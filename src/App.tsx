@@ -1,35 +1,36 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import HomePage from './pages/HomePage/HomePage';
+import ExampleComponent from './components/ExampleComponent/ExampleComponent';
+import Navbar from './components/Navbar/Navbar';
 
 function App() {
-  const [count, setCount] = useState(0)
-
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    <Router>
+      <Navbar />
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/example" element={<ExampleComponent />} />
+        {/* Ejemplo de ruta protegida:
+            Para proteger una ruta, crea un componente "ProtectedRoute" que verifique la autenticación.
+            Ejemplo:
+
+            import ProtectedRoute from './components/ProtectedRoute';
+
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+
+            El componente ProtectedRoute debe validar si el usuario está autenticado y redirigir si no lo está.
+        */}
+        {/* Agrega aquí más rutas según crezcas el proyecto */}
+      </Routes>
+    </Router>
+  );
 }
 
-export default App
+export default App;
