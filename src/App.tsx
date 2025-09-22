@@ -1,34 +1,63 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import HomePage from './pages/HomePage/HomePage';
-import ExampleComponent from './components/ExampleComponent/ExampleComponent';
-import Navbar from './components/Navbar/Navbar';
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  useNavigate,
+  useLocation,
+} from 'react-router-dom';
+
+import { Header } from './components/Header';
+
+// Este componente vive bajo el Router y controla el Header + Rutas
+function AppWrapper() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Usuario falso de prueba
+  const user = {
+    id: '1',
+    name: 'Miguel',
+    email: 'miguel@example.com',
+    role: 'admin' as const,
+  };
+
+  // Manejo de navegación desde el Header
+  const handleNavigate = (section: string) => {
+    navigate(section === 'dashboard' ? '/' : `/${section}`);
+  };
+
+  const handleLogout = () => {
+    alert('Sesión cerrada ✅');
+    navigate('/');
+  };
+
+  // Marca la sección actual según la URL
+  const currentSection = location.pathname.replace('/', '') || 'dashboard';
+
+  return (
+    <>
+      <Header
+        user={user}
+        currentSection={currentSection}
+        onNavigate={handleNavigate}
+        onLogout={handleLogout}
+      />
+
+      {/*Todas las rutas */}
+      <Routes>
+        {/*ejemplos de rutas }
+        {/*<Route path="/" element={<HomePage />} />
+        <Route path="/example" element={<ExampleComponent />} />*/}
+        {/* Más rutas según crezca tu proyecto */}
+      </Routes>
+    </>
+  );
+}
 
 function App() {
   return (
     <Router>
-      <Navbar />
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/example" element={<ExampleComponent />} />
-        {/* Ejemplo de ruta protegida:
-            Para proteger una ruta, crea un componente "ProtectedRoute" que verifique la autenticación.
-            Ejemplo:
-
-            import ProtectedRoute from './components/ProtectedRoute';
-
-            <Route
-              path="/dashboard"
-              element={
-                <ProtectedRoute>
-                  <Dashboard />
-                </ProtectedRoute>
-              }
-            />
-
-            El componente ProtectedRoute debe validar si el usuario está autenticado y redirigir si no lo está.
-        */}
-        {/* Agrega aquí más rutas según crezcas el proyecto */}
-      </Routes>
+      <AppWrapper />
     </Router>
   );
 }
