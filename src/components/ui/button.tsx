@@ -1,7 +1,6 @@
-import * as React from 'react';
 import { Slot } from '@radix-ui/react-slot';
 import { cva, type VariantProps } from 'class-variance-authority';
-
+import { forwardRef } from 'react';
 import { cn } from '../ui/ultils';
 
 const buttonVariants = cva(
@@ -34,12 +33,10 @@ const buttonVariants = cva(
   }
 );
 
-const Button = React.forwardRef<
+const Button = forwardRef<
   HTMLButtonElement,
   React.ComponentProps<'button'> &
-    VariantProps<typeof buttonVariants> & {
-      asChild?: boolean;
-    }
+    VariantProps<typeof buttonVariants> & { asChild?: boolean }
 >(({ className, variant, size, asChild = false, ...props }, ref) => {
   const Comp = asChild ? Slot : 'button';
 
@@ -52,6 +49,7 @@ const Button = React.forwardRef<
     />
   );
 });
+
 Button.displayName = 'Button';
 
 export { Button, buttonVariants };
