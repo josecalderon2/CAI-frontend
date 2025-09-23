@@ -7,6 +7,7 @@ import {
 } from 'react-router-dom';
 
 import { Header } from './components/Header';
+import LoginForm from './components/LoginForm';
 
 // Este componente vive bajo el Router y controla el Header + Rutas
 function AppWrapper() {
@@ -45,10 +46,7 @@ function AppWrapper() {
 
       {/*Todas las rutas */}
       <Routes>
-        {/*ejemplos de rutas }
-        {/*<Route path="/" element={<HomePage />} />
-        <Route path="/example" element={<ExampleComponent />} />*/}
-        {/* Más rutas según crezca tu proyecto */}
+             <Route path="/" element={<LoginForm />} />
       </Routes>
     </>
   );
