@@ -2,62 +2,124 @@ import {
   BrowserRouter as Router,
   Routes,
   Route,
+  Navigate,
   useNavigate,
   useLocation,
 } from 'react-router-dom';
+import type { ReactNode } from 'react';
 
 import { Header } from './components/Header';
 import LoginForm from './components/LoginForm';
+import ProtectedRoute from './components/ProtectedRoute/ProtectedRoute';
 
-// Este componente vive bajo el Router y controla el Header + Rutas
-function AppWrapper() {
+// Helpers de auth
+function getUser() {
+  const raw = localStorage.getItem('user');
+  try {
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+function isAuthenticated() {
+  return !!localStorage.getItem('access_token');
+}
+function clearAuth() {
+  localStorage.removeItem('access_token');
+  localStorage.removeItem('user');
+}
+
+// Dashboard de prueba
+function Dashboard() {
+  const u = getUser();
+  return (
+    <div className="p-6">
+      <h2 className="text-xl font-semibold">
+        Bienvenido, {u?.nombre ?? 'Usuario'}
+      </h2>
+      <p className="text-gray-600">Rol: {u?.role ?? '—'}</p>
+    </div>
+  );
+}
+
+// Shell (Header + rutas)
+function Shell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Usuario falso de prueba
-  const user = {
-    id: '1',
-    name: 'Miguel',
-    email: 'miguel@example.com',
-    role: 'admin' as const,
+  const isLogin = location.pathname === '/login';
+  const hasSession = isAuthenticated();
+  const user = getUser();
+
+  const mapRoleToFront = (r?: string) => {
+    if (r === 'Admin') return 'admin';
+    if (r === 'P.A') return 'administrativo';
+    if (r === 'Orientador') return 'docente';
+    return 'docente';
   };
 
-  // Manejo de navegación desde el Header
+  const uiUser =
+    user && hasSession
+      ? {
+          id: String(user.id),
+          name: user.nombre ?? user.email,
+          email: user.email,
+          role: mapRoleToFront(user.role) as
+            | 'admin'
+            | 'docente'
+            | 'administrativo',
+        }
+      : null;
+
+  const currentSection = location.pathname.replace('/', '') || 'dashboard';
+
   const handleNavigate = (section: string) => {
     navigate(section === 'dashboard' ? '/' : `/${section}`);
   };
 
   const handleLogout = () => {
-    alert('Sesión cerrada ✅');
-    navigate('/');
+    clearAuth();
+    navigate('/login', { replace: true });
   };
-
-  // Marca la sección actual según la URL
-  const currentSection = location.pathname.replace('/', '') || 'dashboard';
 
   return (
     <>
-      <Header
-        user={user}
-        currentSection={currentSection}
-        onNavigate={handleNavigate}
-        onLogout={handleLogout}
-      />
-
-      {/*Todas las rutas */}
-      <Routes>
-             <Route path="/" element={<LoginForm />} />
-      </Routes>
+      {!isLogin && hasSession && uiUser && (
+        <Header
+          user={uiUser}
+          currentSection={currentSection}
+          onNavigate={handleNavigate}
+          onLogout={handleLogout}
+        />
+      )}
+      {children}
     </>
   );
 }
 
-function App() {
+function AppRoutes() {
   return (
-    <Router>
-      <AppWrapper />
-    </Router>
+    <Shell>
+      <Routes>
+        <Route path="/login" element={<LoginForm />} />
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Shell>
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <Router>
+      <AppRoutes />
+    </Router>
+  );
+}

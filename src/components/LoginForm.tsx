@@ -1,27 +1,43 @@
-import { useState } from 'react';
+import { useState, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { User, Lock } from 'lucide-react';
+
+// Components
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { User, Lock } from 'lucide-react';
+
+// Utilities
+import { api } from '../api/axiosConfig';
+import { setAuth } from '../utils/auth';
 import logo from '../../public/logoCai.png';
 
-// Constantes para evitar valores hardcodeados
+// Constants
 const APP_CONFIG = {
   schoolName: 'Colegio Amigos de Israel',
   location: 'Santa Ana, El Salvador',
   systemName: 'Sistema de Gestión Académica',
   emailPlaceholder: 'usuario@colegioamigos.edu',
-  logoSize: { width: 80, height: 80 }
+  logoSize: { width: 80, height: 80 },
 } as const;
 
-// Interface para el formulario
+// Types
 interface LoginFormData {
   email: string;
   password: string;
 }
 
-// Componente de Input con icono reutilizable
+interface AuthResponse {
+  access_token: string;
+  user: {
+    id: number;
+    email: string;
+    nombre: string;
+    role: string;
+  };
+}
+
 interface IconInputProps {
   id: string;
   type: 'email' | 'password';
@@ -33,15 +49,16 @@ interface IconInputProps {
   required?: boolean;
 }
 
-const IconInput = ({ 
-  id, 
-  type, 
-  value, 
-  onChange, 
-  placeholder, 
-  icon, 
-  label, 
-  required = true 
+// Memoized IconInput Component
+const IconInput = ({
+  id,
+  type,
+  value,
+  onChange,
+  placeholder,
+  icon,
+  label,
+  required = true,
 }: IconInputProps) => (
   <div className="space-y-2">
     <Label htmlFor={id}>{label}</Label>
@@ -62,80 +79,146 @@ const IconInput = ({
   </div>
 );
 
+// Error handling utility
+const getErrorMessage = (error: any): string => {
+  if (!error?.response) return 'Error de conexión';
+
+  const { status, data } = error.response;
+  const defaultMessage = 'Error al iniciar sesión';
+
+  if (data?.message) {
+    return `(${status}) ${Array.isArray(data.message) ? data.message.join(', ') : data.message}`;
+  }
+
+  return `(${status}) ${defaultMessage}`;
+};
+
+// Type guard para verificar la respuesta de autenticación
+const isAuthResponse = (data: any): data is AuthResponse => {
+  return (
+    data && typeof data.access_token === 'string' && data.user !== undefined
+  );
+};
+
 export function LoginForm() {
   const [formData, setFormData] = useState<LoginFormData>({
     email: '',
-    password: ''
+    password: '',
   });
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const navigate = useNavigate();
 
-  const handleInputChange = (field: keyof LoginFormData) => (value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
+  // Memoized configuration
+  const config = useMemo(() => APP_CONFIG, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    // Lógica de autenticación aquí
-    console.log('Datos del formulario:', formData);
-  };
+  // Optimized input change handler
+  const handleInputChange = useCallback(
+    (field: keyof LoginFormData) => (value: string) => {
+      setFormData((prev) => ({ ...prev, [field]: value }));
+      // Clear error when user starts typing
+      if (error) setError(null);
+    },
+    [error]
+  );
 
-  const { email, password } = formData;
+  // Form submission handler
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      setError(null);
+      setIsLoading(true);
+
+      try {
+        const { data } = await api.post<AuthResponse>('/auth/login', formData);
+
+        // Verificar que la respuesta tenga la estructura esperada
+        if (isAuthResponse(data)) {
+          setAuth(data);
+          navigate('/', { replace: true });
+        } else {
+          throw new Error('Respuesta del servidor inválida');
+        }
+      } catch (err: any) {
+        setError(getErrorMessage(err));
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [formData, navigate]
+  );
+
+  // Memoized form inputs configuration
+  const formInputs = useMemo(
+    () => [
+      {
+        id: 'email',
+        type: 'email' as const,
+        value: formData.email,
+        placeholder: config.emailPlaceholder,
+        icon: <User className="w-4 h-4" />,
+        label: 'Correo Electrónico',
+      },
+      {
+        id: 'password',
+        type: 'password' as const,
+        value: formData.password,
+        placeholder: '••••••••',
+        icon: <Lock className="w-4 h-4" />,
+        label: 'Contraseña',
+      },
+    ],
+    [formData.email, formData.password, config.emailPlaceholder]
+  );
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100 p-4">
       <Card className="w-full max-w-md shadow-xl">
         <CardHeader className="text-center pb-8">
-          <div 
+          <div
             className="mx-auto mb-4 flex items-center justify-center"
-            style={{ 
-              width: APP_CONFIG.logoSize.width, 
-              height: APP_CONFIG.logoSize.height 
-            }}
+            style={config.logoSize}
           >
-            <img 
-              src={logo} 
-              alt={APP_CONFIG.schoolName} 
+            <img
+              src={logo}
+              alt={config.schoolName}
               className="w-full h-full object-contain"
+              loading="lazy"
             />
           </div>
-          <CardTitle className="text-2xl mb-2">
-            {APP_CONFIG.systemName}
-          </CardTitle>
-          <p className="text-sm text-muted-foreground">
-            {APP_CONFIG.schoolName}
-          </p>
+          <CardTitle className="text-2xl mb-2">{config.systemName}</CardTitle>
+          <p className="text-sm text-muted-foreground">{config.schoolName}</p>
           <p className="text-xs text-muted-foreground mt-1">
-            {APP_CONFIG.location}
+            {config.location}
           </p>
         </CardHeader>
-        
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <IconInput
-              id="email"
-              type="email"
-              value={email}
-              onChange={handleInputChange('email')}
-              placeholder={APP_CONFIG.emailPlaceholder}
-              icon={<User className="w-4 h-4" />}
-              label="Correo Electrónico"
-            />
-            
-            <IconInput
-              id="password"
-              type="password"
-              value={password}
-              onChange={handleInputChange('password')}
-              placeholder="••••••••"
-              icon={<Lock className="w-4 h-4" />}
-              label="Contraseña"
-            />
 
-            <Button 
-              type="submit" 
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+            {formInputs.map((input) => (
+              <IconInput
+                key={input.id}
+                {...input}
+                onChange={handleInputChange(input.id as keyof LoginFormData)}
+              />
+            ))}
+
+            <Button
+              type="submit"
               className="w-full bg-blue-600 hover:bg-blue-700"
+              disabled={isLoading}
             >
-              Iniciar Sesión
+              {isLoading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
             </Button>
+
+            {error && (
+              <p
+                className="text-center text-sm text-red-600 animate-pulse"
+                role="alert"
+              >
+                {error}
+              </p>
+            )}
           </form>
         </CardContent>
       </Card>
