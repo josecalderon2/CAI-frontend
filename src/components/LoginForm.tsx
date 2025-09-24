@@ -135,7 +135,7 @@ export function LoginForm() {
         // Verificar que la respuesta tenga la estructura esperada
         if (isAuthResponse(data)) {
           setAuth(data);
-          navigate('/', { replace: true });
+          navigate('/admin', { replace: true });
         } else {
           throw new Error('Respuesta del servidor inválida');
         }

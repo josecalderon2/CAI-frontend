@@ -11,6 +11,7 @@ import type { ReactNode } from 'react';
 import { Header } from './components/Header';
 import LoginForm from './components/LoginForm';
 import ProtectedRoute from './components/ProtectedRoute/ProtectedRoute';
+import AdminDashboard from './components/AdminDashboard';
 
 // Helpers de auth
 function getUser() {
@@ -29,7 +30,7 @@ function clearAuth() {
   localStorage.removeItem('user');
 }
 
-// Dashboard de prueba
+// Dashboard de prueba (usuarios que no son admin)
 function Dashboard() {
   const u = getUser();
   return (
@@ -97,6 +98,27 @@ function Shell({ children }: { children: ReactNode }) {
   );
 }
 
+function AdminPage() {
+  const navigate = useNavigate();
+  const raw = getUser();
+
+  if (!raw || raw.role !== 'Admin') {
+    return <Navigate to="/" replace />;
+  }
+
+  const uiUser = {
+    id: String(raw.id),
+    name: raw.nombre ?? raw.email,
+    email: raw.email,
+    role: 'admin' as const,
+  };
+
+  const onNavigate = (section: string) =>
+    navigate(section === 'dashboard' ? '/' : `/${section}`);
+
+  return <AdminDashboard user={uiUser} onNavigate={onNavigate} />;
+}
+
 function AppRoutes() {
   return (
     <Shell>
@@ -110,6 +132,16 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
+
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute>
+              <AdminPage />
+            </ProtectedRoute>
+          }
+        />
+
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Shell>
