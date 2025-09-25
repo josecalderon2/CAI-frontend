@@ -33,7 +33,7 @@ interface User {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'docente' | 'administrativo';
+  role: 'admin' | 'orientador' | 'P.A';
 }
 
 interface HeaderProps {
@@ -61,14 +61,14 @@ export function Header({
     { id: 'reportes', label: 'Reportes', icon: FileText },
   ];
 
-  const docenteMenuItems = [
+  const orientadorMenuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: Home },
     { id: 'evaluaciones', label: 'Evaluaciones', icon: Calendar },
     { id: 'notas', label: 'Notas', icon: Edit },
     { id: 'reportes', label: 'Reportes', icon: FileText },
   ];
 
-  const administrativoMenuItems = [
+  const paMenuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: Home },
     { id: 'alumnos', label: 'Alumnos', icon: GraduationCap },
     { id: 'asignaturas', label: 'Asignaturas', icon: BookOpen },
@@ -81,12 +81,12 @@ export function Header({
     switch (user.role) {
       case 'admin':
         return adminMenuItems;
-      case 'docente':
-        return docenteMenuItems;
-      case 'administrativo':
-        return administrativoMenuItems;
+      case 'orientador':
+        return orientadorMenuItems;
+      case 'P.A':
+        return paMenuItems;
       default:
-        return docenteMenuItems;
+        return orientadorMenuItems;
     }
   };
 
@@ -185,9 +185,11 @@ export function Header({
                 <div className="text-left hidden md:block">
                   <p className="font-medium text-sm">{user.name}</p>
                   <p className="text-xs text-gray-500 capitalize">
-                    {user.role === 'administrativo'
+                    {user.role === 'P.A'
                       ? 'Personal Administrativo'
-                      : user.role}
+                      : user.role === 'orientador'
+                        ? 'Orientador'
+                        : 'Administrador'}
                   </p>
                 </div>
               </Button>
@@ -218,20 +220,39 @@ export function Header({
       {/* Navegación horizontal (desktop) */}
       <nav className="hidden lg:block bg-gray-50 border-b border-gray-200 px-4 py-2">
         <div className="flex space-x-1">
-          {menuItems.map((item) => (
-            <Button
-              key={item.id}
-              variant={currentSection === item.id ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => onNavigate(item.id)}
-              className={
-                currentSection === item.id ? 'bg-blue-600 text-white' : ''
+          {menuItems.map((item) => {
+            // Detecta si el dashboard está activo según la ruta y el rol
+            let isActive = false;
+            if (item.id === 'dashboard') {
+              if (
+                (user.role === 'admin' &&
+                  window.location.pathname === '/admin') ||
+                (user.role === 'orientador' &&
+                  window.location.pathname === '/orientador') ||
+                (user.role === 'P.A' && window.location.pathname === '/pa')
+              ) {
+                isActive = true;
               }
-            >
-              <item.icon className="w-4 h-4 mr-2" />
-              {item.label}
-            </Button>
-          ))}
+            } else {
+              isActive = currentSection === item.id;
+            }
+            return (
+              <Button
+                key={item.id}
+                variant={isActive ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => onNavigate(item.id)}
+                className={
+                  isActive
+                    ? 'bg-blue-600 text-white font-semibold'
+                    : 'hover:bg-gray-100'
+                }
+              >
+                <item.icon className="w-4 h-4 mr-2" />
+                {item.label}
+              </Button>
+            );
+          })}
         </div>
       </nav>
 

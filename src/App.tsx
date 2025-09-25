@@ -31,8 +31,22 @@ function clearAuth() {
 }
 
 // Dashboard de prueba (usuarios que no son admin)
+import { useEffect } from 'react';
 function Dashboard() {
   const u = getUser();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // Si el usuario es admin y está en '/', redirige a /admin
+    if (u?.role === 'Admin' && location.pathname === '/') {
+      navigate('/admin', { replace: true });
+    }
+  }, [u, location, navigate]);
+
+  // Si es admin, no renderiza nada aquí (será redirigido)
+  if (u?.role === 'Admin') return null;
+
   return (
     <div className="p-6">
       <h2 className="text-xl font-semibold">
@@ -52,11 +66,11 @@ function Shell({ children }: { children: ReactNode }) {
   const hasSession = isAuthenticated();
   const user = getUser();
 
-  const mapRoleToFront = (r?: string) => {
+  const mapRoleToUserRole = (r?: string) => {
     if (r === 'Admin') return 'admin';
-    if (r === 'P.A') return 'administrativo';
-    if (r === 'Orientador') return 'docente';
-    return 'docente';
+    if (r === 'P.A') return 'P.A';
+    if (r === 'Orientador') return 'orientador';
+    return 'orientador';
   };
 
   const uiUser =
@@ -65,17 +79,26 @@ function Shell({ children }: { children: ReactNode }) {
           id: String(user.id),
           name: user.nombre ?? user.email,
           email: user.email,
-          role: mapRoleToFront(user.role) as
-            | 'admin'
-            | 'docente'
-            | 'administrativo',
+          role: mapRoleToUserRole(user.role) as 'admin' | 'orientador' | 'P.A',
         }
       : null;
 
   const currentSection = location.pathname.replace('/', '') || 'dashboard';
 
   const handleNavigate = (section: string) => {
-    navigate(section === 'dashboard' ? '/' : `/${section}`);
+    if (section === 'dashboard') {
+      if (uiUser?.role === 'admin') {
+        navigate('/admin');
+      } else if (uiUser?.role === 'orientador') {
+        navigate('/orientador');
+      } else if (uiUser?.role === 'P.A') {
+        navigate('/pa');
+      } else {
+        navigate('/');
+      }
+    } else {
+      navigate(`/${section}`);
+    }
   };
 
   const handleLogout = () => {
@@ -119,6 +142,41 @@ function AdminPage() {
   return <AdminDashboard user={uiUser} onNavigate={onNavigate} />;
 }
 
+function OrientadorDashboard() {
+  const u = getUser();
+  return (
+    <div className="p-6">
+      <h2 className="text-xl font-semibold">
+        Bienvenido, {u?.nombre ?? 'Orientador'}
+      </h2>
+      <p className="text-gray-600">Rol: Orientador</p>
+      <p className="mt-4">Este es el dashboard para orientadores.</p>
+    </div>
+  );
+}
+
+function PADashboard() {
+  const u = getUser();
+  return (
+    <div className="p-6">
+      <h2 className="text-xl font-semibold">
+        Bienvenido, {u?.nombre ?? 'Personal Administrativo'}
+      </h2>
+      <p className="text-gray-600">Rol: Personal Administrativo</p>
+      <p className="mt-4">Este es el dashboard para personal administrativo.</p>
+    </div>
+  );
+}
+
+function UsersPage() {
+  return (
+    <div className="p-6">
+      <h2 className="text-2xl font-bold mb-4">Usuarios</h2>
+      <p>Aquí irá la lista de usuarios y el botón para agregar uno nuevo.</p>
+    </div>
+  );
+}
+
 function AppRoutes() {
   return (
     <Shell>
@@ -132,7 +190,6 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
-
         <Route
           path="/admin"
           element={
@@ -141,7 +198,30 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
-
+        <Route
+          path="/orientador"
+          element={
+            <ProtectedRoute>
+              <OrientadorDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/pa"
+          element={
+            <ProtectedRoute>
+              <PADashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/usuarios"
+          element={
+            <ProtectedRoute>
+              <UsersPage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Shell>

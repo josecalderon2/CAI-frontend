@@ -1,23 +1,23 @@
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import { 
-  Users, 
-  GraduationCap, 
-  BookOpen, 
-  School, 
-  FileText, 
+import {
+  Users,
+  GraduationCap,
+  BookOpen,
+  School,
+  FileText,
   BarChart3,
   UserPlus,
   Calendar,
-  Target
+  Target,
 } from 'lucide-react';
 
 interface User {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'docente';
+  role: 'admin' | 'orientador' | 'pa';
 }
 
 interface AdminDashboardProps {
@@ -33,7 +33,7 @@ export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
     totalCursos: 18,
     totalAsignaturas: 12,
     evaluacionesPendientes: 8,
-    reportesGenerados: 45
+    reportesGenerados: 45,
   };
 
   const quickActions = [
@@ -43,7 +43,7 @@ export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
       icon: Users,
       color: 'bg-blue-600',
       action: () => onNavigate('usuarios'),
-      stats: `${stats.totalUsuarios} usuarios activos`
+      stats: `${stats.totalUsuarios} usuarios activos`,
     },
     {
       title: 'Gestión de Alumnos',
@@ -51,7 +51,7 @@ export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
       icon: GraduationCap,
       color: 'bg-green-600',
       action: () => onNavigate('alumnos'),
-      stats: `${stats.totalAlumnos} alumnos registrados`
+      stats: `${stats.totalAlumnos} alumnos registrados`,
     },
     {
       title: 'Gestión de Asignaturas',
@@ -59,7 +59,7 @@ export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
       icon: BookOpen,
       color: 'bg-purple-600',
       action: () => onNavigate('asignaturas'),
-      stats: `${stats.totalAsignaturas} asignaturas activas`
+      stats: `${stats.totalAsignaturas} asignaturas activas`,
     },
     {
       title: 'Gestión de Cursos',
@@ -67,7 +67,7 @@ export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
       icon: School,
       color: 'bg-orange-600',
       action: () => onNavigate('cursos'),
-      stats: `${stats.totalCursos} cursos configurados`
+      stats: `${stats.totalCursos} cursos configurados`,
     },
     {
       title: 'Asignaciones',
@@ -75,7 +75,7 @@ export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
       icon: Target,
       color: 'bg-red-600',
       action: () => onNavigate('asignaciones'),
-      stats: 'Gestionar asignaciones'
+      stats: 'Gestionar asignaciones',
     },
     {
       title: 'Reportes',
@@ -83,15 +83,31 @@ export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
       icon: FileText,
       color: 'bg-indigo-600',
       action: () => onNavigate('reportes'),
-      stats: `${stats.reportesGenerados} reportes generados`
-    }
+      stats: `${stats.reportesGenerados} reportes generados`,
+    },
   ];
 
   const recentActivity = [
-    { action: 'Nuevo alumno registrado', time: 'Hace 2 horas', type: 'success' },
-    { action: 'Usuario creado: Prof. Ana Martínez', time: 'Hace 4 horas', type: 'info' },
-    { action: 'Reporte generado: Notas 3er Grado', time: 'Hace 6 horas', type: 'warning' },
-    { action: 'Asignatura creada: Ciencias Naturales', time: 'Hace 1 día', type: 'success' },
+    {
+      action: 'Nuevo alumno registrado',
+      time: 'Hace 2 horas',
+      type: 'success',
+    },
+    {
+      action: 'Usuario creado: Prof. Ana Martínez',
+      time: 'Hace 4 horas',
+      type: 'info',
+    },
+    {
+      action: 'Reporte generado: Notas 3er Grado',
+      time: 'Hace 6 horas',
+      type: 'warning',
+    },
+    {
+      action: 'Asignatura creada: Ciencias Naturales',
+      time: 'Hace 1 día',
+      type: 'success',
+    },
   ];
 
   return (
@@ -99,10 +115,15 @@ export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Dashboard Administrativo</h1>
+          <h1 className="text-3xl font-bold text-gray-900">
+            Dashboard Administrativo
+          </h1>
           <p className="text-gray-600 mt-1">Bienvenido/a, {user.name}</p>
         </div>
-        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+        <Badge
+          variant="outline"
+          className="bg-blue-50 text-blue-700 border-blue-200"
+        >
           Administrador
         </Badge>
       </div>
@@ -114,7 +135,9 @@ export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Total Usuarios</p>
-                <p className="text-2xl font-bold text-blue-600">{stats.totalUsuarios}</p>
+                <p className="text-2xl font-bold text-blue-600">
+                  {stats.totalUsuarios}
+                </p>
               </div>
               <Users className="w-8 h-8 text-blue-600" />
             </div>
@@ -126,7 +149,9 @@ export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Total Alumnos</p>
-                <p className="text-2xl font-bold text-green-600">{stats.totalAlumnos}</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {stats.totalAlumnos}
+                </p>
               </div>
               <GraduationCap className="w-8 h-8 text-green-600" />
             </div>
@@ -138,7 +163,9 @@ export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Total Cursos</p>
-                <p className="text-2xl font-bold text-purple-600">{stats.totalCursos}</p>
+                <p className="text-2xl font-bold text-purple-600">
+                  {stats.totalCursos}
+                </p>
               </div>
               <School className="w-8 h-8 text-purple-600" />
             </div>
@@ -150,7 +177,9 @@ export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Asignaturas</p>
-                <p className="text-2xl font-bold text-orange-600">{stats.totalAsignaturas}</p>
+                <p className="text-2xl font-bold text-orange-600">
+                  {stats.totalAsignaturas}
+                </p>
               </div>
               <BookOpen className="w-8 h-8 text-orange-600" />
             </div>
@@ -163,17 +192,25 @@ export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
         <h2 className="text-xl font-semibold mb-4">Módulos del Sistema</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {quickActions.map((action, index) => (
-            <Card key={index} className="hover:shadow-lg transition-shadow cursor-pointer group" onClick={action.action}>
+            <Card
+              key={index}
+              className="hover:shadow-lg transition-shadow cursor-pointer group"
+              onClick={action.action}
+            >
               <CardContent className="p-6">
                 <div className="flex items-start space-x-4">
-                  <div className={`${action.color} p-3 rounded-lg group-hover:scale-110 transition-transform`}>
+                  <div
+                    className={`${action.color} p-3 rounded-lg group-hover:scale-110 transition-transform`}
+                  >
                     <action.icon className="w-6 h-6 text-white" />
                   </div>
                   <div className="flex-1">
                     <h3 className="font-semibold mb-2 group-hover:text-blue-600 transition-colors">
                       {action.title}
                     </h3>
-                    <p className="text-sm text-gray-600 mb-3">{action.description}</p>
+                    <p className="text-sm text-gray-600 mb-3">
+                      {action.description}
+                    </p>
                     <p className="text-xs text-gray-500">{action.stats}</p>
                   </div>
                 </div>
@@ -195,11 +232,19 @@ export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
           <CardContent>
             <div className="space-y-4">
               {recentActivity.map((activity, index) => (
-                <div key={index} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                  <div className={`w-2 h-2 rounded-full ${
-                    activity.type === 'success' ? 'bg-green-500' : 
-                    activity.type === 'info' ? 'bg-blue-500' : 'bg-yellow-500'
-                  }`} />
+                <div
+                  key={index}
+                  className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg"
+                >
+                  <div
+                    className={`w-2 h-2 rounded-full ${
+                      activity.type === 'success'
+                        ? 'bg-green-500'
+                        : activity.type === 'info'
+                          ? 'bg-blue-500'
+                          : 'bg-yellow-500'
+                    }`}
+                  />
                   <div className="flex-1">
                     <p className="text-sm">{activity.action}</p>
                     <p className="text-xs text-gray-500">{activity.time}</p>
@@ -218,32 +263,32 @@ export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Button 
-              variant="outline" 
-              className="w-full justify-start" 
+            <Button
+              variant="outline"
+              className="w-full justify-start"
               onClick={() => onNavigate('usuarios')}
             >
               <UserPlus className="w-4 h-4 mr-2" />
               Crear Nuevo Usuario
             </Button>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               className="w-full justify-start"
               onClick={() => onNavigate('alumnos')}
             >
               <GraduationCap className="w-4 h-4 mr-2" />
               Registrar Alumno
             </Button>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               className="w-full justify-start"
               onClick={() => onNavigate('reportes')}
             >
               <FileText className="w-4 h-4 mr-2" />
               Generar Reporte
             </Button>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               className="w-full justify-start"
               onClick={() => onNavigate('asignaciones')}
             >
