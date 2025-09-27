@@ -1,0 +1,305 @@
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Button } from './ui/button';
+import { Badge } from './ui/badge';
+import {
+  Users,
+  GraduationCap,
+  BookOpen,
+  School,
+  FileText,
+  BarChart3,
+  UserPlus,
+  Calendar,
+  Target,
+} from 'lucide-react';
+
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: 'admin' | 'orientador' | 'pa';
+}
+
+interface AdminDashboardProps {
+  user: User;
+  onNavigate: (section: string) => void;
+}
+
+export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
+  // Datos simulados para el dashboard
+  const stats = {
+    totalUsuarios: 24,
+    totalAlumnos: 350,
+    totalCursos: 18,
+    totalAsignaturas: 12,
+    evaluacionesPendientes: 8,
+    reportesGenerados: 45,
+  };
+
+  const quickActions = [
+    {
+      title: 'Gestión de Usuarios',
+      description: 'Crear, editar y administrar usuarios del sistema',
+      icon: Users,
+      color: 'bg-blue-600',
+      action: () => onNavigate('usuarios'),
+      stats: `${stats.totalUsuarios} usuarios activos`,
+    },
+    {
+      title: 'Gestión de Alumnos',
+      description: 'Registrar y administrar información de estudiantes',
+      icon: GraduationCap,
+      color: 'bg-green-600',
+      action: () => onNavigate('alumnos'),
+      stats: `${stats.totalAlumnos} alumnos registrados`,
+    },
+    {
+      title: 'Gestión de Asignaturas',
+      description: 'Crear y administrar materias del plan de estudios',
+      icon: BookOpen,
+      color: 'bg-purple-600',
+      action: () => onNavigate('asignaturas'),
+      stats: `${stats.totalAsignaturas} asignaturas activas`,
+    },
+    {
+      title: 'Gestión de Cursos',
+      description: 'Administrar cursos, grados y secciones',
+      icon: School,
+      color: 'bg-orange-600',
+      action: () => onNavigate('cursos'),
+      stats: `${stats.totalCursos} cursos configurados`,
+    },
+    {
+      title: 'Asignaciones',
+      description: 'Asignar docentes a cursos y asignaturas',
+      icon: Target,
+      color: 'bg-red-600',
+      action: () => onNavigate('asignaciones'),
+      stats: 'Gestionar asignaciones',
+    },
+    {
+      title: 'Reportes',
+      description: 'Generar reportes académicos en PDF y Excel',
+      icon: FileText,
+      color: 'bg-indigo-600',
+      action: () => onNavigate('reportes'),
+      stats: `${stats.reportesGenerados} reportes generados`,
+    },
+  ];
+
+  const recentActivity = [
+    {
+      action: 'Nuevo alumno registrado',
+      time: 'Hace 2 horas',
+      type: 'success',
+    },
+    {
+      action: 'Usuario creado: Prof. Ana Martínez',
+      time: 'Hace 4 horas',
+      type: 'info',
+    },
+    {
+      action: 'Reporte generado: Notas 3er Grado',
+      time: 'Hace 6 horas',
+      type: 'warning',
+    },
+    {
+      action: 'Asignatura creada: Ciencias Naturales',
+      time: 'Hace 1 día',
+      type: 'success',
+    },
+  ];
+
+  return (
+    <div className="p-6 space-y-6">
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">
+            Dashboard Administrativo
+          </h1>
+          <p className="text-gray-600 mt-1">Bienvenido/a, {user.name}</p>
+        </div>
+        <Badge
+          variant="outline"
+          className="bg-blue-50 text-blue-700 border-blue-200"
+        >
+          Administrador
+        </Badge>
+      </div>
+
+      {/* Estadísticas rápidas */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="border-l-4 border-l-blue-600">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Total Usuarios</p>
+                <p className="text-2xl font-bold text-blue-600">
+                  {stats.totalUsuarios}
+                </p>
+              </div>
+              <Users className="w-8 h-8 text-blue-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-green-600">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Total Alumnos</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {stats.totalAlumnos}
+                </p>
+              </div>
+              <GraduationCap className="w-8 h-8 text-green-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-purple-600">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Total Cursos</p>
+                <p className="text-2xl font-bold text-purple-600">
+                  {stats.totalCursos}
+                </p>
+              </div>
+              <School className="w-8 h-8 text-purple-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-orange-600">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Asignaturas</p>
+                <p className="text-2xl font-bold text-orange-600">
+                  {stats.totalAsignaturas}
+                </p>
+              </div>
+              <BookOpen className="w-8 h-8 text-orange-600" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Accesos rápidos */}
+      <div>
+        <h2 className="text-xl font-semibold mb-4">Módulos del Sistema</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {quickActions.map((action, index) => (
+            <Card
+              key={index}
+              className="hover:shadow-lg transition-shadow cursor-pointer group"
+              onClick={action.action}
+            >
+              <CardContent className="p-6">
+                <div className="flex items-start space-x-4">
+                  <div
+                    className={`${action.color} p-3 rounded-lg group-hover:scale-110 transition-transform`}
+                  >
+                    <action.icon className="w-6 h-6 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold mb-2 group-hover:text-blue-600 transition-colors">
+                      {action.title}
+                    </h3>
+                    <p className="text-sm text-gray-600 mb-3">
+                      {action.description}
+                    </p>
+                    <p className="text-xs text-gray-500">{action.stats}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+
+      {/* Actividad reciente */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <Calendar className="w-5 h-5" />
+              <span>Actividad Reciente</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {recentActivity.map((activity, index) => (
+                <div
+                  key={index}
+                  className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg"
+                >
+                  <div
+                    className={`w-2 h-2 rounded-full ${
+                      activity.type === 'success'
+                        ? 'bg-green-500'
+                        : activity.type === 'info'
+                          ? 'bg-blue-500'
+                          : 'bg-yellow-500'
+                    }`}
+                  />
+                  <div className="flex-1">
+                    <p className="text-sm">{activity.action}</p>
+                    <p className="text-xs text-gray-500">{activity.time}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <BarChart3 className="w-5 h-5" />
+              <span>Accesos Rápidos</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Button
+              variant="outline"
+              className="w-full justify-start"
+              onClick={() => onNavigate('usuarios')}
+            >
+              <UserPlus className="w-4 h-4 mr-2" />
+              Crear Nuevo Usuario
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full justify-start"
+              onClick={() => onNavigate('alumnos')}
+            >
+              <GraduationCap className="w-4 h-4 mr-2" />
+              Registrar Alumno
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full justify-start"
+              onClick={() => onNavigate('reportes')}
+            >
+              <FileText className="w-4 h-4 mr-2" />
+              Generar Reporte
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full justify-start"
+              onClick={() => onNavigate('asignaciones')}
+            >
+              <Target className="w-4 h-4 mr-2" />
+              Gestionar Asignaciones
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+export default AdminDashboard;

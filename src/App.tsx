@@ -2,62 +2,236 @@ import {
   BrowserRouter as Router,
   Routes,
   Route,
+  Navigate,
   useNavigate,
   useLocation,
 } from 'react-router-dom';
+import type { ReactNode } from 'react';
 
 import { Header } from './components/Header';
 import LoginForm from './components/LoginForm';
+import ProtectedRoute from './components/ProtectedRoute/ProtectedRoute';
+import AdminDashboard from './components/AdminDashboard';
 
-// Este componente vive bajo el Router y controla el Header + Rutas
-function AppWrapper() {
+// Helpers de auth
+function getUser() {
+  const raw = localStorage.getItem('user');
+  try {
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+function isAuthenticated() {
+  return !!localStorage.getItem('access_token');
+}
+function clearAuth() {
+  localStorage.removeItem('access_token');
+  localStorage.removeItem('user');
+}
+
+// Dashboard de prueba (usuarios que no son admin)
+import { useEffect } from 'react';
+function Dashboard() {
+  const u = getUser();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // Si el usuario es admin y está en '/', redirige a /admin
+    if (u?.role === 'Admin' && location.pathname === '/') {
+      navigate('/admin', { replace: true });
+    }
+  }, [u, location, navigate]);
+
+  // Si es admin, no renderiza nada aquí (será redirigido)
+  if (u?.role === 'Admin') return null;
+
+  return (
+    <div className="p-6">
+      <h2 className="text-xl font-semibold">
+        Bienvenido, {u?.nombre ?? 'Usuario'}
+      </h2>
+      <p className="text-gray-600">Rol: {u?.role ?? '—'}</p>
+    </div>
+  );
+}
+
+// Shell (Header + rutas)
+function Shell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Usuario falso de prueba
-  const user = {
-    id: '1',
-    name: 'Miguel',
-    email: 'miguel@example.com',
-    role: 'admin' as const,
+  const isLogin = location.pathname === '/login';
+  const hasSession = isAuthenticated();
+  const user = getUser();
+
+  const mapRoleToUserRole = (r?: string) => {
+    if (r === 'Admin') return 'admin';
+    if (r === 'P.A') return 'P.A';
+    if (r === 'Orientador') return 'orientador';
+    return 'orientador';
   };
 
-  // Manejo de navegación desde el Header
+  const uiUser =
+    user && hasSession
+      ? {
+          id: String(user.id),
+          name: user.nombre ?? user.email,
+          email: user.email,
+          role: mapRoleToUserRole(user.role) as 'admin' | 'orientador' | 'P.A',
+        }
+      : null;
+
+  const currentSection = location.pathname.replace('/', '') || 'dashboard';
+
   const handleNavigate = (section: string) => {
-    navigate(section === 'dashboard' ? '/' : `/${section}`);
+    if (section === 'dashboard') {
+      if (uiUser?.role === 'admin') {
+        navigate('/admin');
+      } else if (uiUser?.role === 'orientador') {
+        navigate('/orientador');
+      } else if (uiUser?.role === 'P.A') {
+        navigate('/pa');
+      } else {
+        navigate('/');
+      }
+    } else {
+      navigate(`/${section}`);
+    }
   };
 
   const handleLogout = () => {
-    alert('Sesión cerrada ✅');
-    navigate('/');
+    clearAuth();
+    navigate('/login', { replace: true });
   };
-
-  // Marca la sección actual según la URL
-  const currentSection = location.pathname.replace('/', '') || 'dashboard';
 
   return (
     <>
-      <Header
-        user={user}
-        currentSection={currentSection}
-        onNavigate={handleNavigate}
-        onLogout={handleLogout}
-      />
-
-      {/*Todas las rutas */}
-      <Routes>
-             <Route path="/" element={<LoginForm />} />
-      </Routes>
+      {!isLogin && hasSession && uiUser && (
+        <Header
+          user={uiUser}
+          currentSection={currentSection}
+          onNavigate={handleNavigate}
+          onLogout={handleLogout}
+        />
+      )}
+      {children}
     </>
   );
 }
 
-function App() {
+function AdminPage() {
+  const navigate = useNavigate();
+  const raw = getUser();
+
+  if (!raw || raw.role !== 'Admin') {
+    return <Navigate to="/" replace />;
+  }
+
+  const uiUser = {
+    id: String(raw.id),
+    name: raw.nombre ?? raw.email,
+    email: raw.email,
+    role: 'admin' as const,
+  };
+
+  const onNavigate = (section: string) =>
+    navigate(section === 'dashboard' ? '/' : `/${section}`);
+
+  return <AdminDashboard user={uiUser} onNavigate={onNavigate} />;
+}
+
+function OrientadorDashboard() {
+  const u = getUser();
   return (
-    <Router>
-      <AppWrapper />
-    </Router>
+    <div className="p-6">
+      <h2 className="text-xl font-semibold">
+        Bienvenido, {u?.nombre ?? 'Orientador'}
+      </h2>
+      <p className="text-gray-600">Rol: Orientador</p>
+      <p className="mt-4">Este es el dashboard para orientadores.</p>
+    </div>
   );
 }
 
-export default App;
+function PADashboard() {
+  const u = getUser();
+  return (
+    <div className="p-6">
+      <h2 className="text-xl font-semibold">
+        Bienvenido, {u?.nombre ?? 'Personal Administrativo'}
+      </h2>
+      <p className="text-gray-600">Rol: Personal Administrativo</p>
+      <p className="mt-4">Este es el dashboard para personal administrativo.</p>
+    </div>
+  );
+}
+
+function UsersPage() {
+  return (
+    <div className="p-6">
+      <h2 className="text-2xl font-bold mb-4">Usuarios</h2>
+      <p>Aquí irá la lista de usuarios y el botón para agregar uno nuevo.</p>
+    </div>
+  );
+}
+
+function AppRoutes() {
+  return (
+    <Shell>
+      <Routes>
+        <Route path="/login" element={<LoginForm />} />
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute>
+              <AdminPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/orientador"
+          element={
+            <ProtectedRoute>
+              <OrientadorDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/pa"
+          element={
+            <ProtectedRoute>
+              <PADashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/usuarios"
+          element={
+            <ProtectedRoute>
+              <UsersPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Shell>
+  );
+}
+
+export default function App() {
+  return (
+    <Router>
+      <AppRoutes />
+    </Router>
+  );
+}
