@@ -12,6 +12,8 @@ import { Header } from './components/Header';
 import LoginForm from './components/LoginForm';
 import ProtectedRoute from './components/ProtectedRoute/ProtectedRoute';
 import AdminDashboard from './components/AdminDashboard';
+import { UsuariosModule } from './components/UsuariosModule';
+
 
 // Helpers de auth
 function getUser() {
@@ -168,14 +170,7 @@ function PADashboard() {
   );
 }
 
-function UsersPage() {
-  return (
-    <div className="p-6">
-      <h2 className="text-2xl font-bold mb-4">Usuarios</h2>
-      <p>Aquí irá la lista de usuarios y el botón para agregar uno nuevo.</p>
-    </div>
-  );
-}
+
 
 function AppRoutes() {
   return (
@@ -214,14 +209,14 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/usuarios"
-          element={
-            <ProtectedRoute>
-              <UsersPage />
-            </ProtectedRoute>
-          }
-        />
+       <Route
+        path="/usuarios"
+        element={
+          <ProtectedRoute>
+            <UsuariosModule />
+    </ProtectedRoute>
+  }
+/>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Shell>

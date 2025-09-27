@@ -38,7 +38,7 @@ import {
   UserCheck,
   UserX
 } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 interface Usuario {
   id: string;
@@ -194,12 +194,7 @@ export function UsuariosModule() {
     toast.success(`Usuario ${newStatus === 'activo' ? 'activado' : 'desactivado'} correctamente`);
   };
 
-  const handleDeleteUser = (usuario: Usuario) => {
-    if (window.confirm('¿Está seguro de que desea eliminar este usuario?')) {
-      setUsuarios(usuarios.filter(u => u.id !== usuario.id));
-      toast.success('Usuario eliminado correctamente');
-    }
-  };
+
 
   return (
     <div className="p-6 space-y-6">
@@ -360,17 +355,10 @@ export function UsuariosModule() {
                         variant="outline"
                         size="sm"
                         onClick={() => handleToggleStatus(usuario)}
-                        className={usuario.estado === 'activo' ? 'text-orange-600' : 'text-green-600'}
+                        className={usuario.estado === 'activo' ? 'text-orange-600 hover:text-orange-700' : 'text-green-600 hover:text-green-700'}
+                        title={usuario.estado === 'activo' ? 'Desactivar usuario' : 'Activar usuario'}
                       >
                         {usuario.estado === 'activo' ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDeleteUser(usuario)}
-                        className="text-red-600 hover:text-red-700"
-                      >
-                        <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
                   </TableCell>
