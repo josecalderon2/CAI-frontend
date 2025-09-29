@@ -90,3 +90,55 @@ export interface Alumno {
   createdAt?: string;
   updatedAt?: string;
 }
+
+// src/types/index.ts
+
+// 1. Interfaz para Administrativo (sin 'modalidad')
+export interface Administrativo {
+  id_administrativo: number;
+  nombre: string;
+  apellido: string;
+  email: string;
+  direccion: string;
+  dui: string;
+  telefono: string;
+  activo: boolean;
+  createdAt: string;
+  cargoAdministrativo: {
+    id_cargo_administrativo: number;
+    nombre: string;
+  };
+}
+
+// 2. NUEVA Interfaz para Orientador
+export interface Orientador {
+  id_orientador: number;
+  nombre: string;
+  apellido: string;
+  email: string;
+  direccion: string;
+  dui: string;
+  telefono: string;
+  activo: boolean;
+  createdAt: string;
+  cargoAdministrativo: {
+    id_cargo_administrativo: number;
+    nombre: string;
+  };
+}
+
+// 3. Tipo Unificado para usar en el estado del componente
+//    Tendrá todas las propiedades comunes + un 'id' normalizado y un 'type'.
+export type AppUser = (Administrativo | Orientador) & {
+  id: number; // ID normalizado (sea de admin u orientador)
+  type: 'administrativo' | 'orientador'; // Para saber a qué endpoint llamar
+};
+
+// 4. La interfaz para la respuesta paginada no cambia
+export interface PagedResponse<T> {
+  items: T[];
+  page: number;
+  limit: number;
+  total: number;
+  pages: number;
+}

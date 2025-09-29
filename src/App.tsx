@@ -7,6 +7,10 @@ import {
   useLocation,
 } from 'react-router-dom';
 import type { ReactNode } from 'react';
+import { useEffect } from 'react';
+
+// 1. Importa el Toaster
+import { Toaster } from 'sonner';
 
 import { Header } from './components/Header';
 import LoginForm from './components/LoginForm';
@@ -32,21 +36,18 @@ function clearAuth() {
   localStorage.removeItem('user');
 }
 
-// Dashboard de prueba (usuarios que no son admin)
-import { useEffect } from 'react';
+// Dashboard de prueba
 function Dashboard() {
   const u = getUser();
   const location = useLocation();
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Si el usuario es admin y está en '/', redirige a /admin
     if (u?.role === 'Admin' && location.pathname === '/') {
       navigate('/admin', { replace: true });
     }
   }, [u, location, navigate]);
 
-  // Si es admin, no renderiza nada aquí (será redirigido)
   if (u?.role === 'Admin') return null;
 
   return (
@@ -89,15 +90,10 @@ function Shell({ children }: { children: ReactNode }) {
 
   const handleNavigate = (section: string) => {
     if (section === 'dashboard') {
-      if (uiUser?.role === 'admin') {
-        navigate('/admin');
-      } else if (uiUser?.role === 'orientador') {
-        navigate('/orientador');
-      } else if (uiUser?.role === 'P.A') {
-        navigate('/pa');
-      } else {
-        navigate('/');
-      }
+      if (uiUser?.role === 'admin') navigate('/admin');
+      else if (uiUser?.role === 'orientador') navigate('/orientador');
+      else if (uiUser?.role === 'P.A') navigate('/pa');
+      else navigate('/');
     } else {
       navigate(`/${section}`);
     }
@@ -177,51 +173,27 @@ function AppRoutes() {
         <Route path="/login" element={<LoginForm />} />
         <Route
           path="/"
-          element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
-          }
+          element={ <ProtectedRoute><Dashboard /></ProtectedRoute> }
         />
         <Route
           path="/admin"
-          element={
-            <ProtectedRoute>
-              <AdminPage />
-            </ProtectedRoute>
-          }
+          element={ <ProtectedRoute><AdminPage /></ProtectedRoute> }
         />
         <Route
           path="/orientador"
-          element={
-            <ProtectedRoute>
-              <OrientadorDashboard />
-            </ProtectedRoute>
-          }
+          element={ <ProtectedRoute><OrientadorDashboard /></ProtectedRoute> }
         />
         <Route
           path="/pa"
-          element={
-            <ProtectedRoute>
-              <PADashboard />
-            </ProtectedRoute>
-          }
+          element={ <ProtectedRoute><PADashboard /></ProtectedRoute> }
         />
         <Route
           path="/usuarios"
-          element={
-            <ProtectedRoute>
-              <UsuariosModule />
-            </ProtectedRoute>
-          }
+          element={ <ProtectedRoute><UsuariosModule /></ProtectedRoute> }
         />
         <Route
           path="/alumnos"
-          element={
-            <ProtectedRoute>
-              <AlumnosModule />
-            </ProtectedRoute>
-          }
+          element={ <ProtectedRoute><AlumnosModule /></ProtectedRoute> }
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
@@ -233,6 +205,8 @@ export default function App() {
   return (
     <Router>
       <AppRoutes />
+      {/* 2. Coloca el componente Toaster aquí */}
+      <Toaster richColors position="top-right" />
     </Router>
   );
 }
