@@ -13,6 +13,7 @@ import LoginForm from './components/LoginForm';
 import ProtectedRoute from './components/ProtectedRoute/ProtectedRoute';
 import AdminDashboard from './components/AdminDashboard';
 import { UsuariosModule } from './components/UsuariosModule';
+import { AlumnosModule } from './components/AlumnosModule';
 
 // Helpers de auth
 function getUser() {
@@ -211,6 +212,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <UsuariosModule />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/alumnos"
+          element={
+            <ProtectedRoute>
+              <AlumnosModule />
             </ProtectedRoute>
           }
         />
