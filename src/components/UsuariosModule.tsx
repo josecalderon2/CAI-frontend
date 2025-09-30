@@ -209,9 +209,25 @@ export function UsuariosModule() {
     }
   };
 
-  const handleToggleStatus = async (usuario: AppUser) => {
-    // ... (sin cambios)
-  };
+ // UsuariosModule.tsx
+
+const handleToggleStatus = async (usuario: AppUser) => {
+  const action = usuario.activo ? 'Desactivar' : 'Reactivar';
+  const toastId = toast.loading(`${action.slice(0, -1)}ando usuario...`);
+  try {
+    const endpoint = `/${usuario.type}/${usuario.id}`;
+    if (usuario.activo) {
+      await api.delete(endpoint);
+    } else {
+      await api.patch(`${endpoint}/restore`);
+    }
+    toast.success(`Usuario ${action.toLowerCase()}do correctamente`, { id: toastId });
+    fetchAllUsers();
+  } catch (err: any) {
+    const errorMessage = err.response?.data?.message || `Error al ${action.toLowerCase()} el usuario`;
+    toast.error(errorMessage, { id: toastId });
+  }
+};
 
   const countAdmins = filteredUsuarios.filter(u => u.cargoAdministrativo.id_cargo_administrativo === 1).length;
   const countDocentes = filteredUsuarios.filter(u => u.cargoAdministrativo.id_cargo_administrativo === 2).length;
