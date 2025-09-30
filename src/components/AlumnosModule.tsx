@@ -413,6 +413,820 @@ export function AlumnosModule() {
     });
   };
 
+  /* ========= Tipos ========= */
+  /* ================== Tipos base ================== */ type MinMax =
+    | number
+    | { value: number; message?: string };
+  type Pattern = RegExp | { value: RegExp; message?: string };
+  type Rule = {
+    required?: boolean | string; // obligatorio duro
+    minLength?: MinMax;
+    maxLength?: MinMax;
+    pattern?: Pattern;
+    custom?: (value: any, allData: any) => true | string;
+  };
+  type NestedSchema = {
+    __schema: Schema; // sub-esquema a aplicar
+    __array?: boolean; // true si es lista
+    __label?: string; // etiqueta para toasts
+    __normalize?: (item: any) => Record<string, any>; // aplanar/compatibilizar
+    __atLeastOneStarted?: boolean; // exige al menos un item “empezado”
+    __isStarted?: (item: any) => boolean; // detector de “empezado”
+  };
+
+  type Schema = Record<string, Rule | NestedSchema>;
+
+  type ToastLike = { error: (msg: string) => void };
+
+  type ValidateOptions = {
+    toast?: ToastLike;
+    toastAll?: boolean;
+    stopOnFirstError?: boolean; // corte global
+    toastTitlePrefix?: string;
+    setCurrentTab?: (tab: string) => void;
+  };
+
+  type ValidateResult = { valid: boolean; errors: Record<string, any> };
+
+  /* ================== Regex útiles ================== */
+  const telRegex = /^(?:\+?\d{8,15}|(?:\d{4}-\d{4}))$/; // 8–15 dígitos con opcional + o 0000-0000
+  const bloodRegex = /^(A|B|AB|O)[+-]$/i; // A+, O-, etc.
+  const yearRegex = /^(19\d{2}|20\d{2})$/; // 1900–2099
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
+  const duiSV = /^\d{8}-\d$/; // ########-#
+  const placaRegex = /^[A-Z0-9-]{5,10}$/i;
+
+  // DD/MM/YYYY (día 01–31, mes 01–12, año 4 dígitos)
+  const DATE_RE = /^(0[1-9]|[12]\d|3[01])\/(0[1-9]|1[0-2])\/(\d{4})$/;
+
+  /* ================== Utilidades de fecha ================== */
+
+  const isValidDDMMYYYY = (value: string): boolean => {
+    if (!DATE_RE.test(value)) return false;
+    const m = value.match(DATE_RE)!;
+    const dd = parseInt(m[1], 10);
+    const mm = parseInt(m[2], 10) - 1;
+    const yyyy = parseInt(m[3], 10);
+
+    const d = new Date(yyyy, mm, dd);
+    const real =
+      d.getFullYear() === yyyy && d.getMonth() === mm && d.getDate() === dd;
+    if (!real) return false;
+
+    // no futura (comparando solo fecha)
+    const today = new Date();
+    const d0 = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    if (d0.getTime() > t0.getTime()) return false;
+
+    // rango razonable
+    if (yyyy < 1900) return false;
+
+    return true;
+  };
+
+  const toISOFromDDMMYYYY = (value: string): string | null => {
+    if (!isValidDDMMYYYY(value)) return null;
+    const [, dd, mm, yyyy] = value.match(DATE_RE)!;
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  /* ================== Helpers ================== */
+
+  const has = (x: any) => (typeof x === 'string' ? x.trim().length > 0 : !!x);
+  const groupStarted = (all: any, keys: string[]) =>
+    keys.some((k) => has(all?.[k]));
+
+  /* ==========================================
+   RESPONSABLES – Normalización y validación
+========================================== */
+
+  type RespFlat = {
+    nombre: string;
+    apellido: string;
+    dui: string;
+    telefono: string;
+    email: string;
+    direccion: string;
+    empresaTransporte: string;
+    placaVehiculo: string;
+    tipoVehiculo: string;
+    profesionOficio: string; // <— añade esto
+    contactoEmergencia: boolean;
+  };
+
+  const normalizeResponsable = (r: any): RespFlat => {
+    const base = r?.responsable ?? {};
+    const alt = r?.datosResponsable ?? {};
+    const rel = r?.relacion ?? {};
+    const pick = (k: string) => alt[k] ?? base[k] ?? '';
+    const val = (x: any) =>
+      x === null || x === undefined ? '' : String(x).trim();
+
+    return {
+      nombre: val(pick('nombre')),
+      apellido: val(pick('apellido')),
+      dui: val(pick('dui')),
+      telefono: val(pick('telefono')),
+      email: val(pick('email')),
+      direccion: val(pick('direccion')),
+      empresaTransporte: val(pick('empresaTransporte')),
+      placaVehiculo: val(pick('placaVehiculo')),
+      tipoVehiculo: val(pick('tipoVehiculo')),
+      profesionOficio: val(pick('profesionOficio')), // <— añade esto
+      contactoEmergencia:
+        rel.contactoEmergencia === true || r?.contactoEmergencia === true,
+    };
+  };
+
+  const esEmptyResponsable = (r: any): boolean => {
+    const n = normalizeResponsable(r);
+    return !(
+      n.nombre ||
+      n.apellido ||
+      n.dui ||
+      n.telefono ||
+      n.email ||
+      n.direccion ||
+      n.empresaTransporte ||
+      n.placaVehiculo ||
+      n.tipoVehiculo ||
+      n.profesionOficio || // <— añade esto
+      n.contactoEmergencia
+    );
+  };
+
+  const validateResponsableFlat = (
+    n: RespFlat
+  ): { valid: boolean; errors: string[] } => {
+    const errors: string[] = [];
+
+    const started =
+      n.nombre ||
+      n.apellido ||
+      n.dui ||
+      n.telefono ||
+      n.email ||
+      n.direccion ||
+      n.empresaTransporte ||
+      n.placaVehiculo ||
+      n.tipoVehiculo ||
+      n.contactoEmergencia;
+
+    if (!started) return { valid: true, errors: [] }; // vacío => ok (se tolera)
+
+    // Mínimos
+    if (n.nombre.length < 2) errors.push('Nombre: mínimo 2 caracteres.');
+    if (n.apellido.length < 2) errors.push('Apellido: mínimo 2 caracteres.');
+    if (!n.telefono && !n.email) errors.push('Indica teléfono o email.');
+
+    // Formatos
+    if (n.telefono && !telRegex.test(n.telefono))
+      errors.push('Teléfono inválido (8–15 dígitos o 0000-0000).');
+    if (n.email && !emailRegex.test(n.email)) errors.push('Email inválido.');
+    if (n.dui && !duiSV.test(n.dui)) errors.push('DUI inválido (########-#).');
+    if (n.direccion && n.direccion.length < 5)
+      errors.push('Dirección: mínimo 5 caracteres.');
+    if (n.empresaTransporte && n.empresaTransporte.length > 120)
+      errors.push('Empresa: máximo 120 caracteres.');
+    if (n.placaVehiculo && !placaRegex.test(n.placaVehiculo))
+      errors.push('Placa inválida.');
+
+    if (n.contactoEmergencia && !n.telefono && !n.email)
+      errors.push('Como contacto de emergencia, indica teléfono o email.');
+
+    return { valid: errors.length === 0, errors };
+  };
+
+  /** Validación “rápida” para la UI (con toasts + cambio de tab). */
+  const preValidateResponsablesUI = (
+    responsables: any[],
+    opts: { toast?: ToastLike; setCurrentTab?: (tab: string) => void } = {}
+  ): boolean => {
+    const { toast, setCurrentTab } = opts;
+    if (!Array.isArray(responsables)) {
+      toast?.error('Error interno: lista de responsables no válida.');
+      return false;
+    }
+
+    const started = responsables
+      .map((r, i) => ({ i, n: normalizeResponsable(r) }))
+      .filter(({ n }) =>
+        Boolean(
+          n.nombre ||
+            n.apellido ||
+            n.dui ||
+            n.telefono ||
+            n.email ||
+            n.direccion ||
+            n.empresaTransporte ||
+            n.placaVehiculo ||
+            n.tipoVehiculo ||
+            n.contactoEmergencia
+        )
+      );
+
+    if (started.length === 0) {
+      toast?.error('Debe completar al menos un responsable.');
+      setCurrentTab?.('responsables');
+      return false;
+    }
+
+    let ok = true;
+    for (const { i, n } of started) {
+      const res = validateResponsableFlat(n);
+      if (!res.valid) {
+        ok = false;
+        res.errors.forEach((msg) =>
+          toast?.error(`Responsable #${i + 1}: ${msg}`)
+        );
+      }
+    }
+
+    if (!ok) setCurrentTab?.('responsables');
+    return ok;
+  };
+
+  /* ========================================
+   SUB-ESQUEMA: Responsable
+======================================== */
+  const responsableSchema: Schema = {
+    // Guard de completitud (se evalúa sólo si el item está “empezado” por el normalizador)
+    completitud: {
+      custom: (_v, all) => {
+        const started =
+          has(all.nombre) ||
+          has(all.apellido) ||
+          has(all.dui) ||
+          has(all.telefono) ||
+          has(all.email) ||
+          has(all.direccion) ||
+          has(all.empresaTransporte) ||
+          has(all.placaVehiculo) ||
+          has(all.tipoVehiculo) ||
+          !!all.contactoEmergencia;
+
+        if (!started) return true;
+
+        const missing: string[] = [];
+        if (!has(all.nombre) || String(all.nombre).trim().length < 2)
+          missing.push('nombre (mín. 2)');
+        if (!has(all.apellido) || String(all.apellido).trim().length < 2)
+          missing.push('apellido (mín. 2)');
+        if (!(has(all.telefono) || has(all.email)))
+          missing.push('teléfono o email');
+
+        return missing.length ? `Completa: ${missing.join(', ')}.` : true;
+      },
+    },
+    nombre: { minLength: 2, maxLength: 60 },
+    apellido: { minLength: 2, maxLength: 60 },
+    dui: { pattern: { value: duiSV, message: 'DUI inválido (########-#).' } },
+    telefono: { pattern: { value: telRegex, message: 'Teléfono inválido.' } },
+    email: { pattern: { value: emailRegex, message: 'Email inválido.' } },
+    direccion: { minLength: 5, maxLength: 200 },
+    empresaTransporte: { maxLength: 120 },
+    placaVehiculo: {
+      pattern: { value: placaRegex, message: 'Placa inválida.' },
+    },
+    tipoVehiculo: { maxLength: 60 },
+    contactoEmergencia: {
+      custom: (_v, all) =>
+        !all.contactoEmergencia || all.telefono || all.email
+          ? true
+          : 'Como contacto de emergencia, indica teléfono o email.',
+    },
+  };
+
+  /* ========================================
+   ESQUEMA PRINCIPAL – Alumno
+======================================== */
+  const schema: Schema = {
+    // ===== Personal (obligatorio duro) =====
+    nombre: { required: true, minLength: 2, maxLength: 60 },
+    apellido: { required: true, minLength: 2, maxLength: 60 },
+    genero: {
+      // opcional
+      custom: (v) =>
+        !v
+          ? true
+          : ['Masculino', 'Femenino', 'Otro'].includes(v)
+            ? true
+            : 'Género inválido.',
+    },
+    fechaNacimiento: {
+      required: 'La fecha de nacimiento es requerida.',
+      pattern: { value: DATE_RE, message: 'Use el formato DD/MM/AAAA.' },
+      custom: (v) =>
+        isValidDDMMYYYY(v)
+          ? true
+          : 'Fecha de nacimiento inválida (no futura, fecha real).',
+    },
+    nacionalidad: { maxLength: 60 }, // opcional
+
+    // ===== Nacimiento (si empiezan, terminen mínimos) =====
+    partidaNumero: {
+      custom: (v) =>
+        !v
+          ? true
+          : /^[A-Za-z0-9-]{1,20}$/.test(v)
+            ? true
+            : 'Número de partida inválido.',
+    },
+    folio: {
+      custom: (v, all) =>
+        !groupStarted(all, ['partidaNumero', 'folio', 'libro', 'anioPartida'])
+          ? true
+          : !!v || 'Folio requerido.',
+    },
+    libro: {
+      custom: (v, all) =>
+        !groupStarted(all, ['partidaNumero', 'folio', 'libro', 'anioPartida'])
+          ? true
+          : !!v || 'Libro requerido.',
+    },
+    anioPartida: {
+      custom: (v, all) => {
+        if (
+          !groupStarted(all, ['partidaNumero', 'folio', 'libro', 'anioPartida'])
+        )
+          return true;
+        return yearRegex.test(String(v)) ? true : 'Año inválido (YYYY).';
+      },
+    },
+    departamentoNacimiento: {
+      custom: (v, all) =>
+        !groupStarted(all, [
+          'partidaNumero',
+          'folio',
+          'libro',
+          'anioPartida',
+          'departamentoNacimiento',
+          'municipioNacimiento',
+        ])
+          ? true
+          : !!v || 'Seleccione el departamento.',
+    },
+    municipioNacimiento: {
+      custom: (v, all) =>
+        !groupStarted(all, [
+          'partidaNumero',
+          'folio',
+          'libro',
+          'anioPartida',
+          'departamentoNacimiento',
+          'municipioNacimiento',
+        ])
+          ? true
+          : !!v || 'Ingrese el municipio.',
+    },
+
+    // ===== Médico (si empiezan, validar formatos/mínimos) =====
+    tipoSangre: {
+      custom: (v) =>
+        !v
+          ? true
+          : bloodRegex.test(v)
+            ? true
+            : 'Tipo de sangre inválido (A+, O-, etc.).',
+    },
+    problemaFisico: { maxLength: 300 },
+    observacionesMedicas: { maxLength: 500 },
+    centroAsistencial: {
+      custom: (v, all) => {
+        const hasMedNotes =
+          has(all.problemaFisico) || has(all.observacionesMedicas);
+        return !hasMedNotes
+          ? true
+          : has(v)
+            ? true
+            : 'Indica centro asistencial.';
+      },
+    },
+    medicoNombre: {
+      custom: (v, all) =>
+        !has(all.centroAsistencial)
+          ? true
+          : has(v)
+            ? true
+            : 'Indica nombre del médico.',
+    },
+    medicoTelefono: {
+      custom: (v) =>
+        !v ? true : telRegex.test(v) ? true : 'Teléfono del médico inválido.',
+    },
+
+    // ===== Residencia (si empiezan, terminen) =====
+    zonaResidencia: {
+      custom: (v, all) =>
+        !groupStarted(all, [
+          'zonaResidencia',
+          'departamento',
+          'municipio',
+          'direccion',
+        ])
+          ? true
+          : ['Urbana', 'Rural'].includes(v)
+            ? true
+            : 'Zona de residencia inválida.',
+    },
+    direccion: {
+      custom: (v, all) =>
+        !groupStarted(all, [
+          'zonaResidencia',
+          'departamento',
+          'municipio',
+          'direccion',
+        ])
+          ? true
+          : has(v) && String(v).trim().length >= 5
+            ? true
+            : 'Ingrese la dirección completa.',
+    },
+    municipio: {
+      custom: (v, all) =>
+        !groupStarted(all, [
+          'zonaResidencia',
+          'departamento',
+          'municipio',
+          'direccion',
+        ])
+          ? true
+          : !!v || 'Ingrese el municipio.',
+    },
+    departamento: {
+      custom: (v, all) =>
+        !groupStarted(all, [
+          'zonaResidencia',
+          'departamento',
+          'municipio',
+          'direccion',
+        ])
+          ? true
+          : !!v || 'Seleccione el departamento.',
+    },
+
+    // ===== Transporte (si empiezan, terminen) =====
+    distanciaKM: {
+      custom: (v, all) => {
+        if (
+          !groupStarted(all, [
+            'distanciaKM',
+            'medioTransporte',
+            'encargadoTransporte',
+            'encargadoTelefono',
+          ])
+        )
+          return true;
+        return typeof v === 'number' && v >= 0 && v <= 150
+          ? true
+          : 'Distancia debe estar entre 0 y 150 km.';
+      },
+    },
+    medioTransporte: {
+      custom: (v, all) =>
+        !groupStarted(all, [
+          'distanciaKM',
+          'medioTransporte',
+          'encargadoTransporte',
+          'encargadoTelefono',
+        ])
+          ? true
+          : !!v || 'Ingrese el medio de transporte.',
+    },
+    encargadoTransporte: {
+      custom: (v, all) => {
+        if (
+          !groupStarted(all, [
+            'distanciaKM',
+            'medioTransporte',
+            'encargadoTransporte',
+            'encargadoTelefono',
+          ])
+        )
+          return true;
+        if (!v && has(all.encargadoTelefono))
+          return 'Si pones teléfono del encargado, indica su nombre.';
+        return true;
+      },
+    },
+    encargadoTelefono: {
+      custom: (v, all) => {
+        if (
+          !groupStarted(all, [
+            'distanciaKM',
+            'medioTransporte',
+            'encargadoTransporte',
+            'encargadoTelefono',
+          ])
+        )
+          return true;
+        if (!v && has(all.encargadoTransporte))
+          return 'Si indicas encargado, agrega su teléfono.';
+        if (!v) return true;
+        return telRegex.test(v) ? true : 'Teléfono del encargado inválido.';
+      },
+    },
+
+    // ===== Académico (si empiezan, terminen mínimos) =====
+    nivel: {
+      custom: (v, all) =>
+        !groupStarted(all, [
+          'nivel',
+          'grado',
+          'seccion',
+          'fechaIngreso',
+          'repiteGrado',
+          'condicionado',
+        ])
+          ? true
+          : ['parvularia', 'basica', 'media'].includes(v)
+            ? true
+            : 'Nivel inválido.',
+    },
+    grado: {
+      custom: (v, all) =>
+        !groupStarted(all, [
+          'nivel',
+          'grado',
+          'seccion',
+          'fechaIngreso',
+          'repiteGrado',
+          'condicionado',
+        ])
+          ? true
+          : !!v || 'Ingrese el grado.',
+    },
+    seccion: {
+      custom: (v, all) => {
+        if (
+          !groupStarted(all, [
+            'nivel',
+            'grado',
+            'seccion',
+            'fechaIngreso',
+            'repiteGrado',
+            'condicionado',
+          ])
+        )
+          return true;
+        const s = String(v ?? '').trim();
+        if (!s) return 'Ingrese la sección.';
+        if (s.length > 5) return 'Sección demasiado larga.';
+        return true;
+      },
+    },
+    fechaIngreso: {
+      // opcional, pero si viene valida y no anterior a nacimiento
+      custom: (v, all) => {
+        if (!v) return true;
+        const d = new Date(v); // viene como YYYY-MM-DD
+        if (isNaN(d.getTime())) return 'Fecha de ingreso inválida.';
+        const fnISO = toISOFromDDMMYYYY(all.fechaNacimiento);
+        if (fnISO) {
+          const fn = new Date(fnISO);
+          if (!isNaN(fn.getTime()) && d < fn)
+            return 'Ingreso no puede ser anterior al nacimiento.';
+        }
+        return true;
+      },
+    },
+    repiteGrado: {},
+    condicionado: {},
+
+    // ===== Detalles (opcional) =====
+    viveCon: { maxLength: 100 },
+    dependenciaEconomica: { maxLength: 100 },
+    capacidadPago: {},
+    tieneHermanosEnColegio: {},
+    hermanosEnColegio: {
+      custom: (v, all) => {
+        if (!all.tieneHermanosEnColegio) return true;
+        try {
+          const arr = Array.isArray(v) ? v : JSON.parse(v || '[]');
+          if (!Array.isArray(arr))
+            return 'HermanosEnColegio debe ser un arreglo.';
+          // si un hermano está “empezado”, exige nombre y grado
+          for (let i = 0; i < arr.length; i++) {
+            const h = arr[i] ?? {};
+            const started = has(h.nombre) || has(h.grado);
+            if (started) {
+              if (!has(h.nombre)) return `Hermano #${i + 1}: falta el nombre.`;
+              if (!has(h.grado)) return `Hermano #${i + 1}: falta el grado.`;
+            }
+          }
+          return true;
+        } catch {
+          return 'HermanosEnColegio no es JSON válido.';
+        }
+      },
+    },
+
+    // ===== Responsables (arreglo anidado) =====
+    responsables: {
+      __array: true,
+      __label: 'Responsable',
+      __atLeastOneStarted: true,
+      __isStarted: (r: any) => !esEmptyResponsable(r),
+      __normalize: (r: any) => {
+        const n = normalizeResponsable(r);
+        return { ...n, completitud: true }; // fuerza evaluación en sub-esquema
+      },
+      __schema: responsableSchema,
+    },
+  };
+
+  /* ==========================================
+   Motor genérico de validación (con toasts)
+========================================== */
+
+  function isNested(r: Rule | NestedSchema): r is NestedSchema {
+    return r && typeof r === 'object' && '__schema' in r;
+  }
+
+  function validateFields(
+    data: Record<string, any>,
+    schema: Schema,
+    {
+      toast,
+      toastAll = true,
+      stopOnFirstError = false,
+      toastTitlePrefix = 'Validación',
+      setCurrentTab,
+    }: ValidateOptions = {}
+  ): ValidateResult {
+    const errors: Record<string, any> = {};
+
+    const send = (msg: string) => toast?.error(`${toastTitlePrefix}: ${msg}`);
+
+    for (const [field, rules] of Object.entries(schema)) {
+      const value = (data as any)[field];
+
+      // ---------- Sub-esquemas ----------
+      if (isNested(rules)) {
+        const label = rules.__label ?? field;
+
+        if (rules.__array) {
+          const arr = Array.isArray(value) ? value : [];
+          const itemsErr: Array<{
+            index: number;
+            errors: Record<string, any>;
+          }> = [];
+
+          // "al menos uno empezado"
+          if (rules.__atLeastOneStarted) {
+            const startedCount = arr.filter((it) =>
+              rules.__isStarted ? rules.__isStarted(it) : !!it
+            ).length;
+            if (startedCount === 0) {
+              const m = 'Debe completar al menos un responsable.';
+              errors[field] = m;
+              send(`${label}: ${m}`);
+              setCurrentTab?.('responsables');
+              if (stopOnFirstError) return { valid: false, errors };
+            }
+          }
+
+          for (let i = 0; i < arr.length; i++) {
+            const raw = arr[i];
+            const normalized = rules.__normalize ? rules.__normalize(raw) : raw;
+
+            const sub = validateFields(normalized, rules.__schema, {
+              toast: undefined, // evitamos duplicados aquí
+              toastAll: false,
+              stopOnFirstError: false,
+              toastTitlePrefix: `${label} #${i + 1}`,
+            });
+
+            if (!sub.valid) {
+              itemsErr.push({ index: i, errors: sub.errors });
+              // mostramos toasts planos por cada error del item
+              if (toastAll || stopOnFirstError) {
+                for (const [k, v] of Object.entries(sub.errors)) {
+                  if (typeof v === 'string')
+                    send(`${label} #${i + 1} — ${k}: ${v}`);
+                }
+              }
+              if (stopOnFirstError) {
+                setCurrentTab?.('responsables');
+                errors[field] = itemsErr;
+                return { valid: false, errors };
+              }
+            }
+          }
+
+          if (itemsErr.length) {
+            setCurrentTab?.('responsables');
+            errors[field] = itemsErr;
+          }
+          continue;
+        }
+
+        // objeto simple
+        if (value && typeof value === 'object') {
+          const normalized = rules.__normalize
+            ? rules.__normalize(value)
+            : value;
+          const sub = validateFields(normalized, rules.__schema, {
+            toast,
+            toastAll,
+            stopOnFirstError,
+            toastTitlePrefix: label,
+            setCurrentTab,
+          });
+          if (!sub.valid) {
+            errors[field] = sub.errors;
+            if (stopOnFirstError) return { valid: false, errors };
+          }
+        }
+        continue;
+      }
+
+      // ---------- Reglas planas ----------
+      const isEmpty =
+        value === undefined ||
+        value === null ||
+        (typeof value === 'string' && value.trim() === '');
+
+      // required SIEMPRE se cumple (no depende de allowEmpty)
+      if (isEmpty && rules.required) {
+        const m =
+          typeof rules.required === 'string'
+            ? rules.required
+            : `El campo "${field}" es obligatorio.`;
+        errors[field] = m;
+        if (toastAll || stopOnFirstError) send(`${field}: ${m}`);
+        if (stopOnFirstError) return { valid: false, errors };
+        continue;
+      }
+
+      // vacío sin required => no más validaciones
+      if (isEmpty) continue;
+
+      // minLength
+      if (rules.minLength !== undefined) {
+        const conf =
+          typeof rules.minLength === 'number'
+            ? { value: rules.minLength }
+            : rules.minLength;
+        const m =
+          conf.message ??
+          `"${field}" debe tener al menos ${conf.value} caracteres.`;
+        if (String(value).length < conf.value) {
+          errors[field] = m;
+          if (toastAll || stopOnFirstError) send(`${field}: ${m}`);
+          if (stopOnFirstError) return { valid: false, errors };
+          continue;
+        }
+      }
+
+      // maxLength
+      if (rules.maxLength !== undefined) {
+        const conf =
+          typeof rules.maxLength === 'number'
+            ? { value: rules.maxLength }
+            : rules.maxLength;
+        const m =
+          conf.message ??
+          `"${field}" no debe exceder ${conf.value} caracteres.`;
+        if (String(value).length > conf.value) {
+          errors[field] = m;
+          if (toastAll || stopOnFirstError) send(`${field}: ${m}`);
+          if (stopOnFirstError) return { valid: false, errors };
+          continue;
+        }
+      }
+
+      // pattern
+      if (rules.pattern) {
+        const conf =
+          rules.pattern instanceof RegExp
+            ? { value: rules.pattern }
+            : rules.pattern;
+        const m = conf.message ?? `"${field}" no tiene el formato correcto.`;
+        if (!conf.value.test(String(value))) {
+          errors[field] = m;
+          if (toastAll || stopOnFirstError) send(`${field}: ${m}`);
+          if (stopOnFirstError) return { valid: false, errors };
+          continue;
+        }
+      }
+
+      // custom
+      if (rules.custom) {
+        const res = rules.custom(value, data);
+        if (res !== true) {
+          const m = typeof res === 'string' ? res : `Error en "${field}".`;
+          errors[field] = m;
+          if (toastAll || stopOnFirstError) send(`${field}: ${m}`);
+          if (stopOnFirstError) return { valid: false, errors };
+        }
+      }
+    }
+
+    return { valid: Object.keys(errors).length === 0, errors };
+  }
+
   const handleCreateAlumno = () => {
     resetForm();
     setIsDialogOpen(true);
@@ -896,6 +1710,34 @@ export function AlumnosModule() {
 
     if (responsables.length === 0) {
       toast.error('Debe agregar al menos un responsable');
+      return;
+    }
+
+    // --- VALIDACIÓN ---
+    if (responsables.length === 0) {
+      toast.error('Debe agregar al menos un responsable');
+      setCurrentTab('responsables');
+      return;
+    }
+
+    // valida responsables “si y solo si” fueron empezados (con toasts por tarjeta)
+    if (!preValidateResponsablesUI(responsables, { toast, setCurrentTab })) {
+      // preValidateResponsablesUI ya te lleva al tab "responsables" y muestra toasts
+      return;
+    }
+
+    // --- VALIDACIÓN (global) ---
+    const data = { ...formData, responsables };
+
+    const { valid, errors } = validateFields(data, schema, {
+      toast,
+      toastAll: true,
+      stopOnFirstError: true,
+      toastTitlePrefix: 'Formulario',
+    });
+
+    if (!valid) {
+      console.log('Errores:', errors);
       return;
     }
 
@@ -1988,6 +2830,7 @@ export function AlumnosModule() {
                         })
                       }
                       placeholder="01/01/2010"
+                      minLength={10}
                       required
                     />
                   </div>
