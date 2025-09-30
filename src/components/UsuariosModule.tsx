@@ -78,11 +78,9 @@ export function UsuariosModule() {
     } catch (error) {
       toast.error('No se pudieron cargar los roles/cargos.');
     }
-  }, [editingUser]);
+  }, []);
 
-  useEffect(() => {
-    if (isDialogOpen) fetchCargos();
-  }, [isDialogOpen, fetchCargos]);
+
 
   const fetchAllUsers = useCallback(async () => {
     setIsLoading(true);
@@ -119,6 +117,10 @@ export function UsuariosModule() {
   useEffect(() => {
     fetchAllUsers();
   }, [fetchAllUsers]);
+  
+  useEffect(() => {
+  fetchCargos();
+}, [fetchCargos]);
 
   const filteredUsuarios = usuarios.filter(usuario => {
     return filterRole === 'todos' || usuario.cargoAdministrativo.nombre === filterRole;
