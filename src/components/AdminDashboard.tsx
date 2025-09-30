@@ -12,6 +12,14 @@ import {
   Calendar,
   Target,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import {
+  obtenerEstadisticasPersonal,
+  obtenerTotalAlumnos,
+  obtenerTotalCursos,
+  obtenerTotalAsignaturas,
+  obtenerActividadReciente,
+} from '../api/services/dashboardService';
 
 interface User {
   id: string;
@@ -25,16 +33,74 @@ interface AdminDashboardProps {
   onNavigate: (section: string) => void;
 }
 
+interface Stats {
+  totalUsuarios: number;
+  totalAlumnos: number;
+  totalCursos: number;
+  totalAsignaturas: number;
+  evaluacionesPendientes: number;
+  reportesGenerados: number;
+}
+
+interface ActividadReciente {
+  action: string;
+  time: string;
+  type: 'success' | 'info' | 'warning';
+}
+
 export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
-  // Datos simulados para el dashboard
-  const stats = {
-    totalUsuarios: 24,
-    totalAlumnos: 350,
-    totalCursos: 18,
-    totalAsignaturas: 12,
-    evaluacionesPendientes: 8,
-    reportesGenerados: 45,
-  };
+  const [stats, setStats] = useState<Stats>({
+    totalUsuarios: 0,
+    totalAlumnos: 0,
+    totalCursos: 0,
+    totalAsignaturas: 0,
+    evaluacionesPendientes: 0,
+    reportesGenerados: 0,
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const cargarDatosDashboard = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        // Cargamos todos los datos necesarios en paralelo para mayor eficiencia
+        const [personalData, totalAlumnos, totalCursos, totalAsignaturas] =
+          await Promise.all([
+            obtenerEstadisticasPersonal(),
+            obtenerTotalAlumnos(),
+            obtenerTotalCursos(),
+            obtenerTotalAsignaturas(),
+          ]);
+
+        console.log('Datos de personal:', personalData);
+        console.log('Total alumnos:', totalAlumnos);
+        console.log('Total cursos:', totalCursos);
+        console.log('Total asignaturas:', totalAsignaturas);
+
+        // Actualizamos el estado con los datos reales
+        setStats({
+          totalUsuarios:
+            (personalData as { totalUsuariosRegistrados?: number })
+              ?.totalUsuariosRegistrados || 0,
+          totalAlumnos: typeof totalAlumnos === 'number' ? totalAlumnos : 0,
+          totalCursos: typeof totalCursos === 'number' ? totalCursos : 0,
+          totalAsignaturas:
+            typeof totalAsignaturas === 'number' ? totalAsignaturas : 0,
+          evaluacionesPendientes: 0, // Este dato podría requerirse de otro endpoint
+          reportesGenerados: 0, // Este dato podría requerirse de otro endpoint
+        });
+      } catch (err) {
+        console.error('Error al cargar datos del dashboard:', err);
+        setError('Error al cargar datos. Inténtalo de nuevo.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    cargarDatosDashboard();
+  }, []);
 
   const quickActions = [
     {
@@ -87,28 +153,59 @@ export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
     },
   ];
 
-  const recentActivity = [
+  const [actividadReciente, setActividadReciente] = useState([
     {
       action: 'Nuevo alumno registrado',
       time: 'Hace 2 horas',
-      type: 'success',
+      type: 'success' as const,
     },
     {
       action: 'Usuario creado: Prof. Ana Martínez',
       time: 'Hace 4 horas',
-      type: 'info',
+      type: 'info' as const,
     },
     {
       action: 'Reporte generado: Notas 3er Grado',
       time: 'Hace 6 horas',
-      type: 'warning',
+      type: 'warning' as const,
     },
     {
       action: 'Asignatura creada: Ciencias Naturales',
       time: 'Hace 1 día',
-      type: 'success',
+      type: 'success' as const,
     },
-  ];
+  ]);
+
+  // Cargar actividad reciente
+  useEffect(() => {
+    const cargarActividad = async () => {
+      try {
+        const actividadData = await obtenerActividadReciente();
+        if (actividadData && actividadData.length > 0) {
+          const actividadFormateada = actividadData.map((act: any) => ({
+            action: act.descripcion || act.accion || 'Actividad registrada',
+            time: act.fecha
+              ? new Date(act.fecha).toLocaleString('es', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  day: 'numeric',
+                  month: 'short',
+                })
+              : 'Fecha desconocida',
+            type: (act.tipo || 'info') as 'success' | 'info' | 'warning',
+          }));
+          setActividadReciente(actividadFormateada);
+        }
+      } catch (err) {
+        console.error('Error al cargar actividad reciente:', err);
+      }
+    };
+
+    cargarActividad();
+  }, []);
+
+  // Usar la actividad reciente cargada o la predeterminada si está vacía
+  const recentActivity = actividadReciente;
 
   return (
     <div className="p-6 space-y-6">
@@ -119,6 +216,12 @@ export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
             Dashboard Administrativo
           </h1>
           <p className="text-gray-600 mt-1">Bienvenido/a, {user.name}</p>
+          {loading && (
+            <p className="text-blue-500 text-sm mt-1 flex items-center">
+              <span className="animate-pulse mr-2">⚪</span> Cargando datos...
+            </p>
+          )}
+          {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
         </div>
         <Badge
           variant="outline"
