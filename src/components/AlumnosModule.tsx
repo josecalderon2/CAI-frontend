@@ -722,7 +722,7 @@ export function AlumnosModule() {
           ? true
           : 'Fecha de nacimiento inválida (no futura, fecha real).',
     },
-    nacionalidad: { maxLength: 60 }, // opcional
+    nacionalidad: { required: true, minLength: 2, maxLength: 30 }, // ahora es obligatorio como el nombre
 
     // ===== Nacimiento (si empiezan, terminen mínimos) =====
     partidaNumero: {

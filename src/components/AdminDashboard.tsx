@@ -42,12 +42,6 @@ interface Stats {
   reportesGenerados: number;
 }
 
-interface ActividadReciente {
-  action: string;
-  time: string;
-  type: 'success' | 'info' | 'warning';
-}
-
 export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
   const [stats, setStats] = useState<Stats>({
     totalUsuarios: 0,
