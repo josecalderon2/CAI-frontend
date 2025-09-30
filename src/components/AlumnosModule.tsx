@@ -11,14 +11,12 @@ import {
   desactivarAlumno,
   reactivarAlumno,
   eliminarResponsable,
-  agregarResponsable,
   actualizarAlumnoCompleto,
 } from '../api/services/alumnosService';
 
 import {
   actualizarSoloResponsable,
   actualizarRelacionResponsable,
-  obtenerDatosResponsable,
 } from '../api/services/responsableService';
 import {
   Table,
@@ -257,10 +255,7 @@ export function AlumnosModule() {
         const alumnosData = (response.data as Alumno[]).map((alumno) => {
           // Solo verificamos la estructura básica
           if (alumno.responsables && alumno.responsables.length > 0) {
-            // Dejamos un log básico para verificar que hay responsables
-            console.log(
-              `${alumno.nombre} ${alumno.apellido} tiene ${alumno.responsables.length} responsable(s)`
-            );
+            // El alumno tiene responsables
           }
 
           return {
@@ -279,7 +274,6 @@ export function AlumnosModule() {
         setAlumnos(alumnosData);
         setError(null);
       } catch (err) {
-        console.error('Error al cargar alumnos:', err);
         setError('Error al cargar los alumnos. Intente de nuevo más tarde.');
         toast.error('Error al cargar los alumnos');
       } finally {
@@ -296,10 +290,7 @@ export function AlumnosModule() {
       try {
         const response = await api.get('/parentescos');
         setParentescos(response.data as Parentesco[]);
-        console.log('Parentescos cargados:', response.data);
-      } catch (error) {
-        console.error('Error al cargar parentescos:', error);
-      }
+      } catch (error) {}
     };
 
     cargarParentescos();
@@ -428,7 +419,6 @@ export function AlumnosModule() {
   };
 
   const handleEditAlumno = (alumno: Alumno) => {
-    console.log('Editando alumno:', alumno);
     setEditingAlumno(alumno);
     setCurrentTab('personal');
     setIsDialogOpen(true); // Abrimos el diálogo de edición
@@ -487,7 +477,6 @@ export function AlumnosModule() {
 
     // ID temporal para la interfaz (número negativo para evitar colisión con IDs reales)
     const tempId = -Math.floor(Math.random() * 100000);
-    console.log('Agregando nuevo responsable con ID temporal:', tempId);
 
     const newResponsable: ResponsableCompleto = {
       // Propiedades principales (estructura nueva)
@@ -556,14 +545,6 @@ export function AlumnosModule() {
     value: any
   ) => {
     const updated = [...responsables];
-
-    // Log para depurar qué valores están llegando
-    console.log(
-      `updateResponsable: ${section}.${field} = `,
-      value,
-      typeof value,
-      value === ''
-    );
 
     if (section === 'relacion' && field === 'parentescoId') {
       // Buscamos el parentesco en la lista cargada desde la API
@@ -653,11 +634,6 @@ export function AlumnosModule() {
         contactoEmergencia: false,
       };
 
-      console.log(
-        `Actualizando campo ${field} en responsable ${index} a:`,
-        value
-      );
-
       updated[index] = {
         ...updated[index],
         // Actualizamos el campo en la raíz
@@ -673,11 +649,6 @@ export function AlumnosModule() {
       (field === 'email' || field === 'religion')
     ) {
       // Tratamiento especial para campos problemáticos
-      console.log(
-        `Actualizando ${field} en responsable ${index} a:`,
-        value,
-        typeof value
-      );
 
       // Aseguramos que exista la sección datosResponsable
       const datosActuales = updated[index].datosResponsable || {};
@@ -690,23 +661,12 @@ export function AlumnosModule() {
           [field]: value === null ? '' : value, // Convertimos null a cadena vacía
         } as any, // Usamos 'as any' para evitar errores de tipo
       };
-
-      // Log después de la actualización
-      console.log(
-        'Estado de email después de actualización:',
-        updated[index].datosResponsable?.email
-      );
     } else {
       // Aseguramos que la sección exista
       const sectionData = updated[index][section] || {};
 
       // Guardamos el valor tal cual, sin transformaciones
       // Esto permite conservar cadenas vacías
-      console.log(
-        `Actualizando campo ${field} en sección ${section} a:`,
-        value,
-        typeof value
-      );
 
       updated[index] = {
         ...updated[index],
@@ -750,14 +710,6 @@ export function AlumnosModule() {
         const puedeRetirarAlumno = responsable.puedeRetirarAlumno === true;
         const esPrincipal = responsable.esPrincipal === true;
 
-        console.log('Valores booleanos antes de enviar:', {
-          contactoEmergencia,
-          firma,
-          permiteTraslado,
-          puedeRetirarAlumno,
-          esPrincipal,
-        });
-
         const datosRelacion = {
           parentescoId: responsable.parentescoId,
           parentescoLibre: responsable.parentescoLibre || '',
@@ -767,11 +719,6 @@ export function AlumnosModule() {
           puedeRetirarAlumno: puedeRetirarAlumno,
           contactoEmergencia: contactoEmergencia,
         };
-
-        console.log(
-          `Actualizando relación de responsable ${responsable.id}`,
-          datosRelacion
-        );
 
         const resultadoRelacion = await actualizarRelacionResponsable(
           editingAlumno.id_alumno,
@@ -800,7 +747,7 @@ export function AlumnosModule() {
             );
             responsableId = relacionData.responsableId;
           } catch (error) {
-            console.error('Error al obtener ID de responsable:', error);
+            // Error al obtener ID de responsable
           }
         }
 
@@ -820,17 +767,6 @@ export function AlumnosModule() {
             );
           }
 
-          // Log detallado para depuración
-          console.log(
-            'Datos del responsable antes de enviar:',
-            datosParaEnviar
-          );
-
-          console.log(
-            `Actualizando datos del responsable ID: ${responsableId}`,
-            datosParaEnviar
-          );
-
           // Ahora actualizamos los datos del responsable
           const resultado = await actualizarSoloResponsable(
             responsableId,
@@ -846,7 +782,6 @@ export function AlumnosModule() {
         }
       }
     } catch (error: any) {
-      console.error('Error al actualizar responsable:', error);
       toast.error(
         `Error al actualizar responsable: ${error.message || 'Error desconocido'}`
       );
@@ -859,10 +794,6 @@ export function AlumnosModule() {
   const isEmptyResponsable = (responsable: any): boolean => {
     // Si el responsable es nulo o undefined, considerarlo vacío
     if (!responsable) {
-      console.log(
-        'isEmptyResponsable: responsable es null/undefined',
-        responsable
-      );
       return true;
     }
 
@@ -885,23 +816,16 @@ export function AlumnosModule() {
       // Verificar en datosResponsable
       const valor1 = datosResponsable[campo];
       if (valor1 && typeof valor1 === 'string' && valor1.trim() !== '') {
-        console.log(
-          `Campo ${campo} en datosResponsable tiene valor: ${valor1}`
-        );
         return false; // No está vacío
       }
 
       // Verificar en responsable
       const valor2 = responsableData[campo];
       if (valor2 && typeof valor2 === 'string' && valor2.trim() !== '') {
-        console.log(`Campo ${campo} en responsable tiene valor: ${valor2}`);
         return false; // No está vacío
       }
     }
 
-    console.log(
-      'isEmptyResponsable: todos los campos importantes están vacíos'
-    );
     return true; // Está vacío
   };
 
@@ -914,19 +838,12 @@ export function AlumnosModule() {
 
     // Obtenemos el responsable a eliminar
     const responsableToRemove = responsables[index];
-    console.log(
-      `Eliminando responsable en índice ${index}:`,
-      responsableToRemove
-    );
 
     try {
       setIsLoading(true);
 
       // Verificar explícitamente si está vacío
       const esResponsableVacio = isEmptyResponsable(responsableToRemove);
-      console.log(
-        `¿Es un formulario vacío? ${esResponsableVacio ? 'SÍ' : 'NO'}`
-      );
 
       // Caso 1: Responsable existente en la base de datos (tiene ID numérico en la BD)
       if (
@@ -934,10 +851,6 @@ export function AlumnosModule() {
         typeof responsableToRemove?.id === 'number' &&
         responsableToRemove.id > 0
       ) {
-        console.log(
-          `Eliminando responsable con ID ${responsableToRemove.id} del alumno ${editingAlumno.id_alumno} (API)`
-        );
-
         // Llamar a la API para eliminar el responsable
         await eliminarResponsable(
           editingAlumno.id_alumno,
@@ -950,37 +863,21 @@ export function AlumnosModule() {
       }
       // Caso 2: Formulario vacío - solo eliminamos visualmente sin notificación
       else if (esResponsableVacio) {
-        console.log('Cancelando formulario de responsable vacío (solo UI)');
         // No mostramos notificación para no interrumpir al usuario
       }
       // Caso 3: Responsable con datos pero no guardado en BD
       else {
-        console.log(
-          'Eliminando responsable con datos que no está en la BD (solo UI)'
-        );
         toast.success('Responsable eliminado correctamente');
       }
 
       // Eliminación del estado local (en todos los casos)
-      console.log(
-        'Actualizando estado: eliminando responsable del índice',
-        index,
-        'Total actual:',
-        responsables.length
-      );
 
       // Eliminamos del estado usando el índice
       setResponsables((prevState) => {
         const newState = prevState.filter((_, i) => i !== index);
-        console.log(
-          'Nuevo estado después de eliminar:',
-          newState.length,
-          'responsables'
-        );
         return newState;
       });
     } catch (error) {
-      console.error('Error al eliminar responsable:', error);
       const errorMsg =
         error instanceof Error ? error.message : 'Error desconocido';
       toast.error(`Error al eliminar el responsable: ${errorMsg}`);
@@ -991,7 +888,6 @@ export function AlumnosModule() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Formulario enviado - handleSubmit ejecutado');
 
     if (!formData.nombre || !formData.apellido || !formData.fechaNacimiento) {
       toast.error('Los campos obligatorios deben ser completados');
@@ -1157,20 +1053,12 @@ export function AlumnosModule() {
       };
 
       try {
-        console.log('Actualizando alumno con ID:', editingAlumno.id_alumno);
-        console.log(
-          'Datos a enviar:',
-          JSON.stringify(alumnoActualizado, null, 2)
-        );
-
         // Usamos la función actualizarAlumnoCompleto del servicio que maneja todos los aspectos
         // de la actualización, incluyendo responsables
         const resultado = await actualizarAlumnoCompleto(
           editingAlumno.id_alumno,
           alumnoActualizado
         );
-
-        console.log('Resultado de la actualización:', resultado);
 
         // Verificamos si hubo errores con los responsables
         const responsablesConError = resultado.resultadosResponsables.filter(
@@ -1199,8 +1087,6 @@ export function AlumnosModule() {
         }
 
         if (responsablesConError.length > 0) {
-          console.error('Errores en responsables:', responsablesConError);
-
           // Mostramos detalles de los errores específicos
           responsablesConError.forEach((res, index) => {
             toast.error(
@@ -1223,9 +1109,8 @@ export function AlumnosModule() {
         setEditingAlumno(null);
         setIsDialogOpen(false);
       } catch (error) {
-        console.error('Error al actualizar el alumno:', error);
         toast.error(
-          'Error al actualizar el alumno. Revisa la consola para más detalles.'
+          'Error al actualizar el alumno. Por favor intente nuevamente.'
         );
       } finally {
         setIsLoading(false);
@@ -1371,14 +1256,7 @@ export function AlumnosModule() {
       setIsLoading(true);
 
       // Realizamos la petición POST a la API
-      console.log(
-        'Enviando alumno a la API:',
-        JSON.stringify(nuevoAlumno, null, 2)
-      );
-
       try {
-        console.log('Intentando enviar a la API:', nuevoAlumno);
-
         // Intentamos una versión alternativa de la petición API usando fetch directamente
         // para descartar posibles problemas con axios
         const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -1393,29 +1271,16 @@ export function AlumnosModule() {
           body: JSON.stringify(nuevoAlumno),
         });
 
-        console.log('Estado de la respuesta fetch:', fetchResponse.status);
-
         if (fetchResponse.ok) {
           const alumnoCreado = (await fetchResponse.json()) as Alumno;
-          console.log('Alumno creado:', alumnoCreado);
           setAlumnos([...alumnos, alumnoCreado]);
           toast.success('Alumno registrado correctamente');
         } else {
-          const errorData = await fetchResponse.json().catch(() => ({}));
-          console.error(
-            'Error en la respuesta:',
-            fetchResponse.status,
-            errorData
-          );
-          // Mostrar más detalles del error para depuración
-          if (errorData.message) {
-            console.error('Mensaje de error:', errorData.message);
-          }
-          if (errorData.error) {
-            console.error('Error detallado:', errorData.error);
-          }
+          // Intentamos obtener datos de error pero no los mostramos en consola
+          await fetchResponse.json().catch(() => ({}));
+
           toast.error(
-            `Error al registrar: ${fetchResponse.status} ${fetchResponse.statusText}. Consulta la consola para más detalles.`
+            `Error al registrar: ${fetchResponse.status} ${fetchResponse.statusText}`
           );
           throw new Error(
             `Error al registrar: ${fetchResponse.status} ${fetchResponse.statusText}`
@@ -1466,12 +1331,7 @@ export function AlumnosModule() {
         });
         setResponsables([]);
       } catch (error: any) {
-        console.error('Error al crear el alumno:', error);
         // Mostrar más información del error para diagnosticar
-        if (error.response) {
-          console.error('Respuesta del servidor:', error.response.data);
-          console.error('Código de estado:', error.response.status);
-        }
         toast.error(
           'Error al registrar el alumno: ' +
             (error.response?.data?.message ||
@@ -1514,7 +1374,6 @@ export function AlumnosModule() {
         `Alumno ${newStatus ? 'activado' : 'desactivado'} correctamente`
       );
     } catch (error) {
-      console.error('Error al cambiar el estado del alumno:', error);
       toast.error(
         `Error al ${alumno.activo ? 'desactivar' : 'activar'} el alumno`
       );
@@ -1543,11 +1402,6 @@ export function AlumnosModule() {
     parentescoId?: number | null,
     parentescoLibre?: string
   ) => {
-    console.log('Obteniendo nombre de parentesco para:', {
-      parentescoId,
-      parentescoLibre,
-    });
-
     // Si hay texto libre de parentesco, lo usamos directamente
     if (parentescoLibre) return parentescoLibre;
 
@@ -1562,7 +1416,6 @@ export function AlumnosModule() {
       const parentesco = parentescos.find(
         (p) => p.id_parentesco === parentescoId
       );
-      console.log('Parentesco encontrado:', parentesco);
       return parentesco?.nombre || 'Contacto principal';
     }
 
@@ -1576,27 +1429,19 @@ export function AlumnosModule() {
 
   const getResponsablePrincipal = (alumno: Alumno) => {
     // Verificamos que responsables exista y no esté vacío
-    console.log(
-      'Buscando responsable principal para:',
-      alumno.nombre,
-      alumno.apellido
-    );
 
     if (!alumno.responsables) {
-      console.log('No hay responsables para este alumno');
       return null;
     }
 
     // Primero verificamos si responsables es un array
     if (Array.isArray(alumno.responsables)) {
       if (alumno.responsables.length === 0) {
-        console.log('Array de responsables vacío');
         return null;
       }
 
       // Buscamos el responsable principal usando la propiedad esPrincipal
       const principal = alumno.responsables.find((r) => r.esPrincipal === true);
-      console.log('¿Se encontró responsable principal?', !!principal);
 
       // Si encontramos uno principal, lo retornamos
       if (principal) {
@@ -1604,9 +1449,6 @@ export function AlumnosModule() {
       }
 
       // Si no hay principal, retornamos el primero de la lista
-      console.log(
-        'No se encontró responsable principal, devolviendo el primero'
-      );
       return alumno.responsables[0];
     } else if (
       typeof alumno.responsables === 'object' &&
@@ -1805,8 +1647,7 @@ export function AlumnosModule() {
                               setAlumnos(alumnosData);
                               setError(null);
                             })
-                            .catch((err) => {
-                              console.error('Error al recargar alumnos:', err);
+                            .catch(() => {
                               setError(
                                 'Error al cargar los alumnos. Intente de nuevo más tarde.'
                               );
@@ -1839,12 +1680,9 @@ export function AlumnosModule() {
                   // Obtenemos el responsable principal
                   const responsablePrincipal = getResponsablePrincipal(alumno);
 
-                  // Depuramos el responsable encontrado para diagnosticar problemas
+                  // Verificamos que exista el responsable principal
                   if (responsablePrincipal) {
-                    console.log(
-                      'Estructura del responsable principal para renderizar:',
-                      responsablePrincipal
-                    );
+                    // El responsable principal existe
                   }
                   return (
                     <TableRow
@@ -2796,11 +2634,7 @@ export function AlumnosModule() {
                             {/* Botón para cancelar formularios vacíos - con depuración */}
                             {(() => {
                               const isEmpty = isEmptyResponsable(responsable);
-                              console.log(
-                                `Botón para responsable ${index}: isEmpty=${isEmpty}`,
-                                responsable
-                              );
-
+                              // Verificación de formulario vacío
                               if (isEmpty) {
                                 return (
                                   <Button
@@ -2808,10 +2642,6 @@ export function AlumnosModule() {
                                     variant="secondary"
                                     size="sm"
                                     onClick={() => {
-                                      console.log(
-                                        'Cancelando formulario vacío en índice:',
-                                        index
-                                      );
                                       removeResponsable(index);
                                     }}
                                     className="bg-gray-200 text-gray-700 hover:bg-gray-300"
@@ -2836,10 +2666,7 @@ export function AlumnosModule() {
                                               : '')
                                         )
                                       ) {
-                                        console.log(
-                                          'Eliminando responsable con datos en índice:',
-                                          index
-                                        );
+                                        // Eliminando responsable con datos
                                         removeResponsable(index);
                                       }
                                     }}
@@ -2964,10 +2791,6 @@ export function AlumnosModule() {
                                 }
                                 onChange={(e) => {
                                   // Aseguramos que se pase el valor exacto, incluso si es vacío
-                                  console.log(
-                                    'Nuevo valor de email:',
-                                    e.target.value
-                                  );
                                   updateResponsable(
                                     index,
                                     'datosResponsable',
@@ -3379,10 +3202,6 @@ export function AlumnosModule() {
                                   false
                                 }
                                 onCheckedChange={(checked) => {
-                                  console.log(
-                                    'Checkbox firma cambiado a:',
-                                    checked
-                                  );
                                   updateResponsable(
                                     index,
                                     'relacion',
@@ -3525,7 +3344,6 @@ export function AlumnosModule() {
                 type="button"
                 className="bg-blue-600 hover:bg-blue-700"
                 onClick={() => {
-                  console.log('Botón de registro clickeado manualmente');
                   // Creamos un evento sintético para pasar a handleSubmit
                   const syntheticEvent = {
                     preventDefault: () => {},

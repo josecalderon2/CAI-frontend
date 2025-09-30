@@ -4,7 +4,7 @@
 
 /**
  * Actualiza solo los datos de un responsable específico
- * Esta función es útil cuando solo quieres actualizar un responsable sin tocar el resto del alumno
+ * Esta función es útil cuando solo quieres acizar un responsable sin tocar el resto del alumno
  * @param responsableId ID del responsable a actualizar
  * @param datos Datos del responsable a actualizar
  * @returns Datos actualizados del responsable
@@ -29,30 +29,14 @@ export const actualizarSoloResponsable = async (
           value === undefined || value === null || value === ''
             ? ''
             : String(value);
-        console.log(
-          `Tratamiento especial para ${key}:`,
-          value,
-          '->',
-          datosLimpios[key]
-        );
       } else {
         // Para el resto de campos
         datosLimpios[key] = value === undefined || value === null ? '' : value;
       }
-      console.log(
-        `Incluyendo campo ${key} con valor:`,
-        datosLimpios[key],
-        typeof datosLimpios[key]
-      );
     }
   });
 
   try {
-    console.log(
-      `Actualizando solo datos del responsable ID: ${responsableId}`,
-      datosLimpios
-    );
-
     const response = await fetch(`${apiUrl}/responsables/${responsableId}`, {
       method: 'PATCH',
       headers: {
@@ -64,10 +48,6 @@ export const actualizarSoloResponsable = async (
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(
-        `Error al actualizar responsable (status: ${response.status}):`,
-        errorText
-      );
 
       let detalleError;
       try {
@@ -89,7 +69,6 @@ export const actualizarSoloResponsable = async (
     // Si no tiene contenido (204 No Content), devolvemos éxito
     return { success: true, id: responsableId };
   } catch (error: any) {
-    console.error('Error al actualizar datos del responsable:', error);
     throw error;
   }
 };
@@ -129,10 +108,6 @@ export const actualizarRelacionResponsable = async (
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(
-        `Error al actualizar relación (status: ${response.status}):`,
-        errorText
-      );
 
       let detalleError;
       try {
@@ -148,7 +123,6 @@ export const actualizarRelacionResponsable = async (
 
     return await response.json();
   } catch (error: any) {
-    console.error('Error al actualizar relación responsable-alumno:', error);
     throw error;
   }
 };
@@ -183,7 +157,6 @@ export const obtenerDatosResponsable = async (responsableId: number) => {
 
     return await response.json();
   } catch (error: any) {
-    console.error('Error al obtener datos del responsable:', error);
     throw error;
   }
 };

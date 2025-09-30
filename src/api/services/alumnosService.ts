@@ -65,18 +65,12 @@ export const actualizarDatosBasicos = async (
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error(
-        'Error al actualizar datos básicos:',
-        response.status,
-        errorData
-      );
+      await response.json().catch(() => ({})); // Consumimos el cuerpo de la respuesta
       throw new Error(`Error ${response.status}: ${response.statusText}`);
     }
 
     return await response.json();
   } catch (error) {
-    console.error('Error en la actualización de datos básicos:', error);
     throw error;
   }
 };
@@ -94,11 +88,6 @@ export const agregarResponsable = async (
   const token = localStorage.getItem('access_token');
 
   try {
-    console.log(
-      `Agregando nuevo responsable para alumno ${alumnoId}`,
-      nuevoResponsable
-    );
-
     // Nos aseguramos de que la estructura sea correcta para el API
     const datosRelacion: Record<string, any> = {
       parentescoId: nuevoResponsable.parentescoId || null,
@@ -137,18 +126,12 @@ export const agregarResponsable = async (
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error(
-        'Error al agregar responsable:',
-        response.status,
-        errorData
-      );
+      await response.json().catch(() => ({}));
       throw new Error(`Error ${response.status}: ${response.statusText}`);
     }
 
     return await response.json();
   } catch (error) {
-    console.error('Error al agregar responsable:', error);
     throw error;
   }
 };
@@ -168,13 +151,6 @@ export const actualizarRelacionResponsable = async (
   const token = localStorage.getItem('access_token');
 
   try {
-    // Log para verificar los valores antes de enviar
-    console.log('Enviando datos de relación:', {
-      ...datosRelacion,
-      contactoEmergencia:
-        datosRelacion.contactoEmergencia === true ? true : false,
-    });
-
     // Preparar los datos para envío
     const datosEnvio: Record<string, any> = {};
 
@@ -216,7 +192,6 @@ export const actualizarRelacionResponsable = async (
     });
 
     // Log final antes de enviar los datos
-    console.log('Datos finales a enviar a la API:', datosEnvio);
 
     const response = await fetch(
       `${apiUrl}/alumnos/${alumnoId}/responsables/${relacionId}`,
@@ -231,18 +206,12 @@ export const actualizarRelacionResponsable = async (
     );
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error(
-        'Error al actualizar relación:',
-        response.status,
-        errorData
-      );
+      await response.json().catch(() => ({}));
       throw new Error(`Error ${response.status}: ${response.statusText}`);
     }
 
     return await response.json();
   } catch (error) {
-    console.error('Error al actualizar relación con responsable:', error);
     throw error;
   }
 };
@@ -266,12 +235,7 @@ export const eliminarResponsable = async (
   const token = localStorage.getItem('access_token');
 
   try {
-    console.log(
-      `Intentando eliminar responsable: alumnoId=${alumnoId}, relacionId=${relacionId}`
-    );
-
     const url = `${apiUrl}/alumnos/${alumnoId}/responsables/${relacionId}`;
-    console.log(`URL de eliminación: ${url}`);
 
     const response = await fetch(url, {
       method: 'DELETE',
@@ -288,18 +252,12 @@ export const eliminarResponsable = async (
     if (responseText) {
       try {
         responseData = JSON.parse(responseText);
-        console.log('Respuesta del servidor al eliminar:', responseData);
       } catch (parseError) {
-        console.log('Respuesta del servidor (texto plano):', responseText);
+        // No se pudo parsear como JSON
       }
     }
 
     if (!response.ok) {
-      console.error(
-        `Error al eliminar responsable - Status: ${response.status}, Mensaje: ${response.statusText}`,
-        responseData
-      );
-
       // Construir un mensaje de error más descriptivo
       const errorMessage =
         (responseData as any)?.message ||
@@ -311,16 +269,11 @@ export const eliminarResponsable = async (
 
     // Las operaciones DELETE pueden no devolver contenido
     if (response.status === 204 || !responseText) {
-      console.log(
-        'Responsable eliminado correctamente (sin contenido en respuesta)'
-      );
       return { success: true };
     }
 
-    console.log('Responsable eliminado correctamente:', responseData);
     return responseData;
   } catch (error) {
-    console.error('Error en la función eliminarResponsable:', error);
     throw error;
   }
 };
@@ -342,8 +295,7 @@ export const desactivarAlumno = async (alumnoId: number) => {
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error('Error al desactivar alumno:', response.status, errorData);
+      await response.json().catch(() => ({})); // Consumimos el cuerpo de la respuesta
       throw new Error(`Error ${response.status}: ${response.statusText}`);
     }
 
@@ -354,7 +306,6 @@ export const desactivarAlumno = async (alumnoId: number) => {
 
     return await response.json();
   } catch (error) {
-    console.error('Error al desactivar alumno:', error);
     throw error;
   }
 };
@@ -376,14 +327,12 @@ export const reactivarAlumno = async (alumnoId: number) => {
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error('Error al reactivar alumno:', response.status, errorData);
+      await response.json().catch(() => ({})); // Consumimos el cuerpo de la respuesta
       throw new Error(`Error ${response.status}: ${response.statusText}`);
     }
 
     return await response.json();
   } catch (error) {
-    console.error('Error al reactivar alumno:', error);
     throw error;
   }
 };
@@ -415,12 +364,7 @@ export const actualizarAlumnoCompleto = async (
     });
 
     if (!responseAlumno.ok) {
-      const errorData = await responseAlumno.json().catch(() => ({}));
-      console.error(
-        'Error al actualizar datos básicos:',
-        responseAlumno.status,
-        errorData
-      );
+      await responseAlumno.json().catch(() => ({}));
       throw new Error(
         `Error ${responseAlumno.status}: ${responseAlumno.statusText}`
       );
@@ -435,9 +379,6 @@ export const actualizarAlumnoCompleto = async (
 
           if (responsable.id) {
             // Actualizar responsable existente
-            console.log(
-              `Actualizando responsable ID ${responsable.id} para alumno ${alumnoId}`
-            );
 
             // Para la API de actualización de relación alumno-responsable, solo enviamos estos campos específicos
             // según la documentación y el código del backend
@@ -450,11 +391,6 @@ export const actualizarAlumnoCompleto = async (
               puedeRetirarAlumno: Boolean(responsable.puedeRetirarAlumno),
               contactoEmergencia: Boolean(responsable.contactoEmergencia),
             };
-
-            console.log(
-              'Datos de relación a enviar:',
-              JSON.stringify(datosRelacion, null, 2)
-            );
 
             // Primero actualizamos la relación
             respuestaResponsable = await fetch(
@@ -472,10 +408,6 @@ export const actualizarAlumnoCompleto = async (
             // Verificamos si hubo error en la actualización de la relación
             if (!respuestaResponsable.ok) {
               const errorText = await respuestaResponsable.text();
-              console.error(
-                `Error en la actualización de la relación (status ${respuestaResponsable.status}):`,
-                errorText
-              );
 
               // Intentamos parsear como JSON si es posible
               let detalleError;
@@ -488,10 +420,6 @@ export const actualizarAlumnoCompleto = async (
               // Si es un error 404, probablemente el responsable ya no existe
               // En lugar de simplemente reportar el error, deberíamos intentar crear un nuevo responsable
               if (respuestaResponsable.status === 404) {
-                console.log(
-                  'La relación o el responsable no existe. Intentando crear un nuevo responsable...'
-                );
-
                 try {
                   // Creamos un nuevo responsable con todos los datos
                   const datosCreacion: Record<string, any> = {
@@ -525,11 +453,6 @@ export const actualizarAlumnoCompleto = async (
                     datosCreacion.datosResponsable = datosResponsableClean;
                   }
 
-                  console.log(
-                    'Intentando crear nuevo responsable con datos:',
-                    JSON.stringify(datosCreacion, null, 2)
-                  );
-
                   // Intentamos crear un nuevo responsable usando POST
                   const respuestaCreacion = await fetch(
                     `${apiUrl}/alumnos/${alumnoId}/responsables`,
@@ -545,10 +468,6 @@ export const actualizarAlumnoCompleto = async (
 
                   if (respuestaCreacion.ok) {
                     const resultadoCreacion = await respuestaCreacion.json();
-                    console.log(
-                      'Relación recreada exitosamente:',
-                      resultadoCreacion
-                    );
 
                     resultadosResponsables.push({
                       error: false,
@@ -559,10 +478,6 @@ export const actualizarAlumnoCompleto = async (
                   } else {
                     // Si tampoco podemos crear la relación, entonces reportamos el error completo
                     const errorCreacion = await respuestaCreacion.text();
-                    console.error(
-                      'No se pudo crear la relación:',
-                      errorCreacion
-                    );
 
                     resultadosResponsables.push({
                       error: true,
@@ -575,7 +490,6 @@ export const actualizarAlumnoCompleto = async (
                     });
                   }
                 } catch (err: any) {
-                  console.error('Error al intentar recrear la relación:', err);
                   resultadosResponsables.push({
                     error: true,
                     mensaje: `Error al intentar recrear la relación: ${err.message || 'Error desconocido'}`,
@@ -602,10 +516,6 @@ export const actualizarAlumnoCompleto = async (
               const responsableId = relacionData.responsableId;
 
               if (responsableId) {
-                console.log(
-                  `Actualizando datos del responsable ID: ${responsableId}`
-                );
-
                 // Aseguramos que solo enviamos los campos válidos para un responsable
                 // según la estructura en el backend
                 const datosLimpios: Record<string, any> = {};
@@ -662,10 +572,6 @@ export const actualizarAlumnoCompleto = async (
 
                 // Solo hacemos la petición si hay datos que actualizar
                 if (Object.keys(datosLimpios).length === 0) {
-                  console.log(
-                    'No hay datos para actualizar del responsable, omitiendo actualización.'
-                  );
-
                   // Agregamos un registro de éxito aunque no haya hecho actualización
                   resultadosResponsables.push({
                     error: false,
@@ -677,11 +583,6 @@ export const actualizarAlumnoCompleto = async (
                   });
                   continue;
                 }
-
-                console.log(
-                  'Datos del responsable a actualizar:',
-                  JSON.stringify(datosLimpios, null, 2)
-                );
 
                 try {
                   const respDatos = await fetch(
@@ -698,17 +599,8 @@ export const actualizarAlumnoCompleto = async (
 
                   // Guardamos el texto de la respuesta para usarlo tanto para log como para errores
                   const respDatosTexto = await respDatos.text();
-                  console.log(
-                    `Respuesta actualización datos responsable (status: ${respDatos.status}):`,
-                    respDatosTexto
-                  );
 
                   if (!respDatos.ok) {
-                    console.error(
-                      `Error al actualizar datos del responsable: ${respDatos.status}`,
-                      respDatosTexto
-                    );
-
                     // Agregamos el error a resultadosResponsables para mostrarlo al usuario
                     let detalleError;
                     try {
@@ -744,10 +636,6 @@ export const actualizarAlumnoCompleto = async (
                     });
                   }
                 } catch (err: any) {
-                  console.error(
-                    'Excepción al actualizar datos del responsable:',
-                    err
-                  );
                   resultadosResponsables.push({
                     error: true,
                     mensaje: `Excepción: ${err.message || 'Error desconocido'}`,
@@ -758,7 +646,6 @@ export const actualizarAlumnoCompleto = async (
             }
           } else {
             // Agregar nuevo responsable
-            console.log(`Agregando nuevo responsable para alumno ${alumnoId}`);
 
             // Nos aseguramos de enviar la estructura correcta que espera la API
             // Según el controlador, necesitamos cumplir con CreateAlumnoResponsableDto
@@ -797,11 +684,6 @@ export const actualizarAlumnoCompleto = async (
               nuevoResponsable.datosResponsable = datosResponsableClean;
             }
 
-            console.log(
-              'Datos de nuevo responsable:',
-              JSON.stringify(nuevoResponsable, null, 2)
-            );
-
             respuestaResponsable = await fetch(
               `${apiUrl}/alumnos/${alumnoId}/responsables`,
               {
@@ -817,7 +699,6 @@ export const actualizarAlumnoCompleto = async (
 
           if (respuestaResponsable.ok) {
             const resultado = await respuestaResponsable.json();
-            console.log('Respuesta exitosa del servidor:', resultado);
 
             // Guardamos la información del responsable actualizado o creado para actualizaciones futuras
             const responsableInfo = {
@@ -829,11 +710,6 @@ export const actualizarAlumnoCompleto = async (
                 responsable.responsableId ||
                 0,
             };
-
-            console.log(
-              'Información del responsable guardada:',
-              responsableInfo
-            );
 
             resultadosResponsables.push({
               error: false,
@@ -848,10 +724,6 @@ export const actualizarAlumnoCompleto = async (
           } else {
             // Capturamos el texto completo de la respuesta para mejor diagnóstico
             const textoError = await respuestaResponsable.text();
-            console.error(
-              `Error con responsable (status ${respuestaResponsable.status}):`,
-              textoError
-            );
 
             // Intentamos parsear como JSON si es posible
             let detalleError;
@@ -872,7 +744,6 @@ export const actualizarAlumnoCompleto = async (
             });
           }
         } catch (error: any) {
-          console.error('Error procesando responsable:', error);
           resultadosResponsables.push({
             error: true,
             mensaje: error.message || 'Error desconocido',
@@ -892,7 +763,6 @@ export const actualizarAlumnoCompleto = async (
       resultadosResponsables,
     };
   } catch (error) {
-    console.error('Error en la actualización completa del alumno:', error);
     throw error;
   }
 };
