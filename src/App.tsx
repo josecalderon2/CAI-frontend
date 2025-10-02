@@ -18,6 +18,7 @@ import ProtectedRoute from './components/ProtectedRoute/ProtectedRoute';
 import AdminDashboard from './components/AdminDashboard';
 import { UsuariosModule } from './components/UsuariosModule';
 import { AlumnosModule } from './components/AlumnosModule';
+import ResetPassword from './components/ResetPassword';
 
 // Helpers de auth
 function getUser() {
@@ -171,6 +172,11 @@ function AppRoutes() {
     <Shell>
       <Routes>
         <Route path="/login" element={<LoginForm />} />
+
+        <Route 
+          path="/reset-password" 
+          element={<ResetPassword />} 
+        />
         <Route
           path="/"
           element={ <ProtectedRoute><Dashboard /></ProtectedRoute> }
