@@ -125,12 +125,12 @@ export default function ResetPassword() {
                     id="password"
                     type={showPwd ? 'text' : 'password'}
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => setPassword(e.target.value.replace(/\s/g, ''))}
                     placeholder="••••••••"
                     className="pl-10 pr-10"
                     autoComplete="new-password"
                     required
-                  />
+                    />
                   <button
                     type="button"
                     onClick={() => setShowPwd(v => !v)}
@@ -151,12 +151,13 @@ export default function ResetPassword() {
                     id="confirm"
                     type={showConfirm ? 'text' : 'password'}
                     value={confirm}
-                    onChange={(e) => setConfirm(e.target.value)}
+                    onChange={(e) => setConfirm(e.target.value.replace(/\s/g, ''))} 
                     placeholder="••••••••"
                     className="pl-10 pr-10"
                     autoComplete="new-password"
                     required
-                  />
+                />
+
                   <button
                     type="button"
                     onClick={() => setShowConfirm(v => !v)}
