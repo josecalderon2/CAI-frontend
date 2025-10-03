@@ -20,7 +20,7 @@ export default function ResetPassword() {
   // El token viene del enlace del correo: /reset-password?token=XYZ
   const token = useMemo(() => params.get('token') || '', [params]);
 
-  const [password, setPassword] = useState('');
+  const [newPassword, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [showPwd, setShowPwd] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -29,8 +29,44 @@ export default function ResetPassword() {
   const [done, setDone] = useState(false);
 
   useEffect(() => {
-    if (!token) setFormError('El enlace no es válido o ha expirado.');
-  }, [token]);
+  // Redirección si ya hay sesión
+  const stored = localStorage.getItem('auth');
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored);
+      if (parsed?.user) {
+        navigate('/admin', { replace: true });
+        return;
+      }
+    } catch {}
+  }
+
+  if (!token) {
+    setFormError('El enlace no es válido o ha expirado.');
+    return;
+  }
+
+  (async () => {
+    try {
+      const res = await api.get('/auth/reset-password', {
+        params: { token },
+        responseType: 'text', // el GET puede devolver HTML
+        // No lances excepción; decide por status
+        validateStatus: () => true,
+      });
+
+      // ✅ Solo consideramos inválido si el back nos dice 400 explícito
+      if (res.status === 400) {
+        setFormError('El enlace no es válido o ha expirado.');
+      } else {
+        setFormError(null);
+      }
+    } catch {
+      // Cualquier error de red: no bloquees, deja que el POST valide
+      setFormError(null);
+    }
+  })();
+}, [token, navigate]);
 
   // Ajusta esta política para que refleje la del backend
   const policy = {
@@ -41,11 +77,11 @@ export default function ResetPassword() {
   };
 
   const checks = {
-    length: password.length >= policy.min,
-    upper: /[A-Z]/.test(password),
-    lower: /[a-z]/.test(password),
-    digit: /\d/.test(password),
-    match: password.length > 0 && password === confirm,
+    length: newPassword.length >= policy.min,
+    upper: /[A-Z]/.test(newPassword),
+    lower: /[a-z]/.test(newPassword),
+    digit: /\d/.test(newPassword),
+    match: newPassword.length > 0 && newPassword === confirm,
   };
 
   const strength = (() => {
@@ -58,7 +94,7 @@ export default function ResetPassword() {
     return s; // 0–5
   })();
 
-  const canSubmit = token && Object.values(checks).every(Boolean) && !loading;
+  const canSubmit = token && Object.values(checks).every(Boolean) && !loading && !formError;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,16 +103,21 @@ export default function ResetPassword() {
 
     setLoading(true);
     try {
-      // ⬇️ Cambia la ruta si tu backend usa otra (ej. '/auth/password/reset')
-      await api.post('/auth/reset-password', { token, password });
+      // Enviar el body que espera el backend: { token, newPassword }
+      await api.post('/auth/reset-password', { token, newPassword });
 
       setDone(true);
       toast.success('Contraseña restablecida correctamente');
       setTimeout(() => navigate('/login', { replace: true }), 2000);
     } catch (err: any) {
-      const msg =
-        err?.response?.data?.message || 'No se pudo restablecer la contraseña';
-      setFormError(Array.isArray(msg) ? msg.join(', ') : msg);
+      const code = err?.response?.status;
+      if (code === 400) {
+        // Token inválido o expirado
+        setFormError('El enlace es inválido o ha expirado. Solicita uno nuevo.');
+      } else {
+        const msg = err?.response?.data?.message || 'No se pudo restablecer la contraseña';
+        setFormError(Array.isArray(msg) ? msg.join(', ') : msg);
+      }
       toast.error('Ocurrió un error al restablecer la contraseña');
     } finally {
       setLoading(false);
@@ -115,85 +156,87 @@ export default function ResetPassword() {
           )}
 
           {!done ? (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Nueva contraseña */}
-              <div className="space-y-2">
-                <Label htmlFor="password">Nueva contraseña</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <Input
-                    id="password"
-                    type={showPwd ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value.replace(/\s/g, ''))}
-                    placeholder="••••••••"
-                    className="pl-10 pr-10"
-                    autoComplete="new-password"
-                    required
+            formError ? null : (
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {/* Nueva contraseña */}
+                <div className="space-y-2">
+                  <Label htmlFor="password">Nueva contraseña</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <Input
+                      id="password"
+                      type={showPwd ? 'text' : 'password'}
+                      value={newPassword}
+                      onChange={(e) => setPassword(e.target.value.replace(/\s/g, ''))}
+                      placeholder="••••••••"
+                      className="pl-10 pr-10"
+                      autoComplete="new-password"
+                      required
                     />
-                  <button
-                    type="button"
-                    onClick={() => setShowPwd(v => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
-                    aria-label={showPwd ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                  >
-                    {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowPwd(v => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+                      aria-label={showPwd ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                    >
+                      {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              {/* Confirmación */}
-              <div className="space-y-2">
-                <Label htmlFor="confirm">Confirmar contraseña</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <Input
-                    id="confirm"
-                    type={showConfirm ? 'text' : 'password'}
-                    value={confirm}
-                    onChange={(e) => setConfirm(e.target.value.replace(/\s/g, ''))} 
-                    placeholder="••••••••"
-                    className="pl-10 pr-10"
-                    autoComplete="new-password"
-                    required
-                />
+                {/* Confirmación */}
+                <div className="space-y-2">
+                  <Label htmlFor="confirm">Confirmar contraseña</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <Input
+                      id="confirm"
+                      type={showConfirm ? 'text' : 'password'}
+                      value={confirm}
+                      onChange={(e) => setConfirm(e.target.value.replace(/\s/g, ''))}
+                      placeholder="••••••••"
+                      className="pl-10 pr-10"
+                      autoComplete="new-password"
+                      required
+                    />
 
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirm(v => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
-                    aria-label={showConfirm ? 'Ocultar confirmación' : 'Mostrar confirmación'}
-                  >
-                    {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirm(v => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+                      aria-label={showConfirm ? 'Ocultar confirmación' : 'Mostrar confirmación'}
+                    >
+                      {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              {/* Checklist de reglas */}
-              <ul className="text-xs text-gray-600 space-y-1">
-                <CheckItem ok={checks.length} text={`Mínimo ${policy.min} caracteres`} />
-                <CheckItem ok={checks.upper} text="Al menos una mayúscula (A-Z)" />
-                <CheckItem ok={checks.lower} text="Al menos una minúscula (a-z)" />
-                <CheckItem ok={checks.digit} text="Al menos un número (0-9)" />
-                <CheckItem ok={checks.match} text="Las contraseñas coinciden" />
-              </ul>
+                {/* Checklist de reglas */}
+                <ul className="text-xs text-gray-600 space-y-1">
+                  <CheckItem ok={checks.length} text={`Mínimo ${policy.min} caracteres`} />
+                  <CheckItem ok={checks.upper} text="Al menos una mayúscula (A-Z)" />
+                  <CheckItem ok={checks.lower} text="Al menos una minúscula (a-z)" />
+                  <CheckItem ok={checks.digit} text="Al menos un número (0-9)" />
+                  <CheckItem ok={checks.match} text="Las contraseñas coinciden" />
+                </ul>
 
-              {/* Barra de fuerza */}
-              <div className="h-2 rounded bg-gray-200 overflow-hidden">
-                <div
-                  className={`h-full ${strength <= 2 ? 'bg-red-400' : strength <= 4 ? 'bg-yellow-400' : 'bg-green-500'}`}
-                  style={{ width: `${(strength / 5) * 100}%` }}
-                />
-              </div>
+                {/* Barra de fuerza */}
+                <div className="h-2 rounded bg-gray-200 overflow-hidden">
+                  <div
+                    className={`h-full ${strength <= 2 ? 'bg-red-400' : strength <= 4 ? 'bg-yellow-400' : 'bg-green-500'}`}
+                    style={{ width: `${(strength / 5) * 100}%` }}
+                  />
+                </div>
 
-              <Button
-                type="submit"
-                disabled={!canSubmit}
-                className="w-full bg-blue-600 hover:bg-blue-700"
-              >
-                {loading ? 'Guardando…' : 'Guardar nueva contraseña'}
-              </Button>
-            </form>
+                <Button
+                  type="submit"
+                  disabled={!canSubmit}
+                  className="w-full bg-blue-600 hover:bg-blue-700"
+                >
+                  {loading ? 'Guardando…' : 'Guardar nueva contraseña'}
+                </Button>
+              </form>
+            )
           ) : (
             <div className="text-center space-y-4 py-4">
               <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
