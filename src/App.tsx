@@ -9,7 +9,7 @@ import {
 import type { ReactNode } from 'react';
 import { useEffect } from 'react';
 
-// 1. Importa el Toaster
+// Toaster
 import { Toaster } from 'sonner';
 
 import { Header } from './components/Header';
@@ -19,8 +19,10 @@ import AdminDashboard from './components/AdminDashboard';
 import { UsuariosModule } from './components/UsuariosModule';
 import { AlumnosModule } from './components/AlumnosModule';
 import { OrientadorDashboard } from './components/OrientadorDashboard';
+import ResetPassword from './components/ResetPassword';
+import { AdministrativoDashboard } from './components/AdministrativoDashboard';
 
-// Helpers de auth
+// ================= Helpers de auth =================
 function getUser() {
   const raw = localStorage.getItem('user');
   try {
@@ -37,7 +39,19 @@ function clearAuth() {
   localStorage.removeItem('user');
 }
 
-// Dashboard de prueba
+// ============== Home por rol (como el no oficial) ==============
+function homeForRole(r?: string) {
+  switch (r) {
+    case 'Admin':
+      return '/admin';
+    case 'P.A':
+      return '/pa';
+    default:
+      return '/';
+  }
+}
+
+// ================== Dashboard genérico ==================
 function Dashboard() {
   const u = getUser();
   const location = useLocation();
@@ -55,6 +69,9 @@ function Dashboard() {
         navigate('/pa', { replace: true });
       }
     }
+    if (u?.role === 'P.A' && location.pathname === '/') {
+      navigate('/pa', { replace: true });
+    }
   }, [u, location, navigate]);
 
   // No renderizar nada si el usuario va a ser redirigido
@@ -71,7 +88,7 @@ function Dashboard() {
   );
 }
 
-// Shell (Header + rutas)
+// ================= Shell (Header + rutas) =================
 function Shell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -130,12 +147,13 @@ function Shell({ children }: { children: ReactNode }) {
   );
 }
 
+// =================== Pages por rol ===================
 function AdminPage() {
   const navigate = useNavigate();
   const raw = getUser();
 
   if (!raw || raw.role !== 'Admin') {
-    return <Navigate to="/" replace />;
+    return <Navigate to={homeForRole(raw?.role)} replace />;
   }
 
   const uiUser = {
@@ -151,9 +169,30 @@ function AdminPage() {
   return <AdminDashboard user={uiUser} onNavigate={onNavigate} />;
 }
 
-function OrientadorDashboardWrapper() {
+function AdministrativoPage() {
   const navigate = useNavigate();
+  const raw = getUser();
+
+  if (!raw || raw.role !== 'P.A') {
+    return <Navigate to={homeForRole(raw?.role)} replace />;
+  }
+
+  const uiUser = {
+    id: String(raw.id),
+    name: raw.nombre ?? raw.email,
+    email: raw.email,
+    role: 'administrativo' as const,
+  };
+
+  const onNavigate = (section: string) =>
+    navigate(section === 'dashboard' ? '/' : `/${section}`);
+
+  return <AdministrativoDashboard user={uiUser} onNavigate={onNavigate} />;
+}
+
+function OrientadorDashboardWrapper() {
   const u = getUser();
+  const navigate = useNavigate();
 
   // Verificar que el usuario esté autenticado y tenga el rol adecuado
   if (!u) {
@@ -181,24 +220,14 @@ function OrientadorDashboardWrapper() {
   return <OrientadorDashboard user={uiUser} onNavigate={onNavigate} />;
 }
 
-function PADashboard() {
-  const u = getUser();
-  return (
-    <div className="p-6">
-      <h2 className="text-xl font-semibold">
-        Bienvenido, {u?.nombre ?? 'Personal Administrativo'}
-      </h2>
-      <p className="text-gray-600">Rol: Personal Administrativo</p>
-      <p className="mt-4">Este es el dashboard para personal administrativo.</p>
-    </div>
-  );
-}
-
+// ===================== Rutas =====================
 function AppRoutes() {
   return (
     <Shell>
       <Routes>
         <Route path="/login" element={<LoginForm />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+
         <Route
           path="/"
           element={
@@ -207,6 +236,7 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
+
         <Route
           path="/admin"
           element={
@@ -215,6 +245,7 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
+
         <Route
           path="/orientador"
           element={
@@ -223,14 +254,19 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
+
         <Route
           path="/pa"
           element={
             <ProtectedRoute>
-              <PADashboard />
+              <AdministrativoPage />
             </ProtectedRoute>
           }
         />
+
+        {/* Alias legacy: /administrativo → /pa */}
+        <Route path="/administrativo" element={<Navigate to="/pa" replace />} />
+
         <Route
           path="/usuarios"
           element={
@@ -239,6 +275,7 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
+
         <Route
           path="/alumnos"
           element={
@@ -247,7 +284,12 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
-        <Route path="*" element={<Navigate to="/" replace />} />
+
+        {/* Catch-all manda a home del rol */}
+        <Route
+          path="*"
+          element={<Navigate to={homeForRole(getUser()?.role)} replace />}
+        />
       </Routes>
     </Shell>
   );
@@ -257,7 +299,6 @@ export default function App() {
   return (
     <Router>
       <AppRoutes />
-      {/* 2. Coloca el componente Toaster aquí */}
       <Toaster richColors position="top-right" />
     </Router>
   );

@@ -133,13 +133,16 @@ function ForgotPasswordDialog({
 
     setSending(true);
     try {
-      // Ajusta la ruta si tu backend usa otra
-      await api.post('/auth/forgot-password', { email });
+      await api.post('/auth/forgot-password', { email: email.trim() });
+      // Mensaje genérico: no revelar si el correo existe
       setMsg(
         'Te enviamos un enlace para restablecer tu contraseña (si el correo existe).'
       );
     } catch {
-      setErr('No se pudo enviar el enlace. Intenta de nuevo.');
+      // Mantener genérico también en error (evita enumeración de correos)
+      setMsg(
+        'Te enviamos un enlace para restablecer tu contraseña (si el correo existe).'
+      );
     } finally {
       setSending(false);
     }
@@ -237,8 +240,13 @@ export function LoginForm() {
       setIsLoading(true);
 
       try {
-        const { data } = await api.post<AuthResponse>('/auth/login', formData);
+        const { data } = await api.post<AuthResponse>('/auth/login', {
+          email: formData.email.trim(),
+          password: formData.password,
+        });
+
         if (isAuthResponse(data)) {
+          // Guarda sesión (deja tu implementación tal cual)
           setAuth(data);
 
           // Redireccionar según el rol
@@ -334,7 +342,7 @@ export function LoginForm() {
               <button
                 type="button"
                 onClick={() => setForgotOpen(true)}
-                className='"inline-flex items-center justify-center rounded-xl bg-white px-4 py-2 text-sm text-blue-700 shadow-sm hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500"'
+                className="inline-flex items-center justify-center rounded-xl bg-white px-4 py-2 text-sm text-blue-700 shadow-sm hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 ¿Olvidaste tu contraseña?
               </button>
