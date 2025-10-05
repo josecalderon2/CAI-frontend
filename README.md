@@ -1,69 +1,72 @@
-# React + TypeScript + Vite
+# Colegio Amigos de Israel - Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Este proyecto contiene el frontend para el sistema de gestión escolar del Colegio Amigos de Israel.
 
-Currently, two official plugins are available:
+## Tecnologías utilizadas
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- React 19
+- TypeScript
+- Vite 7
+- TailwindCSS 4
+- React Router 7
+- Radix UI
 
-## Expanding the ESLint configuration
+## Requisitos
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- Node.js versión 20.19+ o 22.12+
+- npm o yarn
 
-```js
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Configuración del entorno
 
-      // Remove tseslint.configs.recommended and replace with this
-      ...tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      ...tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      ...tseslint.configs.stylisticTypeChecked,
+El proyecto utiliza variables de entorno para configurar la URL de la API:
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+- Desarrollo: `.env` - Apunta a `http://localhost:3000`
+- Producción: `.env.production` - Apunta a la URL de la API en producción
+
+## Comandos disponibles
+
+```bash
+# Instalar dependencias
+npm install
+
+# Ejecutar en modo desarrollo
+npm run dev
+
+# Construir para producción
+npm run build
+
+# Construir específicamente para producción
+npm run build:prod
+
+# Vista previa de la construcción
+npm run preview
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Despliegue en VM local con Windows
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### Preparación del servidor IIS
 
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+1. Asegúrate de tener instalado IIS en la VM Windows
+2. Instala el módulo URL Rewrite para IIS (necesario para SPAs):
+   - Descarga desde: https://www.iis.net/downloads/microsoft/url-rewrite
+   - Instala siguiendo las instrucciones del instalador
+
+### Despliegue de la aplicación
+
+1. Ejecuta `npm run build` para generar la carpeta `dist`
+2. Copia todo el contenido de la carpeta `dist` a la carpeta del sitio web en IIS
+   (por ejemplo: `C:\inetpub\wwwroot\cai` o la ruta que hayas configurado)
+3. Asegúrate de que el archivo `web.config` esté presente en la raíz del sitio
+4. En el Administrador de IIS:
+   - Crea un nuevo sitio web o aplicación
+   - Configura la ruta física al directorio donde copiaste los archivos
+   - Asigna un nombre de host según sea necesario para tu red local
+
+## Notas adicionales
+
+- Asegúrate de que la API de backend esté correctamente configurada y accesible desde la VM local
+- Verifica que las redirecciones funcionan correctamente para rutas profundas
+- Comprueba que los archivos estáticos (imágenes, etc.) se cargan correctamente
+- Si tienes problemas con las redirecciones, verifica que el módulo URL Rewrite está instalado y funcionando
+- Para acceso desde otras máquinas en la red local, asegúrate de configurar correctamente las reglas de firewall de Windows
+- Considera configurar HTTPS incluso para redes locales para mayor seguridad
