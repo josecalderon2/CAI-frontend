@@ -320,15 +320,25 @@ export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
       {/* Actividad reciente */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
-          <CardHeader>
+          <CardHeader className="pb-2">
             <CardTitle className="flex items-center space-x-2">
               <Calendar className="w-5 h-5" />
               <span>Actividad Reciente</span>
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {recentActivity.map((activity, index) => (
+          <CardContent className="p-0">
+            <div
+              className="h-[180px] overflow-y-auto"
+              style={{
+                overflowY: 'auto',
+                maxHeight: '180px',
+                padding: '1rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '1rem',
+              }}
+            >
+              {recentActivity.slice(0, 4).map((activity, index) => (
                 <div
                   key={index}
                   className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg"

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -227,14 +227,33 @@ interface Alumno {
   responsables: ResponsableCompleto[];
 }
 
+// Hook para debounce del término de búsqueda
+const useDebounce = (value: string, delay: number) => {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+  return debouncedValue;
+};
+
 export function AlumnosModule() {
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Estados para la paginación
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const itemsPerPage = 10; // Número de alumnos por página
+
   const [searchTerm, setSearchTerm] = useState('');
   const [filterNivel, setFilterNivel] = useState<string>('todos');
   const [filterEstado, setFilterEstado] = useState<string>('todos');
+  const debouncedSearchTerm = useDebounce(searchTerm, 500); // Aplicar debounce al término de búsqueda
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
   const [selectedAlumno, setSelectedAlumno] = useState<Alumno | null>(null);
@@ -242,47 +261,56 @@ export function AlumnosModule() {
   const [currentTab, setCurrentTab] = useState('personal');
 
   // Cargar alumnos desde el backend
+  const cargarAlumnos = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      // Incluimos alumnos inactivos para poder filtrarlos en la interfaz
+      const response = await api.get('/alumnos', {
+        params: { incluirInactivos: true },
+      });
+
+      // Aseguramos que cada alumno tenga la propiedad responsables definida
+      const alumnosData = (response.data as Alumno[]).map((alumno) => {
+        return {
+          ...alumno,
+          responsables: alumno.responsables || [],
+          detalle: alumno.detalle || {
+            viveCon: '',
+            dependenciaEconomica: '',
+            capacidadPago: false,
+            tieneHermanosEnColegio: false,
+            hermanosEnColegio: [],
+          },
+        };
+      });
+
+      setAlumnos(alumnosData);
+      setTotalItems(alumnosData.length);
+      setTotalPages(Math.ceil(alumnosData.length / itemsPerPage));
+      setError(null);
+    } catch (err) {
+      setError('Error al cargar los alumnos. Intente de nuevo más tarde.');
+      toast.error('Error al cargar los alumnos');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [itemsPerPage]);
+
+  // Carga inicial de alumnos
   useEffect(() => {
-    const cargarAlumnos = async () => {
-      try {
-        setIsLoading(true);
-        // Incluimos alumnos inactivos para poder filtrarlos en la interfaz
-        const response = await api.get('/alumnos', {
-          params: { incluirInactivos: true },
-        });
-
-        // Aseguramos que cada alumno tenga la propiedad responsables definida
-        const alumnosData = (response.data as Alumno[]).map((alumno) => {
-          // Solo verificamos la estructura básica
-          if (alumno.responsables && alumno.responsables.length > 0) {
-            // El alumno tiene responsables
-          }
-
-          return {
-            ...alumno,
-            responsables: alumno.responsables || [],
-            detalle: alumno.detalle || {
-              viveCon: '',
-              dependenciaEconomica: '',
-              capacidadPago: false,
-              tieneHermanosEnColegio: false,
-              hermanosEnColegio: [],
-            },
-          };
-        });
-
-        setAlumnos(alumnosData);
-        setError(null);
-      } catch (err) {
-        setError('Error al cargar los alumnos. Intente de nuevo más tarde.');
-        toast.error('Error al cargar los alumnos');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     cargarAlumnos();
-  }, []);
+  }, [cargarAlumnos]);
+
+  // Cuando cambian los filtros, volvemos a la primera página
+  useEffect(() => {
+    if (
+      debouncedSearchTerm ||
+      filterNivel !== 'todos' ||
+      filterEstado !== 'todos'
+    ) {
+      setPage(1);
+    }
+  }, [debouncedSearchTerm, filterNivel, filterEstado]);
 
   // Cargamos los parentescos desde la API
   useEffect(() => {
@@ -352,22 +380,51 @@ export function AlumnosModule() {
     hermanosEnColegio: '[]',
   });
 
-  // Filtrar alumnos
-  const filteredAlumnos = alumnos.filter((alumno) => {
-    const matchesSearch =
-      alumno.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      alumno.apellido.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      `${alumno.nombre} ${alumno.apellido}`
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase());
-    const matchesNivel =
-      filterNivel === 'todos' || alumno.nivel === filterNivel;
-    const matchesEstado =
-      filterEstado === 'todos' ||
-      (filterEstado === 'activo' ? alumno.activo : !alumno.activo);
+  // Filtrar alumnos con paginación
+  const getFilteredAlumnos = useCallback(() => {
+    // Primero aplicamos todos los filtros
+    const filtered = alumnos.filter((alumno) => {
+      const matchesSearch =
+        !debouncedSearchTerm ||
+        alumno.nombre
+          .toLowerCase()
+          .includes(debouncedSearchTerm.toLowerCase()) ||
+        alumno.apellido
+          .toLowerCase()
+          .includes(debouncedSearchTerm.toLowerCase()) ||
+        `${alumno.nombre} ${alumno.apellido}`
+          .toLowerCase()
+          .includes(debouncedSearchTerm.toLowerCase());
+      const matchesNivel =
+        filterNivel === 'todos' || alumno.nivel === filterNivel;
+      const matchesEstado =
+        filterEstado === 'todos' ||
+        (filterEstado === 'activo' ? alumno.activo : !alumno.activo);
 
-    return matchesSearch && matchesNivel && matchesEstado;
-  });
+      return matchesSearch && matchesNivel && matchesEstado;
+    });
+
+    // Actualizamos los totales para la paginación
+    setTotalItems(filtered.length);
+    setTotalPages(Math.ceil(filtered.length / itemsPerPage));
+
+    // Devolvemos solo los elementos de la página actual
+    const startIndex = (page - 1) * itemsPerPage;
+    return filtered.slice(startIndex, startIndex + itemsPerPage);
+  }, [
+    alumnos,
+    debouncedSearchTerm,
+    filterNivel,
+    filterEstado,
+    page,
+    itemsPerPage,
+  ]);
+
+  // Calculamos los alumnos filtrados y paginados
+  const filteredAlumnos = useMemo(
+    () => getFilteredAlumnos(),
+    [getFilteredAlumnos]
+  );
 
   const resetForm = () => {
     setEditingAlumno(null);
@@ -2393,12 +2450,21 @@ export function AlumnosModule() {
                 <Input
                   placeholder="Buscar por nombre o apellidos..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setPage(1); // Volver a la primera página al buscar
+                  }}
                   className="pl-10"
                 />
               </div>
             </div>
-            <Select value={filterNivel} onValueChange={setFilterNivel}>
+            <Select
+              value={filterNivel}
+              onValueChange={(value) => {
+                setFilterNivel(value);
+                setPage(1); // Volver a la primera página al cambiar el filtro
+              }}
+            >
               <SelectTrigger className="w-full md:w-48">
                 <SelectValue placeholder="Filtrar por nivel" />
               </SelectTrigger>
@@ -2409,7 +2475,13 @@ export function AlumnosModule() {
                 <SelectItem value="media">Media</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={filterEstado} onValueChange={setFilterEstado}>
+            <Select
+              value={filterEstado}
+              onValueChange={(value) => {
+                setFilterEstado(value);
+                setPage(1); // Volver a la primera página al cambiar el filtro
+              }}
+            >
               <SelectTrigger className="w-full md:w-48">
                 <SelectValue placeholder="Filtrar por estado" />
               </SelectTrigger>
@@ -2428,7 +2500,7 @@ export function AlumnosModule() {
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
             <GraduationCap className="w-5 h-5" />
-            <span>Lista de Alumnos ({filteredAlumnos.length})</span>
+            <span>Lista de Alumnos ({totalItems})</span>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -2687,6 +2759,46 @@ export function AlumnosModule() {
               )}
             </TableBody>
           </Table>
+          <div className="flex items-center justify-between space-x-2 py-4">
+            <p className="text-sm text-gray-600">
+              Mostrando{' '}
+              <span className="font-semibold">{filteredAlumnos.length}</span> de{' '}
+              <span className="font-semibold">{totalItems}</span> resultados
+              {(debouncedSearchTerm ||
+                filterNivel !== 'todos' ||
+                filterEstado !== 'todos') && (
+                <Badge
+                  variant="outline"
+                  className="ml-2 bg-blue-50 text-blue-700"
+                >
+                  Filtrado
+                </Badge>
+              )}
+            </p>
+            <div className="flex items-center space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+                disabled={page === 1}
+              >
+                Anterior
+              </Button>
+              <span className="text-sm text-gray-600">
+                Página {page} de {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setPage((prev) => (prev < totalPages ? prev + 1 : prev))
+                }
+                disabled={page >= totalPages}
+              >
+                Siguiente
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
