@@ -18,6 +18,7 @@ import ProtectedRoute from './components/ProtectedRoute/ProtectedRoute';
 import AdminDashboard from './components/AdminDashboard';
 import { UsuariosModule } from './components/UsuariosModule';
 import { AlumnosModule } from './components/AlumnosModule';
+import { OrientadorDashboard } from './components/OrientadorDashboard';
 
 // Helpers de auth
 function getUser() {
@@ -43,12 +44,22 @@ function Dashboard() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (u?.role === 'Admin' && location.pathname === '/') {
-      navigate('/admin', { replace: true });
+    // Solo redirigir si estamos en la ruta raíz
+    if (location.pathname === '/') {
+      // Redirigir según el rol del usuario
+      if (u?.role === 'Admin') {
+        navigate('/admin', { replace: true });
+      } else if (u?.role === 'Orientador' || u?.role === 'orientador') {
+        navigate('/orientador', { replace: true });
+      } else if (u?.role === 'P.A') {
+        navigate('/pa', { replace: true });
+      }
     }
   }, [u, location, navigate]);
 
-  if (u?.role === 'Admin') return null;
+  // No renderizar nada si el usuario va a ser redirigido
+  if (u?.role === 'Admin' || u?.role === 'Orientador' || u?.role === 'P.A')
+    return null;
 
   return (
     <div className="p-6">
@@ -140,17 +151,34 @@ function AdminPage() {
   return <AdminDashboard user={uiUser} onNavigate={onNavigate} />;
 }
 
-function OrientadorDashboard() {
+function OrientadorDashboardWrapper() {
+  const navigate = useNavigate();
   const u = getUser();
-  return (
-    <div className="p-6">
-      <h2 className="text-xl font-semibold">
-        Bienvenido, {u?.nombre ?? 'Orientador'}
-      </h2>
-      <p className="text-gray-600">Rol: Orientador</p>
-      <p className="mt-4">Este es el dashboard para orientadores.</p>
-    </div>
-  );
+
+  // Verificar que el usuario esté autenticado y tenga el rol adecuado
+  if (!u) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // Permitir acceso tanto si tiene rol Orientador (backend) como orientador (UI)
+  if (u.role !== 'Orientador' && u.role !== 'orientador') {
+    console.log(
+      `Usuario con rol ${u.role} intentando acceder al dashboard de orientador`
+    );
+    return <Navigate to="/" replace />;
+  }
+
+  const uiUser = {
+    id: String(u.id),
+    name: u.nombre ?? u.email,
+    email: u.email,
+    role: 'docente' as const, // El componente OrientadorDashboard espera 'admin' o 'docente' como rol
+  };
+
+  const onNavigate = (section: string) =>
+    navigate(section === 'dashboard' ? '/' : `/${section}`);
+
+  return <OrientadorDashboard user={uiUser} onNavigate={onNavigate} />;
 }
 
 function PADashboard() {
@@ -173,27 +201,51 @@ function AppRoutes() {
         <Route path="/login" element={<LoginForm />} />
         <Route
           path="/"
-          element={ <ProtectedRoute><Dashboard /></ProtectedRoute> }
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
         />
         <Route
           path="/admin"
-          element={ <ProtectedRoute><AdminPage /></ProtectedRoute> }
+          element={
+            <ProtectedRoute>
+              <AdminPage />
+            </ProtectedRoute>
+          }
         />
         <Route
           path="/orientador"
-          element={ <ProtectedRoute><OrientadorDashboard /></ProtectedRoute> }
+          element={
+            <ProtectedRoute>
+              <OrientadorDashboardWrapper />
+            </ProtectedRoute>
+          }
         />
         <Route
           path="/pa"
-          element={ <ProtectedRoute><PADashboard /></ProtectedRoute> }
+          element={
+            <ProtectedRoute>
+              <PADashboard />
+            </ProtectedRoute>
+          }
         />
         <Route
           path="/usuarios"
-          element={ <ProtectedRoute><UsuariosModule /></ProtectedRoute> }
+          element={
+            <ProtectedRoute>
+              <UsuariosModule />
+            </ProtectedRoute>
+          }
         />
         <Route
           path="/alumnos"
-          element={ <ProtectedRoute><AlumnosModule /></ProtectedRoute> }
+          element={
+            <ProtectedRoute>
+              <AlumnosModule />
+            </ProtectedRoute>
+          }
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
