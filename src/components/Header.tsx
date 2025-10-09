@@ -26,6 +26,7 @@ import {
   Calendar,
   Edit,
   UserCheck,
+  Award,
 } from 'lucide-react';
 
 import logo from '../../public/logoCai.png';
@@ -57,6 +58,7 @@ export function Header({
     { id: 'usuarios', label: 'Usuarios', icon: Users },
     { id: 'alumnos', label: 'Alumnos', icon: GraduationCap },
     { id: 'asignaturas', label: 'Asignaturas', icon: BookOpen },
+    { id: 'grados', label: 'Grados', icon: Award },
     { id: 'cursos', label: 'Cursos', icon: School },
     { id: 'asignaciones', label: 'Asignaciones', icon: ClipboardList },
     { id: 'reportes', label: 'Reportes', icon: FileText },
@@ -74,6 +76,7 @@ export function Header({
     { id: 'dashboard', label: 'Dashboard', icon: Home },
     { id: 'alumnos', label: 'Alumnos', icon: GraduationCap },
     { id: 'asignaturas', label: 'Asignaturas', icon: BookOpen },
+    { id: 'grados', label: 'Grados', icon: Award },
     { id: 'cursos', label: 'Cursos', icon: School },
     { id: 'asignaciones', label: 'Asignaciones', icon: ClipboardList },
     { id: 'reportes', label: 'Reportes', icon: FileText },
