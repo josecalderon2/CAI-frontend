@@ -1,11 +1,11 @@
 import { useState } from 'react';
+import { useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Badge } from './ui/badge';
-import { Textarea } from './ui/textarea';
-import { 
+import {
   Table,
   TableBody,
   TableCell,
@@ -28,19 +28,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from './ui/select';
-import { 
-  GraduationCap, 
-  Plus, 
-  Edit, 
+import {
+  GraduationCap,
+  Plus,
+  Edit,
   Search,
   Award,
   Clock,
   Sun,
   Moon,
   Sunrise,
-  Calendar
+  Calendar,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { gradoAcademicoService } from '../api/services/gradoAcademicoService';
 import { Switch } from './ui/switch';
 
 interface Jornada {
@@ -61,86 +62,195 @@ interface GradoAcademico {
   descripcion?: string;
 }
 
-const jornadas: Jornada[] = [
+interface GradoForm {
+  nombre: string;
+  opcion: string;
+  n_anios: number;
+  nota_minima: number;
+  id_jornada: number;
+  rcup: boolean;
+  // descripcion removed to match backend schema
+}
+
+const defaultJornadas: Jornada[] = [
   { id: 1, nombre: 'Matutino', icon: Sun },
   { id: 2, nombre: 'Vespertino', icon: Moon },
   { id: 3, nombre: 'Completo', icon: Sunrise },
 ];
 
 export function GradosAcademicosModule() {
-  const [grados, setGrados] = useState<GradoAcademico[]>([
-    {
-      id: '1',
-      nombre: 'Educación Parvularia',
-      opcion: 'Kinder',
-      n_anios: 2,
-      nota_minima: 5.0,
-      id_jornada: 1,
-      rcup: false,
-      fechaCreacion: '2024-01-15',
-      descripcion: 'Nivel de educación inicial'
-    },
-    {
-      id: '2',
-      nombre: 'Educación Básica',
-      opcion: 'Básica General',
-      n_anios: 8,
-      nota_minima: 4.0,
-      id_jornada: 1,
-      rcup: true,
-      fechaCreacion: '2024-01-15',
-      descripcion: 'Educación básica de 1° a 8°'
-    },
-    {
-      id: '3',
-      nombre: 'Educación Media',
-      opcion: 'Científico-Humanista',
-      n_anios: 4,
-      nota_minima: 4.0,
-      id_jornada: 1,
-      rcup: true,
-      fechaCreacion: '2024-01-15',
-      descripcion: 'Educación media científico-humanista'
-    },
-    {
-      id: '4',
-      nombre: 'Educación Media',
-      opcion: 'Técnico-Profesional',
-      n_anios: 4,
-      nota_minima: 4.0,
-      id_jornada: 3,
-      rcup: true,
-      fechaCreacion: '2024-01-15',
-      descripcion: 'Educación media técnico-profesional'
-    },
-  ]);
+  const [grados, setGrados] = useState<GradoAcademico[]>([]);
+  const [paginatedGrados, setPaginatedGrados] = useState<GradoAcademico[]>([]);
+  const [page, setPage] = useState<number>(1);
+  const [totalPages, setTotalPages] = useState<number>(1);
+  const [totalItems, setTotalItems] = useState<number>(0);
+  const itemsPerPage = 10;
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [jornadasState, setJornadasState] =
+    useState<Jornada[]>(defaultJornadas);
   const [filterJornada, setFilterJornada] = useState<string>('todos');
   const [filterRcup, setFilterRcup] = useState<string>('todos');
+  const [filterOpcion, setFilterOpcion] = useState<string>('todos');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingGrado, setEditingGrado] = useState<GradoAcademico | null>(null);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<GradoForm>({
     nombre: '',
     opcion: '',
     n_anios: 1,
     nota_minima: 4.0,
     id_jornada: 1,
     rcup: false,
-    descripcion: ''
   });
 
-  // Filtrar grados
-  const filteredGrados = grados.filter(grado => {
-    const matchesSearch = 
-      grado.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      grado.opcion.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (grado.descripcion && grado.descripcion.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesJornada = filterJornada === 'todos' || grado.id_jornada.toString() === filterJornada;
-    const matchesRcup = filterRcup === 'todos' || (filterRcup === 'si' ? grado.rcup : !grado.rcup);
-    
-    return matchesSearch && matchesJornada && matchesRcup;
-  });
+  // cargar datos desde la API
+  // Debounce hook for search
+  const useDebounce = (value: string, delay: number) => {
+    const [debouncedValue, setDebouncedValue] = useState(value);
+    useEffect(() => {
+      const handler = setTimeout(() => setDebouncedValue(value), delay);
+      return () => clearTimeout(handler);
+    }, [value, delay]);
+    return debouncedValue;
+  };
+
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
+
+  // cargar datos desde la API (traer todos los registros con límite alto)
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await gradoAcademicoService.list({ page: 1, limit: 1000 });
+        const items = res.items ?? res;
+
+        const parseBoolean = (v: any) => {
+          if (
+            v === true ||
+            v === 1 ||
+            v === '1' ||
+            v === 'true' ||
+            v === 'True'
+          )
+            return true;
+          if (
+            v === false ||
+            v === 0 ||
+            v === '0' ||
+            v === 'false' ||
+            v === 'False'
+          )
+            return false;
+          if (typeof v === 'string') {
+            const s = v.toLowerCase();
+            if (
+              s === 'si' ||
+              s === 'sí' ||
+              s === 's' ||
+              s === 'y' ||
+              s === 'yes'
+            )
+              return true;
+            if (s === 'no' || s === 'n') return false;
+          }
+          return Boolean(v);
+        };
+
+        const mapped = (items || []).map((it: any) => ({
+          id: String(it.id_grado_academico ?? it.id ?? it.id_grado),
+          nombre: it.nombre,
+          opcion: it.opcion ?? '',
+          n_anios: it.n_anios ?? it.n_anios ?? 1,
+          nota_minima: it.nota_minima ?? it.nota_minima ?? 4.0,
+          id_jornada: it.id_jornada ?? 1,
+          rcup: parseBoolean(it.rcup),
+          fechaCreacion: it.fechaCreacion ?? it.createdAt ?? '',
+        }));
+
+        setGrados(mapped);
+      } catch (err: any) {
+        console.error('Error cargando grados:', err);
+        toast.error('No se pudieron cargar los grados académicos');
+      }
+    })();
+  }, []);
+
+  // Intentar cargar jornadas desde backend (si existe endpoint)
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await gradoAcademicoService.listJornadas();
+        const items = res.items ?? res;
+
+        const mapIcon = (name: string) => {
+          const s = (name || '').toLowerCase();
+          if (s.includes('matut')) return Sun;
+          if (s.includes('vespert')) return Moon;
+          if (s.includes('compl') || s.includes('complet')) return Sunrise;
+          return Sun;
+        };
+
+        const mapped = (items || []).map((it: any) => ({
+          id: Number(it.id_jornada ?? it.id),
+          nombre: it.nombre ?? it.descripcion ?? String(it.id_jornada ?? it.id),
+          icon: mapIcon(it.nombre ?? it.descripcion ?? ''),
+        }));
+
+        if (mapped.length > 0) setJornadasState(mapped);
+      } catch (err) {
+        // fallback: mantener defaultJornadas
+        console.warn(
+          'No se pudieron cargar jornadas desde API, usando fallback',
+          err
+        );
+      }
+    })();
+  }, []);
+
+  // Aplicar filtros y paginación en cliente
+  useEffect(() => {
+    const applyFilters = () => {
+      const s = debouncedSearchTerm.toLowerCase();
+
+      const filtered = grados.filter((grado: GradoAcademico) => {
+        const matchesSearch =
+          grado.nombre.toLowerCase().includes(s) ||
+          grado.opcion.toLowerCase().includes(s) ||
+          false;
+        const matchesJornada =
+          filterJornada === 'todos' ||
+          grado.id_jornada.toString() === filterJornada;
+        const matchesRcup =
+          filterRcup === 'todos' ||
+          (filterRcup === 'si' ? grado.rcup : !grado.rcup);
+        const matchesOpcion =
+          filterOpcion === 'todos' ||
+          normalizeOpcion(grado.opcion) === filterOpcion;
+
+        return matchesSearch && matchesJornada && matchesRcup && matchesOpcion;
+      });
+
+      setTotalItems(filtered.length);
+      const pages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
+      setTotalPages(pages);
+      // Ensure current page is within range
+      const currentPage = Math.min(page, pages);
+      setPage(currentPage);
+
+      const start = (currentPage - 1) * itemsPerPage;
+      const slice = filtered.slice(start, start + itemsPerPage);
+      setPaginatedGrados(slice);
+    };
+
+    applyFilters();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    grados,
+    debouncedSearchTerm,
+    filterJornada,
+    filterRcup,
+    filterOpcion,
+    page,
+  ]);
 
   const handleCreateGrado = () => {
     setEditingGrado(null);
@@ -151,7 +261,6 @@ export function GradosAcademicosModule() {
       nota_minima: 4.0,
       id_jornada: 1,
       rcup: false,
-      descripcion: ''
     });
     setIsDialogOpen(true);
   };
@@ -165,14 +274,41 @@ export function GradosAcademicosModule() {
       nota_minima: grado.nota_minima,
       id_jornada: grado.id_jornada,
       rcup: grado.rcup,
-      descripcion: grado.descripcion || ''
     });
     setIsDialogOpen(true);
   };
 
+  // Combina opciones fijas con las ya existentes en los grados
+  // Normaliza variantes comunes para evitar duplicados visuales
+  const normalizeOpcion = (raw: string) => {
+    const s = String(raw || '').trim();
+    if (!s) return '';
+    const low = s.toLowerCase().replace(/\s+/g, ' ');
+    // Normalizar variantes de 'Semi presencial' a 'Semi-presencial'
+    if (/^semi[\s-]*presenci/.test(low)) return 'Semi-presencial';
+    if (/^presencial$/.test(low)) return 'Presencial';
+    if (/^virtual$/.test(low)) return 'Virtual';
+    // Capitalizar palabras por defecto
+    return s.replace(
+      /\w\S*/g,
+      (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
+    );
+  };
+
+  const opcionOptions: string[] = Array.from(
+    new Set([
+      'Presencial',
+      'Semi-presencial',
+      'Virtual',
+      ...grados
+        .map((g) => normalizeOpcion(g.opcion))
+        .filter((o) => o && o.trim() !== ''),
+    ])
+  );
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Validaciones
     if (!formData.nombre || !formData.opcion) {
       toast.error('Los campos nombre y opción son obligatorios');
@@ -189,54 +325,110 @@ export function GradosAcademicosModule() {
       return;
     }
 
-    if (editingGrado) {
-      // Editar grado existente
-      setGrados(grados.map(g => 
-        g.id === editingGrado.id 
-          ? {
-              ...g,
-              nombre: formData.nombre,
-              opcion: formData.opcion,
-              n_anios: formData.n_anios,
-              nota_minima: formData.nota_minima,
-              id_jornada: formData.id_jornada,
-              rcup: formData.rcup,
-              descripcion: formData.descripcion
-            }
-          : g
-      ));
-      toast.success('Grado académico actualizado correctamente');
-    } else {
-      // Crear nuevo grado
-      const newGrado: GradoAcademico = {
-        id: Date.now().toString(),
-        nombre: formData.nombre,
-        opcion: formData.opcion,
-        n_anios: formData.n_anios,
-        nota_minima: formData.nota_minima,
-        id_jornada: formData.id_jornada,
-        rcup: formData.rcup,
-        fechaCreacion: new Date().toISOString().split('T')[0],
-        descripcion: formData.descripcion
-      };
-      setGrados([...grados, newGrado]);
-      toast.success('Grado académico creado correctamente');
-    }
+    (async () => {
+      try {
+        if (editingGrado) {
+          // actualizar en backend
+          const idNum = parseInt(editingGrado.id, 10);
+          const updated: any = await gradoAcademicoService.update(idNum, {
+            nombre: formData.nombre,
+            opcion: formData.opcion,
+            n_anios: formData.n_anios,
+            nota_minima: formData.nota_minima,
+            id_jornada: formData.id_jornada,
+            rcup: formData.rcup,
+            // descripcion removed from payload
+          });
 
-    setIsDialogOpen(false);
+          // reflejar en UI
+          setGrados((prev) =>
+            prev.map((g) =>
+              g.id === String(updated.id_grado_academico ?? updated.id)
+                ? {
+                    ...g,
+                    nombre: updated.nombre,
+                    opcion: updated.opcion ?? g.opcion,
+                    n_anios: updated.n_anios ?? g.n_anios,
+                    nota_minima: updated.nota_minima ?? g.nota_minima,
+                    id_jornada: updated.id_jornada ?? g.id_jornada,
+                    rcup: Boolean(updated.rcup),
+                    // descripcion removed
+                  }
+                : g
+            )
+          );
+
+          toast.success('Grado académico actualizado correctamente');
+        } else {
+          // crear en backend
+          const created: any = await gradoAcademicoService.create({
+            nombre: formData.nombre,
+            opcion: formData.opcion,
+            n_anios: formData.n_anios,
+            nota_minima: formData.nota_minima,
+            id_jornada: formData.id_jornada,
+            rcup: formData.rcup,
+            // descripcion removed from payload
+          } as any);
+
+          const newItem = {
+            id: String(created.id_grado_academico ?? created.id),
+            nombre: created.nombre,
+            opcion: created.opcion ?? '',
+            n_anios: created.n_anios ?? 1,
+            nota_minima: created.nota_minima ?? 4.0,
+            id_jornada: created.id_jornada ?? 1,
+            rcup: Boolean(created.rcup),
+            fechaCreacion: created.fechaCreacion ?? '',
+            // descripcion removed from created mapping
+          } as GradoAcademico;
+
+          setGrados((prev) => [...prev, newItem]);
+          toast.success('Grado académico creado correctamente');
+        }
+
+        setIsDialogOpen(false);
+      } catch (err: any) {
+        console.error('Error creando/actualizando grado', err);
+        toast.error(err?.message ?? 'Error al guardar grado académico');
+      }
+    })();
   };
 
-  const getJornada = (id: number) => jornadas.find(j => j.id === id);
+  // delete function removed per user request
+
+  const getJornada = (id: number) => jornadasState.find((j) => j.id === id);
+
+  const formatDisplayNombre = (g: GradoAcademico) => {
+    const s = String(g.nombre).trim();
+    // match leading number even if followed by text: '5', '5º', '5 Basico', '5 Básico'
+    const leadMatch = s.match(/^([0-9]+)\s*(?:º|°)?(?:\s+(.+))?$/);
+    if (leadMatch) {
+      const num = leadMatch[1];
+      // Prefer showing only the ordinal (e.g. '3º') or the trailing text from nombre itself
+      if (leadMatch[2]) return `${num}º ${leadMatch[2]}`;
+      return `${num}º`;
+    }
+
+    return g.nombre;
+  };
 
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Gestión de Grados Académicos</h1>
-          <p className="text-gray-600">Administra los grados académicos del sistema educativo</p>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Gestión de Grados Académicos
+          </h1>
+          <p className="text-gray-600">
+            Administra los grados académicos del sistema educativo
+          </p>
         </div>
-        <Button onClick={handleCreateGrado} className="bg-blue-600 hover:bg-blue-700">
+        <Button
+          onClick={handleCreateGrado}
+          className="bg-blue-600 hover:bg-blue-700"
+        >
           <Plus className="w-4 h-4 mr-2" />
           Nuevo Grado Académico
         </Button>
@@ -249,7 +441,9 @@ export function GradosAcademicosModule() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Total Grados</p>
-                <p className="text-2xl font-bold text-blue-600">{grados.length}</p>
+                <p className="text-2xl font-bold text-blue-600">
+                  {grados.length}
+                </p>
               </div>
               <GraduationCap className="w-8 h-8 text-blue-600" />
             </div>
@@ -261,7 +455,9 @@ export function GradosAcademicosModule() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Con RCUP</p>
-                <p className="text-2xl font-bold text-purple-600">{grados.filter(g => g.rcup).length}</p>
+                <p className="text-2xl font-bold text-purple-600">
+                  {grados.filter((g) => g.rcup).length}
+                </p>
               </div>
               <Award className="w-8 h-8 text-purple-600" />
             </div>
@@ -270,12 +466,30 @@ export function GradosAcademicosModule() {
 
         <Card className="border-l-4 border-l-orange-600">
           <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Total Años</p>
-                <p className="text-2xl font-bold text-orange-600">{grados.reduce((sum, g) => sum + g.n_anios, 0)}</p>
+            <div>
+              <p className="text-sm text-gray-600">Grados por Jornada</p>
+              <div className="mt-2 space-y-2">
+                {jornadasState.map((j) => {
+                  const count = grados.filter(
+                    (g) => g.id_jornada === j.id
+                  ).length;
+                  const Icon = j.icon;
+                  return (
+                    <div
+                      key={j.id}
+                      className="flex items-center justify-between"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <Icon className="w-5 h-5 text-orange-600" />
+                        <span className="text-sm">{j.nombre}</span>
+                      </div>
+                      <span className="text-2xl font-bold text-orange-600">
+                        {count}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
-              <Clock className="w-8 h-8 text-orange-600" />
             </div>
           </CardContent>
         </Card>
@@ -285,7 +499,12 @@ export function GradosAcademicosModule() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Promedio Años</p>
-                <p className="text-2xl font-bold text-green-600">{Math.round(grados.reduce((sum, g) => sum + g.n_anios, 0) / grados.length)}</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {Math.round(
+                    grados.reduce((sum, g) => sum + g.n_anios, 0) /
+                      grados.length
+                  )}
+                </p>
               </div>
               <Calendar className="w-8 h-8 text-green-600" />
             </div>
@@ -310,23 +529,38 @@ export function GradosAcademicosModule() {
             </div>
             <Select value={filterJornada} onValueChange={setFilterJornada}>
               <SelectTrigger className="w-full md:w-48">
-                <SelectValue placeholder="Filtrar por jornada" />
+                <SelectValue placeholder="Todas las jornadas" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="todos">Todas</SelectItem>
-                {jornadas.map(j => (
-                  <SelectItem key={j.id} value={j.id.toString()}>{j.nombre}</SelectItem>
+                <SelectItem value="todos">Todas las jornadas</SelectItem>
+                {jornadasState.map((j) => (
+                  <SelectItem key={j.id} value={j.id.toString()}>
+                    {j.nombre}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <Select value={filterRcup} onValueChange={setFilterRcup}>
               <SelectTrigger className="w-full md:w-48">
-                <SelectValue placeholder="Filtrar por RCUP" />
+                <SelectValue placeholder="Todos los RCUP" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="todos">Todos</SelectItem>
+                <SelectItem value="todos">Todos los RCUP</SelectItem>
                 <SelectItem value="si">Con RCUP</SelectItem>
                 <SelectItem value="no">Sin RCUP</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filterOpcion} onValueChange={setFilterOpcion}>
+              <SelectTrigger className="w-full md:w-48">
+                <SelectValue placeholder="Filtrar por opción" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todas las Opciones</SelectItem>
+                {opcionOptions.map((opt) => (
+                  <SelectItem key={opt} value={opt}>
+                    {opt}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -338,7 +572,7 @@ export function GradosAcademicosModule() {
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
             <GraduationCap className="w-5 h-5" />
-            <span>Lista de Grados Académicos ({filteredGrados.length})</span>
+            <span>Lista de Grados Académicos ({totalItems})</span>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -355,22 +589,21 @@ export function GradosAcademicosModule() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredGrados.map((grado) => {
+              {paginatedGrados.map((grado: GradoAcademico) => {
                 const jornada = getJornada(grado.id_jornada);
                 const JornadaIcon = jornada?.icon || Sun;
-                
+
                 return (
                   <TableRow key={grado.id}>
                     <TableCell>
                       <div>
-                        <p className="font-medium">{grado.nombre}</p>
-                        {grado.descripcion && (
-                          <p className="text-sm text-gray-500 truncate max-w-xs">{grado.descripcion}</p>
-                        )}
+                        <p className="font-medium">
+                          {formatDisplayNombre(grado)}
+                        </p>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge 
+                      <Badge
                         variant="outline"
                         className="text-blue-700 border-blue-200 bg-blue-50"
                       >
@@ -380,11 +613,13 @@ export function GradosAcademicosModule() {
                     <TableCell className="text-center">
                       <div className="flex items-center space-x-1">
                         <Clock className="w-4 h-4 text-gray-400" />
-                        <span className="text-sm">{grado.n_anios} {grado.n_anios === 1 ? 'año' : 'años'}</span>
+                        <span className="text-sm">
+                          {grado.n_anios} {grado.n_anios === 1 ? 'año' : 'años'}
+                        </span>
                       </div>
                     </TableCell>
                     <TableCell className="text-center">
-                      <Badge 
+                      <Badge
                         variant="outline"
                         className="bg-blue-50 text-blue-700 border-blue-200"
                       >
@@ -403,12 +638,15 @@ export function GradosAcademicosModule() {
                           Sí
                         </Badge>
                       ) : (
-                        <Badge variant="outline" className="text-gray-600 border-gray-300">
+                        <Badge
+                          variant="outline"
+                          className="text-gray-600 border-gray-300"
+                        >
                           No
                         </Badge>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="flex items-center gap-2">
                       <Button
                         variant="outline"
                         size="sm"
@@ -416,12 +654,44 @@ export function GradosAcademicosModule() {
                       >
                         <Edit className="w-4 h-4" />
                       </Button>
+                      {/* delete button removed by user request */}
                     </TableCell>
                   </TableRow>
                 );
               })}
             </TableBody>
           </Table>
+
+          <div className="flex items-center justify-between space-x-2 py-4">
+            <p className="text-sm text-gray-600">
+              Mostrando{' '}
+              <span className="font-semibold">{paginatedGrados.length}</span> de{' '}
+              <span className="font-semibold">{totalItems}</span> resultados
+            </p>
+            <div className="flex items-center space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+                disabled={page === 1}
+              >
+                Anterior
+              </Button>
+              <span className="text-sm text-gray-600">
+                Página {page} de {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setPage((prev) => (prev < totalPages ? prev + 1 : prev))
+                }
+                disabled={page >= totalPages}
+              >
+                Siguiente
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -430,10 +700,14 @@ export function GradosAcademicosModule() {
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>
-              {editingGrado ? 'Editar Grado Académico' : 'Crear Nuevo Grado Académico'}
+              {editingGrado
+                ? 'Editar Grado Académico'
+                : 'Crear Nuevo Grado Académico'}
             </DialogTitle>
             <DialogDescription>
-              {editingGrado ? 'Modifica la información del grado académico' : 'Completa los datos del nuevo grado académico'}
+              {editingGrado
+                ? 'Modifica la información del grado académico'
+                : 'Completa los datos del nuevo grado académico'}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -443,21 +717,33 @@ export function GradosAcademicosModule() {
                 <Input
                   id="nombre"
                   value={formData.nombre}
-                  onChange={(e) => setFormData({...formData, nombre: e.target.value})}
+                  onChange={(e) =>
+                    setFormData({ ...formData, nombre: e.target.value })
+                  }
                   placeholder="Ej: Educación Básica"
                   required
                 />
               </div>
-              
+
               <div>
                 <Label htmlFor="opcion">Opción *</Label>
-                <Input
-                  id="opcion"
+                <Select
                   value={formData.opcion}
-                  onChange={(e) => setFormData({...formData, opcion: e.target.value})}
-                  placeholder="Ej: Básica General"
-                  required
-                />
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, opcion: value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona una opción" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {opcionOptions.map((opt) => (
+                      <SelectItem key={opt} value={opt}>
+                        {opt}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -470,7 +756,18 @@ export function GradosAcademicosModule() {
                   min="1"
                   max="15"
                   value={formData.n_anios}
-                  onChange={(e) => setFormData({...formData, n_anios: parseInt(e.target.value) || 1})}
+                  inputMode="numeric"
+                  step={1}
+                  onFocus={(e) =>
+                    (e.currentTarget as HTMLInputElement).select()
+                  }
+                  onWheel={(e) => (e.currentTarget as HTMLInputElement).blur()}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      n_anios: parseInt(e.target.value) || 1,
+                    })
+                  }
                   required
                 />
                 <p className="text-sm text-gray-500 mt-1">Entre 1 y 15 años</p>
@@ -485,7 +782,17 @@ export function GradosAcademicosModule() {
                   max="7.0"
                   step="0.1"
                   value={formData.nota_minima}
-                  onChange={(e) => setFormData({...formData, nota_minima: parseFloat(e.target.value) || 4.0})}
+                  inputMode="decimal"
+                  onFocus={(e) =>
+                    (e.currentTarget as HTMLInputElement).select()
+                  }
+                  onWheel={(e) => (e.currentTarget as HTMLInputElement).blur()}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      nota_minima: parseFloat(e.target.value) || 4.0,
+                    })
+                  }
                   required
                 />
                 <p className="text-sm text-gray-500 mt-1">Entre 1.0 y 7.0</p>
@@ -493,15 +800,17 @@ export function GradosAcademicosModule() {
 
               <div>
                 <Label htmlFor="jornada">Jornada *</Label>
-                <Select 
-                  value={formData.id_jornada.toString()} 
-                  onValueChange={(value) => setFormData({...formData, id_jornada: parseInt(value)})}
+                <Select
+                  value={formData.id_jornada.toString()}
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, id_jornada: parseInt(value) })
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {jornadas.map(j => {
+                    {jornadasState.map((j) => {
                       const Icon = j.icon;
                       return (
                         <SelectItem key={j.id} value={j.id.toString()}>
@@ -521,26 +830,23 @@ export function GradosAcademicosModule() {
               <Switch
                 id="rcup"
                 checked={formData.rcup}
-                onCheckedChange={(checked) => setFormData({...formData, rcup: checked})}
+                onCheckedChange={(checked) =>
+                  setFormData({ ...formData, rcup: checked })
+                }
               />
               <Label htmlFor="rcup" className="cursor-pointer">
-                RCUP (Reconocimiento Curricular de Unidades Pedagógicas)
+                RCUP (Reprueba con último periodo)
               </Label>
             </div>
 
-            <div>
-              <Label htmlFor="descripcion">Descripción</Label>
-              <Textarea
-                id="descripcion"
-                value={formData.descripcion}
-                onChange={(e) => setFormData({...formData, descripcion: e.target.value})}
-                placeholder="Descripción del grado académico..."
-                rows={3}
-              />
-            </div>
+            {/* descripcion field removed to match backend schema */}
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsDialogOpen(false)}
+              >
                 Cancelar
               </Button>
               <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
