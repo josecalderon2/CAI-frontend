@@ -61,9 +61,21 @@ interface GradoAcademico {
   jornada?: Jornada | null;
 }
 
+interface CursoCupos {
+  id_curso: number;
+  nombre: string;
+  seccion?: string;
+  descripcion?: string;
+  cupoTotal: number;
+  cuposOcupados: number;
+  cuposDisponibles: number;
+  porcentajeOcupacion: number;
+}
+
 interface Curso extends CursoType {
   // Datos adicionales para la UI (solo para la visualización en la interfaz)
   alumnosInscritos?: number; // Será reemplazado por alumnosCount cuando esté disponible desde el backend
+  cupoData?: CursoCupos; // Información de cupos del curso
 }
 
 export function CursosModule() {
@@ -80,11 +92,25 @@ export function CursosModule() {
   const [totalItems, setTotalItems] = useState(0);
   const itemsPerPage = 5; // Cantidad de cursos por página
 
-  // Función para calcular el porcentaje de ocupación
-  const calcularPorcentajeOcupacion = (curso: Curso) => {
-    if (!curso.cupo || curso.cupo === 0) return 0;
-    const porcentaje = ((curso.alumnosInscritos || 0) / curso.cupo) * 100;
-    return Math.min(100, Math.round(porcentaje));
+  // Función para obtener el porcentaje de ocupación desde los datos de cupos
+  const getOcupacionInfo = (curso: Curso) => {
+    if (curso.cupoData) {
+      // Usar información directa del endpoint de cupos
+      return {
+        porcentaje: curso.cupoData.porcentajeOcupacion,
+        ocupados: curso.cupoData.cuposOcupados,
+        total: curso.cupoData.cupoTotal,
+        disponibles: curso.cupoData.cuposDisponibles,
+      };
+    } else {
+      // Fallback a cálculo antiguo si no hay datos de cupos
+      const total = curso.cupo || 0;
+      const ocupados = curso.alumnosInscritos || 0;
+      const disponibles = Math.max(0, total - ocupados);
+      const porcentaje =
+        total > 0 ? Math.min(100, Math.round((ocupados / total) * 100)) : 0;
+      return { porcentaje, ocupados, total, disponibles };
+    }
   };
   const [stats, setStats] = useState({
     totalCursos: 0,
@@ -102,19 +128,37 @@ export function CursosModule() {
         const gradosData = await gradoAcademicoService.list({ limit: 100 });
         setGradosAcademicos(gradosData.items);
 
-        // Cargar cursos
+        // Cargar cursos con información de cupos
+        const cursosCuposData = await cursosService.getAllCursosCupos({
+          limit: 100,
+        });
+
+        // Cargar cursos básicos para tener toda la información
         const cursosData = await cursosService.list({ limit: 100 });
+
+        // Combinar la información de ambos endpoints
         setCursos(
-          cursosData.items.map((curso) => ({
-            ...curso,
-            // Usar descripción del backend si existe, de lo contrario generar una
-            descripcion:
-              curso.descripcion ||
-              `Curso de ${curso.gradoAcademico?.nombre || ''} ${curso.seccion || ''}`,
-            // Usar el conteo real de alumnos del backend si está disponible, de lo contrario mostrar 0
-            alumnosInscritos:
-              curso.alumnosCount !== undefined ? curso.alumnosCount : 0,
-          }))
+          cursosData.items.map((curso) => {
+            // Encontrar la información de cupos para este curso
+            const cupoInfo = cursosCuposData.items.find(
+              (item) => item.id_curso === curso.id_curso
+            );
+
+            return {
+              ...curso,
+              // Usar descripción del backend si existe, de lo contrario generar una
+              descripcion:
+                curso.descripcion ||
+                `Curso de ${curso.gradoAcademico?.nombre || ''} ${curso.seccion || ''}`,
+              // Usar el conteo real de alumnos del backend si está disponible, de lo contrario mostrar 0
+              alumnosInscritos:
+                curso.alumnosCount !== undefined
+                  ? curso.alumnosCount
+                  : cupoInfo?.cuposOcupados || 0,
+              // Añadir la información de cupos
+              cupoData: cupoInfo,
+            };
+          })
         );
 
         // Cargar estadísticas
@@ -511,28 +555,44 @@ export function CursosModule() {
                     </TableCell>
                     <TableCell className="w-[150px]">
                       <div className="space-y-1">
-                        <div className="flex justify-between text-xs">
-                          <span>
-                            {curso.alumnosInscritos || 0} / {curso.cupo}
-                          </span>
-                          <span className="font-medium">
-                            {calcularPorcentajeOcupacion(curso)}%
-                          </span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div
-                            className={`h-2 rounded-full ${
-                              calcularPorcentajeOcupacion(curso) > 90
-                                ? 'bg-red-500'
-                                : calcularPorcentajeOcupacion(curso) > 70
-                                  ? 'bg-amber-500'
-                                  : 'bg-emerald-500'
-                            }`}
-                            style={{
-                              width: `${calcularPorcentajeOcupacion(curso)}%`,
-                            }}
-                          ></div>
-                        </div>
+                        {(() => {
+                          const ocupacion = getOcupacionInfo(curso);
+                          return (
+                            <>
+                              <div className="flex justify-between text-xs">
+                                <span>
+                                  {ocupacion.ocupados} / {ocupacion.total}
+                                </span>
+                                <span className="font-medium">
+                                  {ocupacion.porcentaje.toFixed(1)}%
+                                </span>
+                              </div>
+                              <div className="w-full bg-gray-200 rounded-full h-2">
+                                <div
+                                  className={`h-2 rounded-full ${
+                                    ocupacion.porcentaje > 90
+                                      ? 'bg-red-500'
+                                      : ocupacion.porcentaje > 70
+                                        ? 'bg-amber-500'
+                                        : 'bg-emerald-500'
+                                  }`}
+                                  style={{
+                                    width: `${ocupacion.porcentaje}%`,
+                                    backgroundColor:
+                                      ocupacion.porcentaje > 90
+                                        ? '#dc2626'
+                                        : ocupacion.porcentaje > 70
+                                          ? '#f59e0b'
+                                          : '#10b981',
+                                  }}
+                                ></div>
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                {ocupacion.disponibles} cupos disponibles
+                              </div>
+                            </>
+                          );
+                        })()}
                       </div>
                     </TableCell>
                     <TableCell>

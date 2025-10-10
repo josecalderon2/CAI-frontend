@@ -93,6 +93,66 @@ export const cursosService = {
     };
   },
 
+  // Obtener información de cupos para un curso específico
+  async getCursoCupos(id: number): Promise<{
+    id_curso: number;
+    nombre: string;
+    seccion?: string;
+    descripcion?: string;
+    cupoTotal: number;
+    cuposOcupados: number;
+    cuposDisponibles: number;
+    porcentajeOcupacion: number;
+  }> {
+    const res = await api.get(`${base}/${id}/cupos`);
+    return res.data as {
+      id_curso: number;
+      nombre: string;
+      seccion?: string;
+      descripcion?: string;
+      cupoTotal: number;
+      cuposOcupados: number;
+      cuposDisponibles: number;
+      porcentajeOcupacion: number;
+    };
+  },
+
+  // Obtener lista de todos los cursos con información de cupos
+  async getAllCursosCupos(params?: ListCursosParams): Promise<{
+    items: Array<{
+      id_curso: number;
+      nombre: string;
+      seccion?: string;
+      descripcion?: string;
+      cupoTotal: number;
+      cuposOcupados: number;
+      cuposDisponibles: number;
+      porcentajeOcupacion: number;
+    }>;
+    total: number;
+    page: number;
+    limit: number;
+    pages: number;
+  }> {
+    const res = await api.get(`${base}/cupos/listado`, { params });
+    return res.data as {
+      items: Array<{
+        id_curso: number;
+        nombre: string;
+        seccion?: string;
+        descripcion?: string;
+        cupoTotal: number;
+        cuposOcupados: number;
+        cuposDisponibles: number;
+        porcentajeOcupacion: number;
+      }>;
+      total: number;
+      page: number;
+      limit: number;
+      pages: number;
+    };
+  },
+
   // Toggle active status (wraps update method)
   async toggleStatus(id: number, active: boolean): Promise<Curso> {
     return this.update(id, { activo: active });
