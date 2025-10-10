@@ -29,44 +29,44 @@ export default function ResetPassword() {
   const [done, setDone] = useState(false);
 
   useEffect(() => {
-  // Redirección si ya hay sesión
-  const stored = localStorage.getItem('auth');
-  if (stored) {
-    try {
-      const parsed = JSON.parse(stored);
-      if (parsed?.user) {
-        navigate('/admin', { replace: true });
-        return;
-      }
-    } catch {}
-  }
-
-  if (!token) {
-    setFormError('El enlace no es válido o ha expirado.');
-    return;
-  }
-
-  (async () => {
-    try {
-      const res = await api.get('/auth/reset-password', {
-        params: { token },
-        responseType: 'text', // el GET puede devolver HTML
-        // No lances excepción; decide por status
-        validateStatus: () => true,
-      });
-
-      // ✅ Solo consideramos inválido si el back nos dice 400 explícito
-      if (res.status === 400) {
-        setFormError('El enlace no es válido o ha expirado.');
-      } else {
-        setFormError(null);
-      }
-    } catch {
-      // Cualquier error de red: no bloquees, deja que el POST valide
-      setFormError(null);
+    // Redirección si ya hay sesión
+    const stored = localStorage.getItem('auth');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (parsed?.user) {
+          navigate('/admin', { replace: true });
+          return;
+        }
+      } catch {}
     }
-  })();
-}, [token, navigate]);
+
+    if (!token) {
+      setFormError('El enlace no es válido o ha expirado.');
+      setTimeout(() => navigate('/login', { replace: true }), 2500);
+      return;
+    }
+
+    (async () => {
+      try {
+        const res = await api.get('/auth/reset-password', {
+          params: { token },
+          responseType: 'text',
+          validateStatus: () => true,
+        });
+
+        if (res.status === 400) {
+          setFormError('El enlace no es válido o ha expirado.');
+          setTimeout(() => navigate('/login', { replace: true }), 2500);
+        } else {
+          setFormError(null);
+        }
+      } catch {
+        setFormError('No se pudo validar el enlace.');
+        setTimeout(() => navigate('/login', { replace: true }), 2500);
+      }
+    })();
+  }, [token, navigate]);
 
   // Ajusta esta política para que refleje la del backend
   const policy = {
