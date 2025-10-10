@@ -21,6 +21,8 @@ import { AlumnosModule } from './components/AlumnosModule';
 import { OrientadorDashboard } from './components/OrientadorDashboard';
 import ResetPassword from './components/ResetPassword';
 import { AdministrativoDashboard } from './components/AdministrativoDashboard';
+import { GradosAcademicosModule } from './components/GradosAcademicosModule';
+import { CursosModule }  from './components/CursosModule';
 
 // ================= Helpers de auth =================
 function getUser() {
@@ -284,7 +286,23 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/grados-academicos"
+          element={
+            <ProtectedRoute>
+              <GradosAcademicosModule />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/cursos"
+          element={
+          <ProtectedRoute>
+              <CursosModule />
+           </ProtectedRoute>
 
+          }
+        /> 
         {/* Catch-all manda a home del rol */}
         <Route
           path="*"
