@@ -83,8 +83,8 @@ export function CursosModule() {
   const [gradosAcademicos, setGradosAcademicos] = useState<GradoAcademico[]>(
     []
   );
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [_loading, setLoading] = useState(true);
+  const [_error, setError] = useState<string | null>(null);
 
   // Estados para la paginación
   const [page, setPage] = useState(1);
@@ -112,7 +112,7 @@ export function CursosModule() {
       return { porcentaje, ocupados, total, disponibles };
     }
   };
-  const [stats, setStats] = useState({
+  const [_stats, setStats] = useState({
     totalCursos: 0,
     cursosActivos: 0,
     capacidadTotal: 0,
