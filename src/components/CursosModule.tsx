@@ -85,6 +85,7 @@ export function CursosModule() {
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filtrosInicializados, setFiltrosInicializados] = useState(false);
 
   // Estados para la paginación
   const [page, setPage] = useState(1);
@@ -119,6 +120,45 @@ export function CursosModule() {
     promedioAlumnosPorCurso: 0,
   });
 
+  // Función para extraer y actualizar los valores únicos de secciones y aulas desde los cursos
+  const actualizarFiltrosDisponibles = (cursosList: Curso[]) => {
+    console.log(
+      'Actualizando filtros disponibles con',
+      cursosList.length,
+      'cursos'
+    );
+
+    // Extraer aulas únicas
+    const aulasUnicas = Array.from(
+      new Set(
+        cursosList
+          .map((curso) => curso.aula)
+          .filter(
+            (aula) => aula !== null && aula !== undefined && aula.trim() !== ''
+          )
+      )
+    ).sort();
+    console.log('Aulas únicas encontradas:', aulasUnicas);
+    setAulasDisponibles(aulasUnicas as string[]);
+
+    // Extraer secciones únicas
+    const seccionesUnicas = Array.from(
+      new Set(
+        cursosList
+          .map((curso) => curso.seccion)
+          .filter(
+            (seccion) =>
+              seccion !== null && seccion !== undefined && seccion.trim() !== ''
+          )
+      )
+    ).sort();
+    console.log('Secciones únicas encontradas:', seccionesUnicas);
+    setSeccionesDisponibles(seccionesUnicas as string[]);
+
+    // Marcar filtros como inicializados
+    setFiltrosInicializados(true);
+  };
+
   // Efecto para cargar los datos iniciales
   useEffect(() => {
     const fetchData = async () => {
@@ -135,35 +175,38 @@ export function CursosModule() {
 
         // Cargar cursos básicos para tener toda la información
         const cursosData = await cursosService.list({ limit: 100 });
+        console.log('Cursos cargados:', cursosData.items);
 
         // Combinar la información de ambos endpoints
-        setCursos(
-          cursosData.items.map((curso) => {
-            // Encontrar la información de cupos para este curso
-            const cupoInfo = cursosCuposData.items.find(
-              (item) => item.id_curso === curso.id_curso
-            );
+        const cursosProcesados = cursosData.items.map((curso) => {
+          // Encontrar la información de cupos para este curso
+          const cupoInfo = cursosCuposData.items.find(
+            (item) => item.id_curso === curso.id_curso
+          );
 
-            return {
-              ...curso,
-              // Usar descripción del backend si existe, de lo contrario generar una
-              descripcion:
-                curso.descripcion ||
-                `Curso de ${curso.gradoAcademico?.nombre || ''} ${curso.seccion || ''}`,
-              // Usar el conteo real de alumnos del backend si está disponible, de lo contrario mostrar 0
-              alumnosInscritos:
-                curso.alumnosCount !== undefined
-                  ? curso.alumnosCount
-                  : cupoInfo?.cuposOcupados || 0,
-              // Añadir la información de cupos
-              cupoData: cupoInfo,
-            };
-          })
-        );
+          return {
+            ...curso,
+            // Usar descripción del backend si existe, de lo contrario generar una
+            descripcion:
+              curso.descripcion ||
+              `Curso de ${curso.gradoAcademico?.nombre || ''} ${curso.seccion || ''}`,
+            // Usar el conteo real de alumnos del backend si está disponible, de lo contrario mostrar 0
+            alumnosInscritos:
+              curso.alumnosCount !== undefined
+                ? curso.alumnosCount
+                : cupoInfo?.cuposOcupados || 0,
+            // Añadir la información de cupos
+            cupoData: cupoInfo,
+          };
+        });
+
+        setCursos(cursosProcesados);
 
         // Cargar estadísticas
         const statsData = await cursosService.stats();
         setStats(statsData);
+
+        // Los filtros se actualizarán automáticamente con el useEffect que observa cursos
       } catch (err) {
         console.error('Error cargando datos:', err);
         setError('Error al cargar los datos. Por favor, intente nuevamente.');
@@ -176,19 +219,92 @@ export function CursosModule() {
     fetchData();
   }, []);
 
+  // Efecto para actualizar los filtros cuando cambian los cursos
+  useEffect(() => {
+    if (cursos.length > 0) {
+      actualizarFiltrosDisponibles(cursos);
+    }
+  }, [cursos]);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [filterEstado, setFilterEstado] = useState<string>('todos');
+  const [filterGradoAcademico, setFilterGradoAcademico] =
+    useState<string>('todos');
+  const [filterSeccion, setFilterSeccion] = useState<string>('todos');
+  const [filterAula, setFilterAula] = useState<string>('todos');
+  const [aulasDisponibles, setAulasDisponibles] = useState<string[]>([
+    '1',
+    '2',
+    '3',
+  ]);
+  const [seccionesDisponibles, setSeccionesDisponibles] = useState<string[]>([
+    'A',
+    'B',
+    'C',
+  ]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCurso, setEditingCurso] = useState<Curso | null>(null);
 
   // Form data para curso
   const [formData, setFormData] = useState({
+    nombre: '',
     seccion: '',
     id_grado_academico: 0,
     cupo: 30,
     aula: '',
     descripcion: '',
   });
+
+  // Estado para las opciones de nombre del curso
+  const [nombreOptions, setNombreOptions] = useState<string[]>([]);
+
+  // Función para generar las opciones de nombre según el grado académico
+  const generateNombreOptions = (gradoId: number) => {
+    const gradoSeleccionado = gradosAcademicos.find(
+      (grado) => grado.id_grado_academico === gradoId
+    );
+
+    if (!gradoSeleccionado) {
+      setNombreOptions([]);
+      return;
+    }
+
+    // Obtener el nombre del grado para determinar el nivel
+    const nombreGrado = gradoSeleccionado.nombre.toLowerCase();
+    let options: string[] = [];
+
+    if (
+      nombreGrado.includes('primera infancia') ||
+      nombreGrado.includes('kinder')
+    ) {
+      options = ['Kinder 4', 'Kinder 5', 'Kinder 6'];
+    } else if (nombreGrado.includes('primaria')) {
+      options = [
+        'Primer Grado',
+        'Segundo Grado',
+        'Tercer Grado',
+        'Cuarto Grado',
+        'Quinto Grado',
+        'Sexto Grado',
+      ];
+    } else if (
+      nombreGrado.includes('secundaria') ||
+      nombreGrado.includes('bachillerato')
+    ) {
+      options = [
+        'Séptimo Grado',
+        'Octavo Grado',
+        'Noveno Grado',
+        'Primer Año de Bachillerato',
+        'Segundo Año de Bachillerato',
+      ];
+    } else {
+      // Para cualquier otro tipo de grado académico
+      options = [`Curso de ${gradoSeleccionado.nombre}`];
+    }
+
+    setNombreOptions(options);
+  };
 
   // Filtrar cursos
   const filteredCursos = cursos.filter((curso) => {
@@ -205,7 +321,22 @@ export function CursosModule() {
       filterEstado === 'todos' ||
       (filterEstado === 'activo' ? curso.activo : !curso.activo);
 
-    return matchesSearch && matchesEstado;
+    const matchesGradoAcademico =
+      filterGradoAcademico === 'todos' ||
+      curso.id_grado_academico?.toString() === filterGradoAcademico;
+
+    const matchesSeccion =
+      filterSeccion === 'todos' || curso.seccion === filterSeccion;
+
+    const matchesAula = filterAula === 'todos' || curso.aula === filterAula;
+
+    return (
+      matchesSearch &&
+      matchesEstado &&
+      matchesGradoAcademico &&
+      matchesSeccion &&
+      matchesAula
+    );
   });
 
   // Actualizar estados para la paginación
@@ -217,7 +348,23 @@ export function CursosModule() {
   // Cuando cambian los filtros, volvemos a la primera página
   useEffect(() => {
     setPage(1);
-  }, [searchTerm, filterEstado]);
+  }, [
+    searchTerm,
+    filterEstado,
+    filterGradoAcademico,
+    filterSeccion,
+    filterAula,
+  ]);
+
+  // Efecto para inicializar los filtros si no se han cargado datos
+  useEffect(() => {
+    if (!loading && !filtrosInicializados) {
+      console.log('Inicializando filtros con valores predeterminados...');
+      setSeccionesDisponibles(['A', 'B', 'C']);
+      setAulasDisponibles(['1', '2', '3']);
+      setFiltrosInicializados(true);
+    }
+  }, [loading, filtrosInicializados]);
 
   // Aplicar paginación
   const paginatedCursos = filteredCursos.slice(
@@ -228,24 +375,36 @@ export function CursosModule() {
   const handleCreateCurso = () => {
     setEditingCurso(null);
     setFormData({
+      nombre: '',
       seccion: '',
       id_grado_academico: 0,
       cupo: 30,
       aula: '',
       descripcion: '',
     });
+    setNombreOptions([]);
     setIsDialogOpen(true);
   };
 
   const handleEditCurso = (curso: Curso) => {
     setEditingCurso(curso);
+
+    const gradoId = curso.id_grado_academico || 0;
+
     setFormData({
+      nombre: curso.nombre || '',
       seccion: curso.seccion || '',
-      id_grado_academico: curso.id_grado_academico || 0,
+      id_grado_academico: gradoId,
       cupo: curso.cupo || 30,
       aula: curso.aula || '',
       descripcion: curso.descripcion || '',
     });
+
+    // Generar opciones de nombre para este grado
+    if (gradoId > 0) {
+      generateNombreOptions(gradoId);
+    }
+
     setIsDialogOpen(true);
   };
 
@@ -253,10 +412,21 @@ export function CursosModule() {
     e.preventDefault();
 
     // Validaciones
-    if (!formData.seccion || !formData.id_grado_academico || !formData.aula) {
+    if (
+      !formData.nombre ||
+      !formData.seccion ||
+      !formData.id_grado_academico ||
+      !formData.aula
+    ) {
       toast.error(
-        'Los campos sección, grado académico y aula son obligatorios'
+        'Los campos nombre, sección, grado académico y aula son obligatorios'
       );
+      return;
+    }
+
+    // Validar que el nombre seleccionado está entre las opciones válidas
+    if (!nombreOptions.includes(formData.nombre)) {
+      toast.error('Debes seleccionar un nombre válido del menú desplegable');
       return;
     }
 
@@ -270,8 +440,8 @@ export function CursosModule() {
       return;
     }
 
-    // Generar nombre del curso
-    const nombreCurso = `${gradoAcademico.nombre} ${formData.seccion}`;
+    // Usar el nombre directamente del formulario
+    const nombreCurso = formData.nombre;
 
     // Verificar combinación única de grado y sección
     const cursoExists = cursos.some(
@@ -282,7 +452,7 @@ export function CursosModule() {
     );
 
     if (cursoExists) {
-      toast.error('Ya existe un curso con ese grado y sección');
+      toast.error('Ya existe un curso con ese grado académico y sección');
       return;
     }
 
@@ -476,29 +646,116 @@ export function CursosModule() {
       {/* Filtros y búsqueda */}
       <Card>
         <CardContent className="p-4">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <Input
-                  placeholder="Buscar por nombre, grado o aula..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="flex-1">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <Input
+                    placeholder="Buscar por nombre, grado o aula..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
               </div>
+
+              <Select value={filterEstado} onValueChange={setFilterEstado}>
+                <SelectTrigger className="w-full md:w-48">
+                  <SelectValue placeholder="Filtrar por estado" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos los estados</SelectItem>
+                  <SelectItem value="activo">Activo</SelectItem>
+                  <SelectItem value="inactivo">Inactivo</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
-            <Select value={filterEstado} onValueChange={setFilterEstado}>
-              <SelectTrigger className="w-full md:w-48">
-                <SelectValue placeholder="Filtrar por estado" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos los estados</SelectItem>
-                <SelectItem value="activo">Activo</SelectItem>
-                <SelectItem value="inactivo">Inactivo</SelectItem>
-              </SelectContent>
-            </Select>
+            {/* Filtros adicionales */}
+            <div className="flex flex-col md:flex-row gap-4">
+              <Select
+                value={filterGradoAcademico}
+                onValueChange={setFilterGradoAcademico}
+              >
+                <SelectTrigger className="w-full md:w-[200px]">
+                  <SelectValue placeholder="Filtrar por grado" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos los grados</SelectItem>
+                  {gradosAcademicos.map((grado) => (
+                    <SelectItem
+                      key={grado.id_grado_academico}
+                      value={grado.id_grado_academico.toString()}
+                    >
+                      {grado.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={filterSeccion}
+                disabled={!filtrosInicializados}
+                onValueChange={(value) => {
+                  console.log('Sección seleccionada:', value);
+                  setFilterSeccion(value);
+                }}
+              >
+                <SelectTrigger className="w-full md:w-[200px]">
+                  <SelectValue placeholder="Filtrar por sección" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todas las secciones</SelectItem>
+                  {!filtrosInicializados ? (
+                    <SelectItem value="cargando" disabled>
+                      Cargando secciones...
+                    </SelectItem>
+                  ) : seccionesDisponibles.length === 0 ? (
+                    <SelectItem value="no-hay" disabled>
+                      No hay secciones disponibles
+                    </SelectItem>
+                  ) : (
+                    seccionesDisponibles.map((seccion) => (
+                      <SelectItem key={seccion} value={seccion}>
+                        Sección {seccion}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={filterAula}
+                disabled={!filtrosInicializados}
+                onValueChange={(value) => {
+                  console.log('Aula seleccionada:', value);
+                  setFilterAula(value);
+                }}
+              >
+                <SelectTrigger className="w-full md:w-[200px]">
+                  <SelectValue placeholder="Filtrar por aula" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todas las aulas</SelectItem>
+                  {!filtrosInicializados ? (
+                    <SelectItem value="cargando" disabled>
+                      Cargando aulas...
+                    </SelectItem>
+                  ) : aulasDisponibles.length === 0 ? (
+                    <SelectItem value="no-hay" disabled>
+                      No hay aulas disponibles
+                    </SelectItem>
+                  ) : (
+                    aulasDisponibles.map((aula) => (
+                      <SelectItem key={aula} value={aula}>
+                        Aula {aula}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -516,9 +773,10 @@ export function CursosModule() {
             <TableHeader>
               <TableRow>
                 <TableHead>Nombre</TableHead>
-                <TableHead>Descripción</TableHead>
+                <TableHead>Sección</TableHead>
                 <TableHead>Grado Académico</TableHead>
                 <TableHead>Aula</TableHead>
+                <TableHead>Descripción</TableHead>
                 <TableHead className="w-[150px]">Ocupación / Cupo</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead>Acciones</TableHead>
@@ -535,9 +793,7 @@ export function CursosModule() {
                     </TableCell>
                     <TableCell>
                       <div>
-                        <p className="text-sm text-gray-600 truncate max-w-xs">
-                          {curso.descripcion || '-'}
-                        </p>
+                        <p className="font-medium">{curso.seccion}</p>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -551,6 +807,13 @@ export function CursosModule() {
                       <div className="flex items-center space-x-2">
                         <MapPin className="w-4 h-4 text-gray-400" />
                         <span className="text-sm">{curso.aula}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div>
+                        <p className="text-sm text-gray-600 truncate max-w-xs">
+                          {curso.descripcion || '-'}
+                        </p>
                       </div>
                     </TableCell>
                     <TableCell className="w-[150px]">
@@ -640,7 +903,11 @@ export function CursosModule() {
               Mostrando {(page - 1) * itemsPerPage + 1} -{' '}
               {Math.min(page * itemsPerPage, totalItems)} de {totalItems}{' '}
               resultados
-              {(searchTerm.trim() !== '' || filterEstado !== 'todos') && (
+              {(searchTerm.trim() !== '' ||
+                filterEstado !== 'todos' ||
+                filterGradoAcademico !== 'todos' ||
+                filterSeccion !== 'todos' ||
+                filterAula !== 'todos') && (
                 <Badge
                   variant="outline"
                   className="ml-2 bg-blue-50 text-blue-700"
@@ -690,17 +957,60 @@ export function CursosModule() {
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <Label htmlFor="nombre">Nombre del Curso *</Label>
+              <Select
+                value={formData.nombre}
+                onValueChange={(value) =>
+                  setFormData({
+                    ...formData,
+                    nombre: value,
+                  })
+                }
+                disabled={
+                  formData.id_grado_academico === 0 ||
+                  nombreOptions.length === 0
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue
+                    placeholder={
+                      formData.id_grado_academico === 0
+                        ? 'Primero selecciona un grado académico'
+                        : 'Selecciona el nombre del curso'
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {nombreOptions.map((nombre, index) => (
+                    <SelectItem key={index} value={nombre}>
+                      {nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {formData.id_grado_academico === 0 && (
+                <p className="text-xs text-amber-600 mt-1">
+                  Primero debes seleccionar un grado académico
+                </p>
+              )}
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="grado_academico">Grado Académico *</Label>
                 <Select
                   value={formData.id_grado_academico.toString()}
-                  onValueChange={(value) =>
+                  onValueChange={(value) => {
+                    const gradoId = parseInt(value);
                     setFormData({
                       ...formData,
-                      id_grado_academico: parseInt(value),
-                    })
-                  }
+                      id_grado_academico: gradoId,
+                      nombre: '', // Reseteamos el nombre al cambiar de grado
+                    });
+                    // Generamos las nuevas opciones de nombre según el grado seleccionado
+                    generateNombreOptions(gradoId);
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecciona un grado" />
