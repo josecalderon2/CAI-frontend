@@ -91,7 +91,7 @@ export function CursosModule() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
-  const itemsPerPage = 5; // Cantidad de cursos por página
+  const itemsPerPage = 10; // Cantidad de cursos por página
 
   // Función para obtener el porcentaje de ocupación desde los datos de cupos
   const getOcupacionInfo = (curso: Curso) => {
@@ -128,7 +128,7 @@ export function CursosModule() {
       'cursos'
     );
 
-    // Extraer aulas únicas
+    // Extraer aulas únicas y asegurar que son strings válidos
     const aulasUnicas = Array.from(
       new Set(
         cursosList
@@ -137,9 +137,24 @@ export function CursosModule() {
             (aula) => aula !== null && aula !== undefined && aula.trim() !== ''
           )
       )
-    ).sort();
-    console.log('Aulas únicas encontradas:', aulasUnicas);
-    setAulasDisponibles(aulasUnicas as string[]);
+    ) as string[];
+
+    // Ordenar las aulas numéricamente cuando sea posible
+    const aulasOrdenadas = aulasUnicas.sort((a, b) => {
+      // Intentar convertir a números para ordenar numéricamente
+      const numA = parseInt(a);
+      const numB = parseInt(b);
+
+      // Si ambos son números válidos, ordenar numéricamente
+      if (!isNaN(numA) && !isNaN(numB)) {
+        return numA - numB;
+      }
+      // Caer en ordenamiento alfabético si no son números
+      return a.localeCompare(b);
+    });
+
+    console.log('Aulas ordenadas:', aulasOrdenadas);
+    setAulasDisponibles(aulasOrdenadas);
 
     // Extraer secciones únicas
     const seccionesUnicas = Array.from(
@@ -443,16 +458,18 @@ export function CursosModule() {
     // Usar el nombre directamente del formulario
     const nombreCurso = formData.nombre;
 
-    // Verificar combinación única de grado y sección
+    // Verificar si ya existe un curso con el mismo nombre y la misma sección
     const cursoExists = cursos.some(
       (c) =>
-        c.id_grado_academico === formData.id_grado_academico &&
+        c.nombre === formData.nombre &&
         c.seccion === formData.seccion &&
         c.id_curso !== editingCurso?.id_curso
     );
 
     if (cursoExists) {
-      toast.error('Ya existe un curso con ese grado académico y sección');
+      toast.error(
+        `Ya existe un curso llamado "${formData.nombre}" con sección "${formData.seccion}"`
+      );
       return;
     }
 
