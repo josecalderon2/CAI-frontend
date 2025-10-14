@@ -23,6 +23,7 @@ import ResetPassword from './components/ResetPassword';
 import { AdministrativoDashboard } from './components/AdministrativoDashboard';
 import { GradosAcademicosModule } from './components/GradosAcademicosModule';
 import { CursosModule }  from './components/CursosModule';
+import { AsignaturasModule } from './components/AsignaturasModule';
 
 // ================= Helpers de auth =================
 function getUser() {
@@ -303,6 +304,16 @@ function AppRoutes() {
 
           }
         /> 
+
+        <Route
+          path="/asignaturas"
+          element={
+            <ProtectedRoute>
+              <AsignaturasModule />
+            </ProtectedRoute>
+          }
+        />
+
         {/* Catch-all manda a home del rol */}
         <Route
           path="*"
