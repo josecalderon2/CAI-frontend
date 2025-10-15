@@ -424,14 +424,10 @@ export function AsignaturasModule() {
         </Card>
       </div>
 
-      {/* Tabla */}
+      {/* Filtros y búsqueda */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <BookOpen className="w-5 h-5" />
-            <span>Lista de Asignaturas ({totalItems})</span>
-          </CardTitle>
-          <div className="flex flex-col md:flex-row gap-4 mb-3">
+        <CardContent className="p-4">
+          <div className="flex flex-col md:flex-row gap-4">
             {/* Buscador */}
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -446,66 +442,75 @@ export function AsignaturasModule() {
               />
             </div>
 
-            {/* Filtro por Curso */}
-            <Select
-              value={filterNivel}
-              onValueChange={(value) => {
-                setFilterNivel(value);
-                setPage(1); // Volver a la primera página cuando se cambia el filtro
-              }}
-            >
-              <SelectTrigger className="w-full md:w-48">
-                <SelectValue placeholder="Filtrar por curso" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos los Cursos</SelectItem>
-                {cursos.map((curso) => (
-                  <SelectItem key={curso.id_curso} value={curso.nombre}>
-                    {curso.nombre}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* Filtros */}
+            <div className="flex flex-col md:flex-row gap-2 md:gap-4">
+              <Select
+                value={filterNivel}
+                onValueChange={(value) => {
+                  setFilterNivel(value);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger className="w-full md:w-48">
+                  <SelectValue placeholder="Filtrar por curso" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos los Cursos</SelectItem>
+                  {cursos.map((curso) => (
+                    <SelectItem key={curso.id_curso} value={curso.nombre}>
+                      {curso.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
-            {/* Filtro por Método de Evaluación */}
-            <Select
-              value={filterMetodo}
-              onValueChange={(value) => {
-                setFilterMetodo(value);
-                setPage(1); // Volver a la primera página cuando se cambia el filtro
-              }}
-            >
-              <SelectTrigger className="w-full md:w-48">
-                <SelectValue placeholder="Filtrar por método" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos los Métodos</SelectItem>
-                {metodos.map((metodo) => (
-                  <SelectItem
-                    key={metodo.id_metodo_evaluacion}
-                    value={metodo.nombre}
-                  >
-                    {metodo.nombre}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              <Select
+                value={filterMetodo}
+                onValueChange={(value) => {
+                  setFilterMetodo(value);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger className="w-full md:w-48">
+                  <SelectValue placeholder="Filtrar por método" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos los Métodos</SelectItem>
+                  {metodos.map((metodo) => (
+                    <SelectItem
+                      key={metodo.id_metodo_evaluacion}
+                      value={metodo.nombre}
+                    >
+                      {metodo.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Tabla */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center space-x-2">
+            <BookOpen className="w-5 h-5" />
+            <span>Lista de Asignaturas ({totalItems})</span>
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead style={{ width: '20%' }}>Nombre</TableHead>
-                  <TableHead style={{ width: '15%' }}>Cursos</TableHead>
-                  <TableHead style={{ width: '10%' }}>
-                    Método Evaluación
-                  </TableHead>
-                  <TableHead style={{ width: '10%', textAlign: 'center' }}>
+                  <TableHead className="w-[25%]">Nombre</TableHead>
+                  <TableHead className="w-[20%]">Cursos</TableHead>
+                  <TableHead className="w-[20%]">Método Evaluación</TableHead>
+                  <TableHead className="w-[15%] text-center">
                     Horas/Semana
                   </TableHead>
-                  <TableHead style={{ width: '10%', textAlign: 'center' }}>
+                  <TableHead className="w-[15%] text-center">
                     Acciones
                   </TableHead>
                 </TableRow>
@@ -530,30 +535,44 @@ export function AsignaturasModule() {
                 ) : paginatedAsignaturas.length > 0 ? (
                   paginatedAsignaturas.map((asignatura) => (
                     <TableRow key={asignatura.id}>
-                      <TableCell>{asignatura.nombre}</TableCell>
                       <TableCell>
-                        <Badge variant="secondary" className="capitalize">
+                        <div>
+                          <p className="font-medium">{asignatura.nombre}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className="text-blue-700 border-blue-200 bg-blue-50 capitalize"
+                        >
                           {asignatura.nivel || 'N/A'}
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline">
+                        <Badge
+                          variant="outline"
+                          className="text-purple-700 border-purple-200 bg-purple-50"
+                        >
                           {asignatura.metodoEvaluacion || 'N/A'}
                         </Badge>
                       </TableCell>
-                      <TableCell style={{ textAlign: 'center' }}>
-                        {asignatura.horasSemanales}
+                      <TableCell className="text-center">
+                        <Badge
+                          variant="outline"
+                          className="bg-gray-50 text-gray-700 border-gray-200"
+                        >
+                          {asignatura.horasSemanales}h/sem
+                        </Badge>
                       </TableCell>
-                      <TableCell>
-                        <div className="flex justify-center">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleEditAsignatura(asignatura)}
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                        </div>
+                      <TableCell className="text-center">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 p-0 text-gray-600 hover:text-gray-800 hover:bg-gray-100"
+                          onClick={() => handleEditAsignatura(asignatura)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))
