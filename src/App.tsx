@@ -22,8 +22,9 @@ import { OrientadorDashboard } from './components/OrientadorDashboard';
 import ResetPassword from './components/ResetPassword';
 import { AdministrativoDashboard } from './components/AdministrativoDashboard';
 import { GradosAcademicosModule } from './components/GradosAcademicosModule';
-import { CursosModule }  from './components/CursosModule';
+import { CursosModule } from './components/CursosModule';
 import { AsignaturasModule } from './components/AsignaturasModule';
+import { AsignacionesModule } from './components/AsignacionesModule';
 
 // ================= Helpers de auth =================
 function getUser() {
@@ -298,18 +299,25 @@ function AppRoutes() {
         <Route
           path="/cursos"
           element={
-          <ProtectedRoute>
+            <ProtectedRoute>
               <CursosModule />
-           </ProtectedRoute>
-
+            </ProtectedRoute>
           }
-        /> 
+        />
 
         <Route
           path="/asignaturas"
           element={
             <ProtectedRoute>
               <AsignaturasModule />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/asignaciones"
+          element={
+            <ProtectedRoute>
+              <AsignacionesModule />
             </ProtectedRoute>
           }
         />
