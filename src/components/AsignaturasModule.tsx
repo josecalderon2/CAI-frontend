@@ -500,95 +500,88 @@ export function AsignaturasModule() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nombre</TableHead>
+                <TableHead>Cursos</TableHead>
+                <TableHead>Método Evaluación</TableHead>
+                <TableHead>Horas/Semana</TableHead>
+                <TableHead>Acciones</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
                 <TableRow>
-                  <TableHead className="w-[25%]">Nombre</TableHead>
-                  <TableHead className="w-[20%]">Cursos</TableHead>
-                  <TableHead className="w-[20%]">Método Evaluación</TableHead>
-                  <TableHead className="w-[15%] text-center">
-                    Horas/Semana
-                  </TableHead>
-                  <TableHead className="w-[15%] text-center">
-                    Acciones
-                  </TableHead>
+                  <TableCell colSpan={5} className="text-center p-4">
+                    <Loader2 className="w-6 h-6 animate-spin inline-block" />
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center p-4">
-                      <Loader2 className="w-6 h-6 animate-spin inline-block" />
+              ) : error ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={5}
+                    className="text-center text-red-600 p-4"
+                  >
+                    <AlertCircle className="w-6 h-6 inline-block mr-2" />
+                    {error}
+                  </TableCell>
+                </TableRow>
+              ) : paginatedAsignaturas.length > 0 ? (
+                paginatedAsignaturas.map((asignatura) => (
+                  <TableRow key={asignatura.id}>
+                    <TableCell>
+                      <div>
+                        <p className="font-medium">{asignatura.nombre}</p>
+                      </div>
                     </TableCell>
-                  </TableRow>
-                ) : error ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={5}
-                      className="text-center text-red-600 p-4"
-                    >
-                      <AlertCircle className="w-6 h-6 inline-block mr-2" />
-                      {error}
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className="text-blue-700 border-blue-200 bg-blue-50 capitalize"
+                      >
+                        {asignatura.nivel || 'N/A'}
+                      </Badge>
                     </TableCell>
-                  </TableRow>
-                ) : paginatedAsignaturas.length > 0 ? (
-                  paginatedAsignaturas.map((asignatura) => (
-                    <TableRow key={asignatura.id}>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{asignatura.nombre}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className="text-blue-700 border-blue-200 bg-blue-50 capitalize"
-                        >
-                          {asignatura.nivel || 'N/A'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className="text-purple-700 border-purple-200 bg-purple-50"
-                        >
-                          {asignatura.metodoEvaluacion || 'N/A'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge
-                          variant="outline"
-                          className="bg-gray-50 text-gray-700 border-gray-200"
-                        >
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className="text-purple-700 border-purple-200 bg-purple-50"
+                      >
+                        {asignatura.metodoEvaluacion || 'N/A'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center space-x-1">
+                        <FileText className="w-4 h-4 text-gray-400" />
+                        <span className="text-sm">
                           {asignatura.horasSemanales}h/sem
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 p-0 text-gray-600 hover:text-gray-800 hover:bg-gray-100"
-                          onClick={() => handleEditAsignatura(asignatura)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell
-                      colSpan={5}
-                      className="text-center text-gray-500 py-6"
-                    >
-                      No hay asignaturas registradas.
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleEditAsignatura(asignatura)}
+                      >
+                        <Edit className="w-4 h-4" />
+                      </Button>
                     </TableCell>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell
+                    colSpan={5}
+                    className="text-center text-gray-500 py-6"
+                  >
+                    No hay asignaturas registradas.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
 
           {/* Paginación */}
           <div className="flex items-center justify-between space-x-2 py-4">

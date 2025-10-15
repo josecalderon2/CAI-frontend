@@ -54,6 +54,7 @@ import {
   ToggleLeft,
   ToggleRight,
   Loader2,
+  Pencil,
 } from 'lucide-react';
 import { Input } from './ui/input';
 import { toast } from 'sonner';
@@ -74,6 +75,7 @@ interface CursoUI {
   nivel?: string;
   grado?: string;
   seccion?: string;
+  orientadorId?: number; // ID del orientador principal del curso
 }
 
 // Interfaz para representar una asignatura desde la API
@@ -428,6 +430,8 @@ export function AsignacionesModule() {
   const [filterCurso, setFilterCurso] = useState<string>('todos');
   const [filterEstado, setFilterEstado] = useState<string>('todos');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState({
     orientadorId: '',
     cursoId: '',
@@ -525,6 +529,8 @@ export function AsignacionesModule() {
   };
 
   const handleCreateAsignacion = () => {
+    setIsEditMode(false);
+    setEditingId(null);
     setFormData({
       orientadorId: '',
       cursoId: '',
@@ -535,7 +541,53 @@ export function AsignacionesModule() {
     setIsDialogOpen(true);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleEditAsignacion = async (asignacion: AsignacionUI) => {
+    setIsEditMode(true);
+    setEditingId(asignacion.id);
+    
+    try {
+      // Si la asignación tiene curso, cargar las asignaturas para ese curso
+      if (asignacion.cursoId) {
+        // Mostrar indicador de carga
+        const loadingToast = toast.loading('Cargando asignaturas del curso...');
+        
+        // Cargar asignaturas para este curso desde el backend
+        const asignaturasCurso = await asignacionesService.getAsignaturasPorCurso(
+          asignacion.cursoId
+        );
+        
+        // Mapear a formato UI
+        const asignaturasFormateadas = asignaturasCurso.map(
+          (a) => ({
+            id: a.id_asignatura,
+            nombre: a.nombre,
+            codigo: a.orden_en_reporte || '',
+            nivel: '',
+          })
+        );
+        
+        // Actualizar estado
+        setAsignaturasFiltradas(asignaturasFormateadas);
+        
+        // Finalizar indicador de carga
+        toast.dismiss(loadingToast);
+      }
+    } catch (error) {
+      console.error('Error al cargar asignaturas por curso:', error);
+      toast.error('No se pudieron cargar las asignaturas para este curso.');
+    }
+    
+    // Cargar los datos actuales en el formulario
+    setFormData({
+      orientadorId: asignacion.orientadorId.toString(),
+      cursoId: asignacion.cursoId.toString(),
+      asignaturaId: asignacion.asignaturaId.toString(),
+      cargaHoraria: asignacion.cargaHoraria,
+      esOrientador: asignacion.esOrientador,
+    });
+    
+    setIsDialogOpen(true);
+  };  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // Validaciones
@@ -552,13 +604,14 @@ export function AsignacionesModule() {
       return;
     }
 
-    // Verificar que no exista duplicado
+    // Verificar que no exista duplicado (ignorando el registro actual si estamos en modo edición)
     const exists = asignaciones.some(
       (a) =>
         a.orientadorId === Number(formData.orientadorId) &&
         a.cursoId === Number(formData.cursoId) &&
         a.asignaturaId === Number(formData.asignaturaId) &&
-        a.estado === 'ACTIVO'
+        a.estado === 'ACTIVO' &&
+        (!isEditMode || (isEditMode && a.id !== editingId)) // Ignorar el registro actual en modo edición
     );
 
     if (exists) {
@@ -586,61 +639,119 @@ export function AsignacionesModule() {
     }
 
     try {
-      const loadingToast = toast.loading('Creando asignación...');
+      const loadingToast = toast.loading(
+        isEditMode ? 'Actualizando asignación...' : 'Creando asignación...'
+      );
 
-      // Crear dto para la API
-      const createDto = {
+      // Preparar payload según operación
+      // Preparamos el payload común para ambas operaciones
+      const commonPayload = {
         id_orientador: Number(formData.orientadorId),
         id_asignatura: Number(formData.asignaturaId),
         id_curso: Number(formData.cursoId), // Necesario para validación en el backend
-        anio_academico: new Date().getFullYear().toString(),
         cargaHorariaSemanal: Number(formData.cargaHoraria), // Aseguramos que sea número
-        activo: true,
         es_orientador: Boolean(formData.esOrientador), // Aseguramos que sea boolean
       };
 
-      // Loguear para debug
-      console.log('Enviando datos de asignación:', createDto);
+      let response;
 
-      // Llamar a la API
-      const response = await asignacionesService.createAsignacion(createDto);
+      if (isEditMode && editingId) {
+        // Para actualización solo enviamos los campos que queremos modificar
+        console.log('Actualizando asignación:', editingId, commonPayload);
 
-      // Log para debug
-      console.log('Respuesta API:', response);
+        // Llamar al servicio de actualización
+        response = await asignacionesService.updateAsignacion(
+          editingId,
+          commonPayload
+        );
 
-      // Obtener la asignación recién creada con formato UI
-      const newAsignacion: AsignacionUI = {
-        id: response.id_asignatura_orientador,
-        orientadorId: response.docente.id_orientador,
-        cursoId: response.curso.id_curso,
-        asignaturaId: response.asignatura.id_asignatura,
-        fechaAsignacion: response.fechaAsignacion,
-        estado: response.estado,
-        cargaHoraria: response.cargaHorariaSemanal,
-        esOrientador: response.esOrientador || false,
-        orientador: {
-          id: response.docente.id_orientador,
-          nombre: response.docente.nombreCompleto,
-        },
-        curso: {
-          id: response.curso.id_curso,
-          nombre: response.curso.nombre,
-          seccion: response.curso.seccion || '',
-        },
-        asignatura: {
-          id: response.asignatura.id_asignatura,
-          nombre: response.asignatura.nombre,
-          codigo: response.asignatura.orden_en_reporte || '',
-        },
-      };
+        // Actualizar la lista local de asignaciones
+        setAsignaciones(
+          asignaciones.map((asignacion) =>
+            asignacion.id === editingId
+              ? {
+                  ...asignacion,
+                  orientadorId: response.docente.id_orientador,
+                  cursoId: response.curso.id_curso,
+                  asignaturaId: response.asignatura.id_asignatura,
+                  cargaHoraria: response.cargaHorariaSemanal,
+                  esOrientador: response.esOrientador,
+                  orientador: {
+                    id: response.docente.id_orientador,
+                    nombre: response.docente.nombreCompleto,
+                  },
+                  curso: {
+                    id: response.curso.id_curso,
+                    nombre: response.curso.nombre,
+                    seccion: response.curso.seccion || '',
+                  },
+                  asignatura: {
+                    id: response.asignatura.id_asignatura,
+                    nombre: response.asignatura.nombre,
+                    codigo: response.asignatura.orden_en_reporte || '',
+                  },
+                }
+              : asignacion
+          )
+        );
 
-      setAsignaciones([...asignaciones, newAsignacion]);
-      toast.dismiss(loadingToast);
-      toast.success('Asignación creada correctamente');
+        toast.dismiss(loadingToast);
+        toast.success('Asignación actualizada correctamente');
+      } else {
+        // Para creación necesitamos todos los campos
+        const createDto = {
+          ...commonPayload,
+          anio_academico: new Date().getFullYear().toString(),
+          activo: true,
+        };
+
+        // Loguear para debug
+        console.log('Creando nueva asignación:', createDto);
+
+        // Llamar a la API de creación
+        response = await asignacionesService.createAsignacion(createDto);
+
+        // Log para debug
+        console.log('Respuesta API:', response);
+
+        // Obtener la asignación recién creada con formato UI
+        const newAsignacion: AsignacionUI = {
+          id: response.id_asignatura_orientador,
+          orientadorId: response.docente.id_orientador,
+          cursoId: response.curso.id_curso,
+          asignaturaId: response.asignatura.id_asignatura,
+          fechaAsignacion: response.fechaAsignacion,
+          estado: response.estado,
+          cargaHoraria: response.cargaHorariaSemanal,
+          esOrientador: response.esOrientador || false,
+          orientador: {
+            id: response.docente.id_orientador,
+            nombre: response.docente.nombreCompleto,
+          },
+          curso: {
+            id: response.curso.id_curso,
+            nombre: response.curso.nombre,
+            seccion: response.curso.seccion || '',
+          },
+          asignatura: {
+            id: response.asignatura.id_asignatura,
+            nombre: response.asignatura.nombre,
+            codigo: response.asignatura.orden_en_reporte || '',
+          },
+        };
+
+        setAsignaciones([...asignaciones, newAsignacion]);
+        toast.dismiss(loadingToast);
+        toast.success('Asignación creada correctamente');
+      }
+
       setIsDialogOpen(false);
     } catch (error: any) {
-      // Error al crear asignación
-      console.error('Error al crear asignación:', error);
+      // Error al procesar la asignación
+      console.error(
+        `Error al ${isEditMode ? 'editar' : 'crear'} asignación:`,
+        error
+      );
 
       if (error.response) {
         // El servidor respondió con un error
@@ -672,7 +783,7 @@ export function AsignacionesModule() {
       } else {
         // Error al preparar la petición
         toast.error(
-          'Error al crear asignación. Por favor, intente nuevamente.'
+          `Error al ${isEditMode ? 'editar' : 'crear'} asignación. Por favor, intente nuevamente.`
         );
       }
     }
@@ -1051,27 +1162,38 @@ export function AsignacionesModule() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleToggleStatus(asignacion)}
-                          className={
-                            asignacion.estado === 'ACTIVO'
-                              ? 'text-orange-600 hover:text-orange-700'
-                              : 'text-green-600 hover:text-green-700'
-                          }
-                          title={
-                            asignacion.estado === 'ACTIVO'
-                              ? 'Desactivar asignación'
-                              : 'Activar asignación'
-                          }
-                        >
-                          {asignacion.estado === 'ACTIVO' ? (
-                            <ToggleLeft className="w-4 h-4" />
-                          ) : (
-                            <ToggleRight className="w-4 h-4" />
-                          )}
-                        </Button>
+                        <div className="flex space-x-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleEditAsignacion(asignacion)}
+                            className="text-blue-600 hover:text-blue-700"
+                            title="Editar asignación"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleToggleStatus(asignacion)}
+                            className={
+                              asignacion.estado === 'ACTIVO'
+                                ? 'text-orange-600 hover:text-orange-700'
+                                : 'text-green-600 hover:text-green-700'
+                            }
+                            title={
+                              asignacion.estado === 'ACTIVO'
+                                ? 'Desactivar asignación'
+                                : 'Activar asignación'
+                            }
+                          >
+                            {asignacion.estado === 'ACTIVO' ? (
+                              <ToggleLeft className="w-4 h-4" />
+                            ) : (
+                              <ToggleRight className="w-4 h-4" />
+                            )}
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -1131,13 +1253,17 @@ export function AsignacionesModule() {
         </CardContent>
       </Card>
 
-      {/* Dialog para crear asignación */}
+      {/* Dialog para crear/editar asignación */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Crear Nueva Asignación</DialogTitle>
+            <DialogTitle>
+              {isEditMode ? 'Editar Asignación' : 'Crear Nueva Asignación'}
+            </DialogTitle>
             <DialogDescription>
-              Asigna un orientador a un curso y asignatura específica
+              {isEditMode
+                ? 'Modifica los detalles de la asignación actual'
+                : 'Asigna un orientador a un curso y asignatura específica'}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -1282,7 +1408,19 @@ export function AsignacionesModule() {
                   <SelectValue placeholder="Selecciona una asignatura" />
                 </SelectTrigger>
                 <SelectContent>
-                  {getAsignaturasCompatibles(formData.cursoId).length > 0 ? (
+                  {isEditMode && asignaturasFiltradas.length === 0 ? (
+                    // Si estamos en modo edición pero no tenemos asignaturas filtradas aún, mostrar la asignatura actual
+                    <SelectItem value={formData.asignaturaId}>
+                      <div>
+                        <p className="font-medium">
+                          {asignaturas.find(a => a.id.toString() === formData.asignaturaId)?.nombre || 'Cargando...'}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          {asignaturas.find(a => a.id.toString() === formData.asignaturaId)?.codigo || ''}
+                        </p>
+                      </div>
+                    </SelectItem>
+                  ) : getAsignaturasCompatibles(formData.cursoId).length > 0 ? (
                     getAsignaturasCompatibles(formData.cursoId).map(
                       (asignatura) => (
                         <SelectItem
@@ -1330,12 +1468,43 @@ export function AsignacionesModule() {
               <Checkbox
                 id="esOrientador"
                 checked={formData.esOrientador}
-                onCheckedChange={(checked) =>
-                  setFormData({
-                    ...formData,
-                    esOrientador: checked === true,
-                  })
-                }
+                onCheckedChange={(checked) => {
+                  // Cuando se está marcando el checkbox
+                  if (checked === true) {
+                    // Verificar si ya existe un orientador principal para este curso
+                    const cursoSeleccionado = cursos.find(c => c.id.toString() === formData.cursoId);
+                    const orientadorActual = cursoSeleccionado?.orientadorId;
+                    
+                    if (orientadorActual && orientadorActual > 0) {
+                      // Primera confirmación
+                      if (window.confirm(
+                        `Este curso ya tiene un orientador principal asignado. ¿Estás seguro de querer cambiar al orientador principal?`
+                      )) {
+                        // Segunda confirmación
+                        if (window.confirm(
+                          `ATENCIÓN: Cambiar el orientador principal del curso puede afectar otras configuraciones. ¿Estás completamente seguro?`
+                        )) {
+                          setFormData({
+                            ...formData,
+                            esOrientador: true,
+                          });
+                        }
+                      }
+                    } else {
+                      // No hay orientador principal, simplemente actualizamos
+                      setFormData({
+                        ...formData,
+                        esOrientador: true,
+                      });
+                    }
+                  } else {
+                    // Si está desmarcando, actualizar sin preguntar
+                    setFormData({
+                      ...formData,
+                      esOrientador: false,
+                    });
+                  }
+                }}
               />
               <label
                 htmlFor="esOrientador"
@@ -1363,7 +1532,7 @@ export function AsignacionesModule() {
                   getAsignaturasCompatibles(formData.cursoId).length === 0
                 }
               >
-                Crear Asignación
+                {isEditMode ? 'Actualizar Asignación' : 'Crear Asignación'}
               </Button>
             </DialogFooter>
           </form>
