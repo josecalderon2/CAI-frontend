@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import { 
+import { Checkbox } from './ui/checkbox';
+import {
   Table,
   TableBody,
   TableCell,
@@ -10,6 +11,22 @@ import {
   TableHeader,
   TableRow,
 } from './ui/table';
+
+// Hook para debounce del término de búsqueda
+const useDebounce = (value: string, delay: number) => {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+
+  return debouncedValue;
+};
+import { formatDate } from '../utils/formatDate';
 import {
   Dialog,
   DialogContent,
@@ -18,6 +35,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from './ui/dialog';
+import type { PagedResponse } from '../types';
 import {
   Select,
   SelectContent,
@@ -25,236 +43,703 @@ import {
   SelectTrigger,
   SelectValue,
 } from './ui/select';
-import { 
-  Target, 
-  Plus, 
+import {
+  Target,
+  Plus,
   Search,
   User,
-  BookOpen,
   School,
   Users,
   Calendar,
   ToggleLeft,
-  ToggleRight
+  ToggleRight,
+  Loader2,
 } from 'lucide-react';
 import { Input } from './ui/input';
 import { toast } from 'sonner';
+import asignacionesService from '../api/services/asignacionesService';
 
-interface Docente {
-  id: string;
+// Interfaz para representar un orientador desde la API
+interface OrientadorUI {
+  id: number;
   nombre: string;
-  email: string;
-  especialidad: string;
+  email?: string;
+  especialidad?: string;
 }
 
-interface Curso {
-  id: string;
+// Interfaz para representar un curso desde la API
+interface CursoUI {
+  id: number;
   nombre: string;
-  nivel: string;
-  grado: string;
-  seccion: string;
+  nivel?: string;
+  grado?: string;
+  seccion?: string;
 }
 
-interface Asignatura {
-  id: string;
+// Interfaz para representar una asignatura desde la API
+interface AsignaturaUI {
+  id: number;
   nombre: string;
-  codigo: string;
-  nivel: string;
+  codigo?: string;
+  nivel?: string;
 }
 
-interface Asignacion {
-  id: string;
-  docenteId: string;
-  cursoId: string;
-  asignaturaId: string;
+// Interfaz para representar una asignación desde la API
+interface AsignacionUI {
+  id: number;
+  orientadorId: number;
+  cursoId: number;
+  asignaturaId: number;
   fechaAsignacion: string;
-  estado: 'activa' | 'inactiva';
+  estado: 'ACTIVO' | 'INACTIVO' | 'FINALIZADO';
   cargaHoraria: number;
+  esOrientador: boolean;
+  orientador?: OrientadorUI;
+  curso?: CursoUI;
+  asignatura?: AsignaturaUI;
 }
 
 export function AsignacionesModule() {
-  // Datos mock
-  const [docentes] = useState<Docente[]>([
-    { id: '1', nombre: 'María González', email: 'maria@colegio.edu', especialidad: 'Matemáticas' },
-    { id: '2', nombre: 'Carlos Rodríguez', email: 'carlos@colegio.edu', especialidad: 'Ciencias' },
-    { id: '3', nombre: 'Ana Martínez', email: 'ana@colegio.edu', especialidad: 'Lenguaje' },
-    { id: '4', nombre: 'Pedro Silva', email: 'pedro@colegio.edu', especialidad: 'Historia' },
-    { id: '5', nombre: 'Laura Pérez', email: 'laura@colegio.edu', especialidad: 'Educación Física' }
-  ]);
+  // Estados para datos de API
+  const [orientadores, setOrientadores] = useState<OrientadorUI[]>([]);
+  const [cursos, setCursos] = useState<CursoUI[]>([]); // Para el dropdown de filtro
+  const [cursosFormulario, setCursosFormulario] = useState<CursoUI[]>([]); // Para el formulario de creación
+  const [asignaturas, setAsignaturas] = useState<AsignaturaUI[]>([]);
+  const [asignaciones, setAsignaciones] = useState<AsignacionUI[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const [cursos] = useState<Curso[]>([
-    { id: '1', nombre: '8° Básico A', nivel: 'basica', grado: '8', seccion: 'A' },
-    { id: '2', nombre: '7° Básico B', nivel: 'basica', grado: '7', seccion: 'B' },
-    { id: '3', nombre: '1° Media A', nivel: 'media', grado: '1', seccion: 'A' },
-    { id: '4', nombre: 'Kinder B', nivel: 'parvularia', grado: 'K', seccion: 'B' },
-    { id: '5', nombre: '6° Básico C', nivel: 'basica', grado: '6', seccion: 'C' }
-  ]);
+  // Estados para paginación
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const itemsPerPage = 10;
 
-  const [asignaturas] = useState<Asignatura[]>([
-    { id: '1', nombre: 'Matemáticas', codigo: 'MAT001', nivel: 'basica' },
-    { id: '2', nombre: 'Ciencias Naturales', codigo: 'CIE001', nivel: 'basica' },
-    { id: '3', nombre: 'Lenguaje y Comunicación', codigo: 'LEN001', nivel: 'media' },
-    { id: '4', nombre: 'Historia', codigo: 'HIS001', nivel: 'media' },
-    { id: '5', nombre: 'Educación Física', codigo: 'EDF001', nivel: 'basica' },
-    { id: '6', nombre: 'Inglés', codigo: 'ING001', nivel: 'basica' }
-  ]);
+  // Cargar datos al montar el componente
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
 
-  const [asignaciones, setAsignaciones] = useState<Asignacion[]>([
-    {
-      id: '1',
-      docenteId: '1',
-      cursoId: '1',
-      asignaturaId: '1',
-      fechaAsignacion: '2024-01-15',
-      estado: 'activa',
-      cargaHoraria: 5
-    },
-    {
-      id: '2',
-      docenteId: '2',
-      cursoId: '1',
-      asignaturaId: '2',
-      fechaAsignacion: '2024-01-16',
-      estado: 'activa',
-      cargaHoraria: 4
-    },
-    {
-      id: '3',
-      docenteId: '3',
-      cursoId: '3',
-      asignaturaId: '3',
-      fechaAsignacion: '2024-01-18',
-      estado: 'activa',
-      cargaHoraria: 6
-    },
-    {
-      id: '4',
-      docenteId: '1',
-      cursoId: '2',
-      asignaturaId: '1',
-      fechaAsignacion: '2024-01-20',
-      estado: 'inactiva',
-      cargaHoraria: 5
-    }
-  ]);
+        // Obtener orientadores
+        const orientadoresData = await asignacionesService.getOrientadores();
+
+        if (Array.isArray(orientadoresData)) {
+          if (orientadoresData.length > 0) {
+            const orientadoresFormateados = orientadoresData
+              .map((o) => {
+                // Verificar que el objeto tiene las propiedades esperadas
+                if (!o || typeof o !== 'object') {
+                  // Elemento no válido en orientadores
+                  return null;
+                }
+
+                // Verificar si tiene id_orientador y nombreCompleto
+                if (!('id_orientador' in o) || !('nombreCompleto' in o)) {
+                  // Elemento sin las propiedades requeridas
+                  // Intentar identificar las claves del objeto para adaptarse
+                  const keys = Object.keys(o);
+
+                  // Buscar claves que puedan contener el ID y el nombre
+                  const idKey =
+                    keys.find((k) => k.toLowerCase().includes('id')) || '';
+                  const nombreKey =
+                    keys.find(
+                      (k) =>
+                        k.toLowerCase().includes('nombre') ||
+                        k.toLowerCase().includes('name') ||
+                        k.toLowerCase().includes('apellido')
+                    ) || '';
+
+                  if (idKey && nombreKey) {
+                    return {
+                      id: o[idKey],
+                      nombre: o[nombreKey],
+                      email: '',
+                      especialidad: '',
+                    };
+                  }
+
+                  return null;
+                }
+
+                // Asegurarnos de que estamos usando el ID correcto
+                return {
+                  id: o.id_orientador,
+                  nombre: o.nombreCompleto,
+                  email: o.email || '',
+                  especialidad: o.especialidad || '',
+                };
+              })
+              .filter((d) => d !== null);
+
+            if (orientadoresFormateados.length > 0) {
+              setOrientadores(orientadoresFormateados);
+            } else {
+              // Array formateado quedó vacío
+              toast.warning(
+                'No se pudieron procesar los orientadores correctamente'
+              );
+            }
+          } else {
+            // Array de orientadores original vacío
+            toast.warning('No hay orientadores disponibles en el sistema');
+          }
+        } else if (
+          typeof orientadoresData === 'object' &&
+          orientadoresData !== null
+        ) {
+          // Intenta manejar el caso de un solo objeto orientador
+
+          try {
+            const orientadorData = orientadoresData as any;
+            if (
+              'id_orientador' in orientadorData &&
+              'nombreCompleto' in orientadorData
+            ) {
+              const orientadorUnico = {
+                id: orientadorData.id_orientador,
+                nombre: orientadorData.nombreCompleto,
+                email: orientadorData.email || '',
+                especialidad: orientadorData.especialidad || '',
+              };
+
+              setOrientadores([orientadorUnico]);
+            } else {
+              // El objeto no tiene la estructura esperada de un orientador
+              toast.error('Formato de orientador no reconocido');
+            }
+          } catch (err) {
+            // Error al procesar objeto de orientador
+            toast.error('Error al procesar datos de orientadores');
+          }
+        } else {
+          // No se recibieron orientadores o el formato es incorrecto
+          toast.error('Error al cargar la lista de orientadores');
+        }
+
+        // Obtener cursos para el filtro (con endpoint /cursos)
+        const cursosData = await asignacionesService.getCursos();
+
+        const cursosFormateados = cursosData.map((c) => ({
+          id: c.id_curso,
+          nombre: c.nombre,
+          nivel: '', // No tenemos esta info en la API actual
+          grado: '',
+          seccion: c.seccion || '',
+        }));
+
+        // Mapeo más completo para ordenar correctamente los cursos
+        const ordenCursos: Record<string, number> = {
+          primero: 1,
+          primer: 1,
+          '1': 1,
+          i: 1,
+          segundo: 2,
+          '2': 2,
+          ii: 2,
+          tercero: 3,
+          tercer: 3,
+          '3': 3,
+          iii: 3,
+          cuarto: 4,
+          '4': 4,
+          iv: 4,
+          quinto: 5,
+          '5': 5,
+          v: 5,
+          sexto: 6,
+          '6': 6,
+          vi: 6,
+          séptimo: 7,
+          septimo: 7,
+          '7': 7,
+          vii: 7,
+          octavo: 8,
+          '8': 8,
+          viii: 8,
+          noveno: 9,
+          '9': 9,
+          ix: 9,
+          décimo: 10,
+          decimo: 10,
+          '10': 10,
+          x: 10,
+          undécimo: 11,
+          undecimo: 11,
+          onceavo: 11,
+          '11': 11,
+          xi: 11,
+          duodécimo: 12,
+          duodecimo: 12,
+          doceavo: 12,
+          '12': 12,
+          xii: 12,
+        };
+
+        // Función mejorada para determinar el orden de un curso
+        const getOrdenCurso = (nombre: string): number => {
+          const nombreLower = nombre.toLowerCase().trim();
+
+          // 1. Buscar coincidencias exactas primero
+          for (const [clave, valor] of Object.entries(ordenCursos)) {
+            // Buscar coincidencias exactas (por ejemplo, "Primero A" contiene "primero")
+            if (
+              nombreLower === clave ||
+              nombreLower.startsWith(clave + ' ') ||
+              nombreLower.includes(' ' + clave + ' ') ||
+              nombreLower.endsWith(' ' + clave)
+            ) {
+              return valor;
+            }
+          }
+
+          // 2. Buscar coincidencias parciales
+          for (const [clave, valor] of Object.entries(ordenCursos)) {
+            if (nombreLower.includes(clave)) {
+              return valor;
+            }
+          }
+
+          // 3. Buscar números en el nombre
+          const numeroMatch = nombreLower.match(/\d+/);
+          if (numeroMatch && numeroMatch[0]) {
+            const numero = parseInt(numeroMatch[0], 10);
+            if (numero >= 1 && numero <= 12) {
+              return numero;
+            }
+          }
+
+          return 99; // Valor por defecto para cursos que no siguen el patrón
+        };
+
+        // Ordenar los cursos por grado académico
+        const cursosOrdenados = [...cursosFormateados].sort((a, b) => {
+          const ordenA = getOrdenCurso(a.nombre);
+          const ordenB = getOrdenCurso(b.nombre);
+
+          if (ordenA === ordenB) {
+            // Si el grado es igual, ordenar por sección (A, B, C, etc.)
+            return a.nombre.localeCompare(b.nombre);
+          }
+
+          return ordenA - ordenB;
+        });
+
+        // Registramos cómo quedó el ordenamiento para debug
+        console.log(
+          'Cursos ordenados:',
+          cursosOrdenados.map(
+            (c) => `${c.nombre} (orden: ${getOrdenCurso(c.nombre)})`
+          )
+        );
+
+        setCursos(cursosOrdenados);
+
+        // Obtener cursos para el formulario (con endpoint /cursos/all)
+        const cursosAllData = await asignacionesService.getCursosAll();
+
+        const cursosAllFormateados = cursosAllData.map((c) => ({
+          id: c.id_curso,
+          nombre: c.nombre,
+          nivel: '', // No tenemos esta info en la API actual
+          grado: '',
+          seccion: c.seccion || '',
+        }));
+        setCursosFormulario(cursosAllFormateados);
+
+        // Obtener asignaturas
+        const asignaturasData = await asignacionesService.getAsignaturas();
+
+        const asignaturasFormateadas = asignaturasData.map((a) => ({
+          id: a.id_asignatura,
+          nombre: a.nombre,
+          codigo: a.orden_en_reporte || '',
+          nivel: '', // No tenemos esta info en la API actual
+        }));
+        setAsignaturas(asignaturasFormateadas);
+
+        // Obtener asignaciones
+        const asignacionesResponse =
+          await asignacionesService.getAsignaciones();
+
+        // Verificar si hay datos de asignaciones
+        const asignacionesData = asignacionesResponse?.data || [];
+
+        if (asignacionesData.length === 0) {
+          // No se recibieron asignaciones del servidor
+          setAsignaciones([]);
+          return;
+        }
+
+        const asignacionesFormateadas = asignacionesData
+          .map((a) => {
+            // Verificar que los objetos anidados existan y tengan los campos necesarios
+            if (!a || !a.docente || !a.curso || !a.asignatura) {
+              // Asignación con datos faltantes
+              return null;
+            }
+
+            return {
+              id: a.id_asignatura_orientador,
+              orientadorId: a.docente?.id_orientador,
+              cursoId: a.curso?.id_curso,
+              asignaturaId: a.asignatura?.id_asignatura,
+              fechaAsignacion: a.fechaAsignacion || '',
+              estado: a.estado || 'ACTIVO',
+              cargaHoraria: a.cargaHorariaSemanal || 0,
+              esOrientador: a.esOrientador || false,
+              orientador: {
+                id: a.docente.id_orientador,
+                nombre: a.docente.nombreCompleto,
+              },
+              curso: {
+                id: a.curso.id_curso,
+                nombre: a.curso.nombre,
+                seccion: a.curso.seccion || '',
+              },
+              asignatura: {
+                id: a.asignatura.id_asignatura,
+                nombre: a.asignatura.nombre,
+                codigo: a.asignatura.orden_en_reporte || '',
+              },
+            };
+          })
+          .filter((item) => item !== null) as AsignacionUI[];
+        setAsignaciones(asignacionesFormateadas);
+      } catch (error) {
+        // Error al cargar datos
+        toast.error('Error al cargar datos. Por favor, intente nuevamente.');
+
+        // Inicializar arrays vacíos en caso de error
+        setOrientadores([]);
+        setCursos([]);
+        setAsignaturas([]);
+        setAsignaciones([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterDocente, setFilterDocente] = useState<string>('todos');
+  const debouncedSearchTerm = useDebounce(searchTerm, 500); // Debounce para mejorar rendimiento
+  const [filterOrientador, setFilterOrientador] = useState<string>('todos');
   const [filterCurso, setFilterCurso] = useState<string>('todos');
   const [filterEstado, setFilterEstado] = useState<string>('todos');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
-    docenteId: '',
+    orientadorId: '',
     cursoId: '',
     asignaturaId: '',
-    cargaHoraria: 4
+    cargaHoraria: 4,
+    esOrientador: false,
   });
 
   // Funciones auxiliares para obtener nombres
-  const getDocenteNombre = (id: string) => docentes.find(d => d.id === id)?.nombre || 'N/A';
-  const getCursoNombre = (id: string) => cursos.find(c => c.id === id)?.nombre || 'N/A';
-  const getAsignaturaNombre = (id: string) => asignaturas.find(a => a.id === id)?.nombre || 'N/A';
-  const getAsignaturaCodigo = (id: string) => asignaturas.find(a => a.id === id)?.codigo || 'N/A';
+  const getOrientadorNombre = (id: number) =>
+    orientadores.find((o: OrientadorUI) => o.id === id)?.nombre || 'N/A';
+  const getCursoNombre = (id: number) =>
+    cursos.find((c: CursoUI) => c.id === id)?.nombre || 'N/A';
+  const getAsignaturaNombre = (id: number) =>
+    asignaturas.find((a: AsignaturaUI) => a.id === id)?.nombre || 'N/A';
+  const getAsignaturaCodigo = (id: number) =>
+    asignaturas.find((a: AsignaturaUI) => a.id === id)?.codigo || 'N/A';
 
-  // Filtrar asignaciones
-  const filteredAsignaciones = asignaciones.filter(asignacion => {
-    const docenteNombre = getDocenteNombre(asignacion.docenteId).toLowerCase();
-    const cursoNombre = getCursoNombre(asignacion.cursoId).toLowerCase();
-    const asignaturaNombre = getAsignaturaNombre(asignacion.asignaturaId).toLowerCase();
-    
-    const matchesSearch = 
-      docenteNombre.includes(searchTerm.toLowerCase()) ||
-      cursoNombre.includes(searchTerm.toLowerCase()) ||
-      asignaturaNombre.includes(searchTerm.toLowerCase());
-    
-    const matchesDocente = filterDocente === 'todos' || asignacion.docenteId === filterDocente;
-    const matchesCurso = filterCurso === 'todos' || asignacion.cursoId === filterCurso;
-    const matchesEstado = filterEstado === 'todos' || asignacion.estado === filterEstado;
-    
-    return matchesSearch && matchesDocente && matchesCurso && matchesEstado;
+  // Filtrar asignaciones con lógica mejorada similar a UsuariosModule
+  const filteredAsignaciones = asignaciones.filter((asignacion) => {
+    // Usar el objeto orientador y curso directamente si están disponibles
+    const orientadorNombre = (
+      asignacion.orientador?.nombre ||
+      getOrientadorNombre(asignacion.orientadorId)
+    ).toLowerCase();
+
+    const cursoNombre = (
+      asignacion.curso?.nombre || getCursoNombre(asignacion.cursoId)
+    ).toLowerCase();
+
+    const asignaturaNombre = (
+      asignacion.asignatura?.nombre ||
+      getAsignaturaNombre(asignacion.asignaturaId)
+    ).toLowerCase();
+
+    // Búsqueda mejorada con término debounced
+    let matchesSearch = true;
+    if (debouncedSearchTerm) {
+      const searchTermLower = debouncedSearchTerm.toLowerCase();
+      matchesSearch =
+        orientadorNombre.includes(searchTermLower) ||
+        cursoNombre.includes(searchTermLower) ||
+        asignaturaNombre.includes(searchTermLower);
+    }
+
+    // Filtros adicionales
+    const matchesOrientador =
+      filterOrientador === 'todos' ||
+      asignacion.orientadorId.toString() === filterOrientador;
+
+    const matchesCurso =
+      filterCurso === 'todos' || asignacion.cursoId.toString() === filterCurso;
+
+    const matchesEstado =
+      filterEstado === 'todos' || asignacion.estado === filterEstado;
+
+    return matchesSearch && matchesOrientador && matchesCurso && matchesEstado;
   });
+
+  // Calcular paginación
+  const startIndex = (page - 1) * itemsPerPage;
+  const paginatedAsignaciones = filteredAsignaciones.slice(
+    startIndex,
+    startIndex + itemsPerPage
+  );
+
+  // Actualizar número total de páginas
+  useEffect(() => {
+    const totalFiltered = filteredAsignaciones.length;
+    setTotalPages(Math.ceil(totalFiltered / itemsPerPage));
+
+    // Asegurarse de que la página actual es válida
+    if (page > Math.ceil(totalFiltered / itemsPerPage) && totalFiltered > 0) {
+      setPage(1);
+    }
+  }, [filteredAsignaciones, page]);
+
+  // Estado para manejar asignaturas filtradas por curso
+  const [asignaturasFiltradas, setAsignaturasFiltradas] = useState<
+    AsignaturaUI[]
+  >([]);
 
   // Obtener asignaturas compatibles con el curso seleccionado
   const getAsignaturasCompatibles = (cursoId: string) => {
-    const curso = cursos.find(c => c.id === cursoId);
-    if (!curso) return [];
-    return asignaturas.filter(a => a.nivel === curso.nivel);
+    // Si no hay curso seleccionado, devolver array vacío
+    if (!cursoId) return [];
+
+    // Si hay asignaturas filtradas (incluso si es array vacío), devolverlas
+    // Esto asegura que si un curso no tiene asignaturas, no se mostrarán opciones en el dropdown
+    if (formData.cursoId && formData.cursoId === cursoId)
+      return asignaturasFiltradas;
+
+    // Si no hay asignaturas filtradas y no hay curso seleccionado, devolver todas las asignaturas
+    return asignaturas;
   };
 
   const handleCreateAsignacion = () => {
     setFormData({
-      docenteId: '',
+      orientadorId: '',
       cursoId: '',
       asignaturaId: '',
-      cargaHoraria: 4
+      cargaHoraria: 4,
+      esOrientador: false,
     });
     setIsDialogOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Validaciones
-    if (!formData.docenteId || !formData.cursoId || !formData.asignaturaId) {
+    if (!formData.orientadorId || !formData.cursoId || !formData.asignaturaId) {
       toast.error('Todos los campos son obligatorios');
       return;
     }
 
+    // Verificar que el curso tenga asignaturas asignadas
+    if (getAsignaturasCompatibles(formData.cursoId).length === 0) {
+      toast.error(
+        'Este curso no tiene asignaturas asignadas. Por favor, seleccione otro curso.'
+      );
+      return;
+    }
+
     // Verificar que no exista duplicado
-    const exists = asignaciones.some(a => 
-      a.docenteId === formData.docenteId && 
-      a.cursoId === formData.cursoId && 
-      a.asignaturaId === formData.asignaturaId &&
-      a.estado === 'activa'
+    const exists = asignaciones.some(
+      (a) =>
+        a.orientadorId === Number(formData.orientadorId) &&
+        a.cursoId === Number(formData.cursoId) &&
+        a.asignaturaId === Number(formData.asignaturaId) &&
+        a.estado === 'ACTIVO'
     );
-    
+
     if (exists) {
-      toast.error('Ya existe una asignación activa para este docente, curso y asignatura');
+      toast.error(
+        'Ya existe una asignación activa para este orientador, curso y asignatura'
+      );
       return;
     }
 
     // Verificar compatibilidad de nivel
-    const curso = cursos.find(c => c.id === formData.cursoId);
-    const asignatura = asignaturas.find(a => a.id === formData.asignaturaId);
-    
-    if (curso && asignatura && curso.nivel !== asignatura.nivel) {
+    const curso = cursos.find((c) => c.id.toString() === formData.cursoId);
+    const asignatura = asignaturas.find(
+      (a) => a.id.toString() === formData.asignaturaId
+    );
+
+    if (
+      curso &&
+      asignatura &&
+      curso.nivel &&
+      asignatura.nivel &&
+      curso.nivel !== asignatura.nivel
+    ) {
       toast.error('La asignatura no es compatible con el nivel del curso');
       return;
     }
 
-    // Crear nueva asignación
-    const newAsignacion: Asignacion = {
-      id: Date.now().toString(),
-      docenteId: formData.docenteId,
-      cursoId: formData.cursoId,
-      asignaturaId: formData.asignaturaId,
-      fechaAsignacion: new Date().toISOString().split('T')[0],
-      estado: 'activa',
-      cargaHoraria: formData.cargaHoraria
-    };
+    try {
+      const loadingToast = toast.loading('Creando asignación...');
 
-    setAsignaciones([...asignaciones, newAsignacion]);
-    toast.success('Asignación creada correctamente');
-    setIsDialogOpen(false);
+      // Crear dto para la API
+      const createDto = {
+        id_orientador: Number(formData.orientadorId),
+        id_asignatura: Number(formData.asignaturaId),
+        id_curso: Number(formData.cursoId), // Necesario para validación en el backend
+        anio_academico: new Date().getFullYear().toString(),
+        cargaHorariaSemanal: Number(formData.cargaHoraria), // Aseguramos que sea número
+        activo: true,
+        es_orientador: Boolean(formData.esOrientador), // Aseguramos que sea boolean
+      };
+
+      // Loguear para debug
+      console.log('Enviando datos de asignación:', createDto);
+
+      // Llamar a la API
+      const response = await asignacionesService.createAsignacion(createDto);
+
+      // Log para debug
+      console.log('Respuesta API:', response);
+
+      // Obtener la asignación recién creada con formato UI
+      const newAsignacion: AsignacionUI = {
+        id: response.id_asignatura_orientador,
+        orientadorId: response.docente.id_orientador,
+        cursoId: response.curso.id_curso,
+        asignaturaId: response.asignatura.id_asignatura,
+        fechaAsignacion: response.fechaAsignacion,
+        estado: response.estado,
+        cargaHoraria: response.cargaHorariaSemanal,
+        esOrientador: response.esOrientador || false,
+        orientador: {
+          id: response.docente.id_orientador,
+          nombre: response.docente.nombreCompleto,
+        },
+        curso: {
+          id: response.curso.id_curso,
+          nombre: response.curso.nombre,
+          seccion: response.curso.seccion || '',
+        },
+        asignatura: {
+          id: response.asignatura.id_asignatura,
+          nombre: response.asignatura.nombre,
+          codigo: response.asignatura.orden_en_reporte || '',
+        },
+      };
+
+      setAsignaciones([...asignaciones, newAsignacion]);
+      toast.dismiss(loadingToast);
+      toast.success('Asignación creada correctamente');
+      setIsDialogOpen(false);
+    } catch (error: any) {
+      // Error al crear asignación
+      console.error('Error al crear asignación:', error);
+
+      if (error.response) {
+        // El servidor respondió con un error
+        console.error('Respuesta de error:', error.response.data);
+
+        // Mostrar mensaje específico según el código de error
+        if (error.response.status === 400) {
+          if (error.response.data?.message) {
+            if (Array.isArray(error.response.data.message)) {
+              toast.error(`Error: ${error.response.data.message[0]}`);
+            } else {
+              toast.error(`Error: ${error.response.data.message}`);
+            }
+          } else {
+            toast.error(
+              'Los datos enviados no son válidos. Revise el formulario.'
+            );
+          }
+        } else {
+          toast.error(
+            `Error del servidor (${error.response.status}). Por favor, intente nuevamente.`
+          );
+        }
+      } else if (error.request) {
+        // No se recibió respuesta
+        toast.error(
+          'No se pudo conectar con el servidor. Verifique su conexión.'
+        );
+      } else {
+        // Error al preparar la petición
+        toast.error(
+          'Error al crear asignación. Por favor, intente nuevamente.'
+        );
+      }
+    }
   };
 
+  const handleToggleStatus = async (asignacion: AsignacionUI) => {
+    try {
+      const loadingToast = toast.loading('Actualizando estado...');
 
+      // Llamar a la API para cambiar el estado
 
-  const handleToggleStatus = (asignacion: Asignacion) => {
-    const newStatus = asignacion.estado === 'activa' ? 'inactiva' : 'activa';
-    setAsignaciones(asignaciones.map(a => 
-      a.id === asignacion.id ? { ...a, estado: newStatus } : a
-    ));
-    toast.success(`Asignación ${newStatus === 'activa' ? 'activada' : 'desactivada'} correctamente`);
+      await asignacionesService.updateAsignacion(asignacion.id, {
+        activo: asignacion.estado === 'ACTIVO' ? false : true,
+      });
+
+      // Actualizar estado local
+      const newStatus = asignacion.estado === 'ACTIVO' ? 'INACTIVO' : 'ACTIVO';
+      setAsignaciones(
+        asignaciones.map((a) =>
+          a.id === asignacion.id ? { ...a, estado: newStatus } : a
+        )
+      );
+
+      toast.dismiss(loadingToast);
+      toast.success(
+        `Asignación ${newStatus === 'ACTIVO' ? 'activada' : 'desactivada'} correctamente`
+      );
+    } catch (error: any) {
+      // Error al cambiar estado
+
+      // Mostrar más detalles del error
+      if (error.response) {
+        // Detalle de la respuesta del error
+
+        // Mensaje personalizado según el código de error
+        if (error.response.status === 404) {
+          toast.error(
+            'No se encontró la asignación. Puede que haya sido eliminada.'
+          );
+        } else if (error.response.status === 400) {
+          toast.error(
+            `Error en la solicitud: ${error.response.data.message || 'Datos inválidos'}`
+          );
+        } else {
+          toast.error(
+            `Error del servidor (${error.response.status}). Por favor, intente nuevamente.`
+          );
+        }
+      } else if (error.request) {
+        // No se recibió respuesta del servidor
+        toast.error(
+          'No se pudo conectar con el servidor. Verifique su conexión a internet.'
+        );
+      } else {
+        // Error al configurar la petición
+        toast.error(`Error: ${error.message}`);
+      }
+    }
   };
 
   // Calcular estadísticas
   const totalCargaHoraria = asignaciones
-    .filter(a => a.estado === 'activa')
+    .filter((a) => a.estado === 'ACTIVO')
     .reduce((sum, a) => sum + a.cargaHoraria, 0);
 
-  const docentesConAsignaciones = new Set(
-    asignaciones.filter(a => a.estado === 'activa').map(a => a.docenteId)
+  const orientadoresConAsignaciones = new Set(
+    asignaciones.filter((a) => a.estado === 'ACTIVO').map((a) => a.orientadorId)
   ).size;
 
   return (
@@ -262,12 +747,29 @@ export function AsignacionesModule() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Gestión de Asignaciones</h1>
-          <p className="text-gray-600">Asigna docentes a cursos y asignaturas</p>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Gestión de Asignaciones
+          </h1>
+          <p className="text-gray-600">
+            Asigna orientadores a cursos y asignaturas
+          </p>
         </div>
-        <Button onClick={handleCreateAsignacion} className="bg-blue-600 hover:bg-blue-700">
-          <Plus className="w-4 h-4 mr-2" />
-          Nueva Asignación
+        <Button
+          onClick={handleCreateAsignacion}
+          className="bg-blue-600 hover:bg-blue-700"
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Cargando...
+            </>
+          ) : (
+            <>
+              <Plus className="w-4 h-4 mr-2" />
+              Nueva Asignación
+            </>
+          )}
         </Button>
       </div>
 
@@ -279,7 +781,7 @@ export function AsignacionesModule() {
               <div>
                 <p className="text-sm text-gray-600">Total Asignaciones</p>
                 <p className="text-2xl font-bold text-blue-600">
-                  {asignaciones.filter(a => a.estado === 'activa').length}
+                  {asignaciones.filter((a) => a.estado === 'ACTIVO').length}
                 </p>
               </div>
               <Target className="w-8 h-8 text-blue-600" />
@@ -291,8 +793,10 @@ export function AsignacionesModule() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Docentes Asignados</p>
-                <p className="text-2xl font-bold text-green-600">{docentesConAsignaciones}</p>
+                <p className="text-sm text-gray-600">Orientadores Asignados</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {orientadoresConAsignaciones}
+                </p>
               </div>
               <Users className="w-8 h-8 text-green-600" />
             </div>
@@ -304,7 +808,9 @@ export function AsignacionesModule() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Carga Horaria Total</p>
-                <p className="text-2xl font-bold text-purple-600">{totalCargaHoraria}h</p>
+                <p className="text-2xl font-bold text-purple-600">
+                  {totalCargaHoraria}h
+                </p>
               </div>
               <Calendar className="w-8 h-8 text-purple-600" />
             </div>
@@ -315,9 +821,14 @@ export function AsignacionesModule() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Promedio por Docente</p>
+                <p className="text-sm text-gray-600">Promedio por Orientador</p>
                 <p className="text-2xl font-bold text-orange-600">
-                  {docentesConAsignaciones > 0 ? Math.round(totalCargaHoraria / docentesConAsignaciones) : 0}h
+                  {orientadoresConAsignaciones > 0
+                    ? Math.round(
+                        totalCargaHoraria / orientadoresConAsignaciones
+                      )
+                    : 0}
+                  h
                 </p>
               </div>
               <User className="w-8 h-8 text-orange-600" />
@@ -334,47 +845,81 @@ export function AsignacionesModule() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <Input
-                  placeholder="Buscar por docente, curso o asignatura..."
+                  placeholder="Buscar por orientador, curso o asignatura..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setPage(1); // Volver a la primera página cuando se busca
+                  }}
                   className="pl-10"
                 />
               </div>
             </div>
-            <Select value={filterDocente} onValueChange={setFilterDocente}>
+            <Select
+              value={filterOrientador}
+              onValueChange={(value) => {
+                setFilterOrientador(value);
+                setPage(1); // Volver a la primera página cuando se cambia el filtro
+              }}
+            >
               <SelectTrigger className="w-full md:w-48">
-                <SelectValue placeholder="Filtrar por docente" />
+                <SelectValue placeholder="Filtrar por orientador" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="todos">Todos los docentes</SelectItem>
-                {docentes.map((docente) => (
-                  <SelectItem key={docente.id} value={docente.id}>
-                    {docente.nombre}
-                  </SelectItem>
-                ))}
+                <SelectItem value="todos">Todos los orientadores</SelectItem>
+                {orientadores.map((orientador) => {
+                  // Es importante que usemos el ID que coincida con el orientadorId de las asignaciones
+                  return (
+                    <SelectItem
+                      key={orientador.id}
+                      value={orientador.id.toString()}
+                    >
+                      {orientador.nombre}
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
-            <Select value={filterCurso} onValueChange={setFilterCurso}>
+            <Select
+              value={filterCurso}
+              onValueChange={(value) => {
+                setFilterCurso(value);
+                setPage(1); // Volver a la primera página cuando se cambia el filtro
+              }}
+            >
               <SelectTrigger className="w-full md:w-48">
                 <SelectValue placeholder="Filtrar por curso" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="todos">Todos los cursos</SelectItem>
                 {cursos.map((curso) => (
-                  <SelectItem key={curso.id} value={curso.id}>
-                    {curso.nombre}
+                  <SelectItem key={curso.id} value={curso.id.toString()}>
+                    <div>
+                      <p className="font-medium">{curso.nombre}</p>
+                      {curso.seccion && (
+                        <p className="text-sm text-gray-500">
+                          Sección: {curso.seccion}
+                        </p>
+                      )}
+                    </div>
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <Select value={filterEstado} onValueChange={setFilterEstado}>
+            <Select
+              value={filterEstado}
+              onValueChange={(value) => {
+                setFilterEstado(value);
+                setPage(1); // Volver a la primera página cuando se cambia el filtro
+              }}
+            >
               <SelectTrigger className="w-full md:w-48">
                 <SelectValue placeholder="Filtrar por estado" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="todos">Todos los estados</SelectItem>
-                <SelectItem value="activa">Activa</SelectItem>
-                <SelectItem value="inactiva">Inactiva</SelectItem>
+                <SelectItem value="ACTIVO">Activa</SelectItem>
+                <SelectItem value="INACTIVO">Inactiva</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -393,7 +938,7 @@ export function AsignacionesModule() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Docente</TableHead>
+                <TableHead>Orientador</TableHead>
                 <TableHead>Curso</TableHead>
                 <TableHead>Asignatura</TableHead>
                 <TableHead>Carga Horaria</TableHead>
@@ -403,57 +948,186 @@ export function AsignacionesModule() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredAsignaciones.map((asignacion) => {
-                const docente = docentes.find(d => d.id === asignacion.docenteId);
-                return (
-                  <TableRow key={asignacion.id}>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{getDocenteNombre(asignacion.docenteId)}</p>
-                        <p className="text-sm text-gray-500">{docente?.especialidad}</p>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center space-x-2">
-                        <School className="w-4 h-4 text-gray-400" />
-                        <span>{getCursoNombre(asignacion.cursoId)}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{getAsignaturaNombre(asignacion.asignaturaId)}</p>
-                        <Badge variant="outline" className="text-xs">
-                          {getAsignaturaCodigo(asignacion.asignaturaId)}
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="h-24 text-center">
+                    <div className="flex justify-center items-center h-full">
+                      <Loader2 className="w-6 h-6 animate-spin mr-2" />
+                      <span>Cargando asignaciones...</span>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : filteredAsignaciones.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={7}
+                    className="h-24 text-center text-gray-500"
+                  >
+                    No se encontraron asignaciones con los filtros seleccionados
+                  </TableCell>
+                </TableRow>
+              ) : (
+                paginatedAsignaciones.map((asignacion) => {
+                  // Usar información directa del objeto o buscar por ID como fallback
+                  const orientadorNombre =
+                    asignacion.orientador?.nombre ||
+                    getOrientadorNombre(asignacion.orientadorId);
+                  const cursoNombre =
+                    asignacion.curso?.nombre ||
+                    getCursoNombre(asignacion.cursoId);
+                  const asignaturaNombre =
+                    asignacion.asignatura?.nombre ||
+                    getAsignaturaNombre(asignacion.asignaturaId);
+                  const asignaturaCodigo =
+                    asignacion.asignatura?.codigo ||
+                    getAsignaturaCodigo(asignacion.asignaturaId);
+
+                  const orientador = orientadores.find(
+                    (o) => o.id === asignacion.orientadorId
+                  );
+
+                  return (
+                    <TableRow key={asignacion.id}>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">
+                            {orientadorNombre || 'N/A'}
+                          </p>
+                          <p className="text-sm text-gray-500">
+                            {orientador?.especialidad || ''}
+                          </p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center space-x-2">
+                          <School className="w-4 h-4 text-gray-400" />
+                          <div>
+                            <span>{cursoNombre || 'N/A'}</span>
+                            {asignacion.curso?.seccion && (
+                              <span className="text-sm text-gray-500 ml-1">
+                                {asignacion.curso.seccion}
+                              </span>
+                            )}
+                            {asignacion.esOrientador && (
+                              <Badge
+                                variant="secondary"
+                                className="ml-2 text-xs bg-green-100 text-green-800"
+                              >
+                                Orientador Principal
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">
+                            {asignaturaNombre || 'N/A'}
+                          </p>
+                          <Badge variant="outline" className="text-xs">
+                            Código: {asignaturaCodigo || 'N/A'}
+                          </Badge>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant="secondary">
+                          {asignacion.cargaHoraria}h/sem
                         </Badge>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant="secondary">
-                        {asignacion.cargaHoraria}h/sem
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{asignacion.fechaAsignacion}</TableCell>
-                    <TableCell>
-                      <Badge variant={asignacion.estado === 'activa' ? 'default' : 'destructive'}>
-                        {asignacion.estado === 'activa' ? 'Activa' : 'Inactiva'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleToggleStatus(asignacion)}
-                        className={asignacion.estado === 'activa' ? 'text-orange-600 hover:text-orange-700' : 'text-green-600 hover:text-green-700'}
-                        title={asignacion.estado === 'activa' ? 'Desactivar asignación' : 'Activar asignación'}
-                      >
-                        {asignacion.estado === 'activa' ? <ToggleLeft className="w-4 h-4" /> : <ToggleRight className="w-4 h-4" />}
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
+                      </TableCell>
+                      <TableCell>
+                        {formatDate(asignacion.fechaAsignacion, 'short')}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            asignacion.estado === 'ACTIVO'
+                              ? 'default'
+                              : 'destructive'
+                          }
+                        >
+                          {asignacion.estado === 'ACTIVO'
+                            ? 'Activa'
+                            : 'Inactiva'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleToggleStatus(asignacion)}
+                          className={
+                            asignacion.estado === 'ACTIVO'
+                              ? 'text-orange-600 hover:text-orange-700'
+                              : 'text-green-600 hover:text-green-700'
+                          }
+                          title={
+                            asignacion.estado === 'ACTIVO'
+                              ? 'Desactivar asignación'
+                              : 'Activar asignación'
+                          }
+                        >
+                          {asignacion.estado === 'ACTIVO' ? (
+                            <ToggleLeft className="w-4 h-4" />
+                          ) : (
+                            <ToggleRight className="w-4 h-4" />
+                          )}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
             </TableBody>
           </Table>
+
+          {/* Controles de paginación */}
+          <div className="flex items-center justify-between space-x-2 py-4">
+            <p className="text-sm text-gray-600">
+              Mostrando{' '}
+              <span className="font-semibold">
+                {paginatedAsignaciones.length}
+              </span>{' '}
+              de{' '}
+              <span className="font-semibold">
+                {filteredAsignaciones.length}
+              </span>{' '}
+              resultados
+              {(debouncedSearchTerm ||
+                filterEstado !== 'todos' ||
+                filterCurso !== 'todos' ||
+                filterOrientador !== 'todos') && (
+                <Badge
+                  variant="outline"
+                  className="ml-2 bg-blue-50 text-blue-700"
+                >
+                  Filtrado
+                </Badge>
+              )}
+            </p>
+            <div className="flex items-center space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+                disabled={page === 1}
+              >
+                Anterior
+              </Button>
+              <span className="text-sm text-gray-600">
+                Página {page} de {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setPage((prev) => (prev < totalPages ? prev + 1 : prev))
+                }
+                disabled={page >= totalPages}
+              >
+                Siguiente
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -463,66 +1137,126 @@ export function AsignacionesModule() {
           <DialogHeader>
             <DialogTitle>Crear Nueva Asignación</DialogTitle>
             <DialogDescription>
-              Asigna un docente a un curso y asignatura específica
+              Asigna un orientador a un curso y asignatura específica
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-2">Docente *</label>
-              <Select value={formData.docenteId} onValueChange={(value) => setFormData({...formData, docenteId: value})}>
+              <label className="block text-sm font-medium mb-2">
+                Orientador *
+              </label>
+              <Select
+                value={formData.orientadorId}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, orientadorId: value })
+                }
+              >
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecciona un docente" />
+                  <SelectValue placeholder="Selecciona un orientador" />
                 </SelectTrigger>
                 <SelectContent>
-                  {docentes.map((docente) => (
-                    <SelectItem key={docente.id} value={docente.id}>
-                      <div>
-                        <p className="font-medium">{docente.nombre}</p>
-                        <p className="text-sm text-gray-500">{docente.especialidad}</p>
-                      </div>
+                  {orientadores.length > 0 ? (
+                    orientadores.map((orientador) => {
+                      return (
+                        <SelectItem
+                          key={orientador.id}
+                          value={orientador.id.toString()}
+                        >
+                          <div>
+                            <p className="font-medium">{orientador.nombre}</p>
+                            <p className="text-sm text-gray-500">
+                              {orientador.especialidad}
+                            </p>
+                          </div>
+                        </SelectItem>
+                      );
+                    })
+                  ) : (
+                    <SelectItem value="" disabled>
+                      No hay orientadores disponibles
                     </SelectItem>
-                  ))}
+                  )}
                 </SelectContent>
               </Select>
             </div>
 
             <div>
               <label className="block text-sm font-medium mb-2">Curso *</label>
-              <Select 
-                value={formData.cursoId} 
-                onValueChange={(value) => {
-                  setFormData({...formData, cursoId: value, asignaturaId: ''});
+              <Select
+                value={formData.cursoId}
+                onValueChange={async (value) => {
+                  // Actualizar el form data
+                  setFormData({
+                    ...formData,
+                    cursoId: value,
+                    asignaturaId: '',
+                  });
+
+                  // Si se seleccionó un curso, cargar sus asignaturas
+                  if (value) {
+                    try {
+                      // Mostrar indicador de carga
+                      toast.loading('Cargando asignaturas...', {
+                        id: 'asignaturas-loading',
+                      });
+
+                      // Cargar asignaturas para este curso desde el backend
+                      const asignaturasCurso =
+                        await asignacionesService.getAsignaturasPorCurso(
+                          parseInt(value, 10)
+                        );
+
+                      // Mapear a formato UI
+                      const asignaturasFormateadas = asignaturasCurso.map(
+                        (a) => ({
+                          id: a.id_asignatura,
+                          nombre: a.nombre,
+                          codigo: a.orden_en_reporte || '',
+                          nivel: '',
+                        })
+                      );
+
+                      // Actualizar estado
+                      setAsignaturasFiltradas(asignaturasFormateadas);
+
+                      // Finalizar indicador de carga
+                      toast.dismiss('asignaturas-loading');
+
+                      // Si no hay asignaturas, mostrar mensaje
+                      if (asignaturasFormateadas.length === 0) {
+                        toast.warning(
+                          'Este curso no tiene asignaturas asignadas. Por favor, asigne asignaturas al curso primero.'
+                        );
+                      }
+                    } catch (error) {
+                      console.error(
+                        'Error al cargar asignaturas por curso:',
+                        error
+                      );
+                      toast.error(
+                        'No se pudieron cargar las asignaturas para este curso.'
+                      );
+                      setAsignaturasFiltradas([]);
+                    }
+                  } else {
+                    // Si se deseleccionó el curso, limpiar asignaturas filtradas
+                    setAsignaturasFiltradas([]);
+                  }
                 }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecciona un curso" />
                 </SelectTrigger>
                 <SelectContent>
-                  {cursos.map((curso) => (
-                    <SelectItem key={curso.id} value={curso.id}>
-                      {curso.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">Asignatura *</label>
-              <Select 
-                value={formData.asignaturaId} 
-                onValueChange={(value) => setFormData({...formData, asignaturaId: value})}
-                disabled={!formData.cursoId}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecciona una asignatura" />
-                </SelectTrigger>
-                <SelectContent>
-                  {getAsignaturasCompatibles(formData.cursoId).map((asignatura) => (
-                    <SelectItem key={asignatura.id} value={asignatura.id}>
+                  {cursosFormulario.map((curso) => (
+                    <SelectItem key={curso.id} value={curso.id.toString()}>
                       <div>
-                        <p className="font-medium">{asignatura.nombre}</p>
-                        <p className="text-sm text-gray-500">{asignatura.codigo}</p>
+                        <p className="font-medium">{curso.nombre}</p>
+                        {curso.seccion && (
+                          <p className="text-sm text-gray-500">
+                            Sección: {curso.seccion}
+                          </p>
+                        )}
                       </div>
                     </SelectItem>
                   ))}
@@ -531,22 +1265,104 @@ export function AsignacionesModule() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-2">Carga Horaria Semanal</label>
+              <label className="block text-sm font-medium mb-2">
+                Asignatura *
+              </label>
+              <Select
+                value={formData.asignaturaId}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, asignaturaId: value })
+                }
+                disabled={
+                  !formData.cursoId ||
+                  getAsignaturasCompatibles(formData.cursoId).length === 0
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona una asignatura" />
+                </SelectTrigger>
+                <SelectContent>
+                  {getAsignaturasCompatibles(formData.cursoId).length > 0 ? (
+                    getAsignaturasCompatibles(formData.cursoId).map(
+                      (asignatura) => (
+                        <SelectItem
+                          key={asignatura.id}
+                          value={asignatura.id.toString()}
+                        >
+                          <div>
+                            <p className="font-medium">{asignatura.nombre}</p>
+                            <p className="text-sm text-gray-500">
+                              {asignatura.codigo}
+                            </p>
+                          </div>
+                        </SelectItem>
+                      )
+                    )
+                  ) : (
+                    <div className="text-amber-500 p-2 text-center">
+                      Este curso no tiene asignaturas asignadas
+                    </div>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Carga Horaria Semanal
+              </label>
               <Input
                 type="number"
                 min="1"
                 max="10"
                 value={formData.cargaHoraria}
-                onChange={(e) => setFormData({...formData, cargaHoraria: parseInt(e.target.value) || 4})}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    cargaHoraria: parseInt(e.target.value) || 4,
+                  })
+                }
                 placeholder="Horas por semana"
               />
             </div>
 
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="esOrientador"
+                checked={formData.esOrientador}
+                onCheckedChange={(checked) =>
+                  setFormData({
+                    ...formData,
+                    esOrientador: checked === true,
+                  })
+                }
+              />
+              <label
+                htmlFor="esOrientador"
+                className="text-sm font-medium text-gray-700 cursor-pointer"
+              >
+                Es orientador principal de este curso
+              </label>
+            </div>
+
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsDialogOpen(false)}
+              >
                 Cancelar
               </Button>
-              <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
+              <Button
+                type="submit"
+                className="bg-blue-600 hover:bg-blue-700"
+                disabled={
+                  !formData.orientadorId ||
+                  !formData.cursoId ||
+                  !formData.asignaturaId ||
+                  getAsignaturasCompatibles(formData.cursoId).length === 0
+                }
+              >
                 Crear Asignación
               </Button>
             </DialogFooter>
