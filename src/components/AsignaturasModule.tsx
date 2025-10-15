@@ -34,6 +34,8 @@ import {
   Search,
   Calculator,
   FileText,
+  Loader2,
+  AlertCircle,
   //Award,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -77,6 +79,12 @@ export function AsignaturasModule() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // Paginación
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const itemsPerPage = 10;
+
   // Catálogos
   const [metodos, setMetodos] = useState<MetodoEvaluacion[]>([]);
   const [cursos, setCursos] = useState<Curso[]>([]);
@@ -98,8 +106,8 @@ export function AsignaturasModule() {
           Array.isArray(data)
             ? data
             : Array.isArray(data?.items)
-            ? data.items
-            : [];
+              ? data.items
+              : [];
 
         setMetodos(safeData(resMet.data));
         setCursos(safeData(resCur.data));
@@ -113,7 +121,7 @@ export function AsignaturasModule() {
 
     fetchCatalogos();
   }, []);
-  
+
   // Cargar asignaturas
   const fetchAsignaturas = async () => {
     try {
@@ -122,23 +130,28 @@ export function AsignaturasModule() {
       const res = await api.get<any[]>('/asignaturas');
       const data = res.data || [];
 
-      setAsignaturas(
-        Array.isArray(data)
-          ? data.map((a: any) => ({
-              id: a.id_asignatura?.toString() ?? 'N/A',
-              nombre: a.nombre ?? 'N/A',
-              metodoEvaluacion: a.metodoEvaluacion?.nombre ?? 'N/A',
-              nivel: a.curso?.nombre ?? 'N/A',
-              tipoAsignatura: a.tipoAsignatura?.nombre ?? 'N/A', // 🟩
-              sistemaEvaluacion: a.sistemaEvaluacion?.nombre ?? 'N/A', // 🟩
-              fechaCreacion: a.createdAt ?? 'N/A',
-              horasSemanales: a.horas_semanas ?? 0,
-            }))
-          : []
-      );
+      const asignaturasData = Array.isArray(data)
+        ? data.map((a: any) => ({
+            id: a.id_asignatura?.toString() ?? 'N/A',
+            nombre: a.nombre ?? 'N/A',
+            metodoEvaluacion: a.metodoEvaluacion?.nombre ?? 'N/A',
+            nivel: a.curso?.nombre ?? 'N/A',
+            tipoAsignatura: a.tipoAsignatura?.nombre ?? 'N/A',
+            sistemaEvaluacion: a.sistemaEvaluacion?.nombre ?? 'N/A',
+            fechaCreacion: a.createdAt ?? 'N/A',
+            horasSemanales: a.horas_semanas ?? 0,
+          }))
+        : [];
 
+      setAsignaturas(asignaturasData);
+      setTotalItems(asignaturasData.length);
+      setTotalPages(
+        Math.max(1, Math.ceil(asignaturasData.length / itemsPerPage))
+      );
+      setPage(1); // Volver a la primera página al recargar datos
     } catch (err: any) {
-      const msg = err?.response?.data?.message || 'Error al cargar asignaturas.';
+      const msg =
+        err?.response?.data?.message || 'Error al cargar asignaturas.';
       setError(Array.isArray(msg) ? msg.join(', ') : msg);
     } finally {
       setLoading(false);
@@ -154,8 +167,11 @@ export function AsignaturasModule() {
   // Filtros
   const [searchTerm, setSearchTerm] = useState('');
   const [filterNivel, setFilterNivel] = useState<string>('todos');
+  const [filterMetodo, setFilterMetodo] = useState<string>('todos');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingAsignatura, setEditingAsignatura] = useState<Asignatura | null>(null);
+  const [editingAsignatura, setEditingAsignatura] = useState<Asignatura | null>(
+    null
+  );
 
   // Form
   const [formData, setFormData] = useState({
@@ -169,10 +185,37 @@ export function AsignaturasModule() {
 
   // Filtrar
   const filteredAsignaturas = asignaturas.filter((asignatura) => {
-    const matchesSearch = asignatura.nombre.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesNivel = filterNivel === 'todos' || asignatura.nivel === filterNivel;
-    return matchesSearch && matchesNivel;
+    const matchesSearch = asignatura.nombre
+      .toLowerCase()
+      .includes(searchTerm.toLowerCase());
+    const matchesNivel =
+      filterNivel === 'todos' || asignatura.nivel === filterNivel;
+    const matchesMetodo =
+      filterMetodo === 'todos' || asignatura.metodoEvaluacion === filterMetodo;
+    return matchesSearch && matchesNivel && matchesMetodo;
   });
+
+  // Efectos para la paginación
+  useEffect(() => {
+    // Actualizar el total de elementos y las páginas
+    setTotalItems(filteredAsignaturas.length);
+    setTotalPages(
+      Math.max(1, Math.ceil(filteredAsignaturas.length / itemsPerPage))
+    );
+
+    // Si la página actual es mayor que el total de páginas, volver a la última página disponible
+    if (page > Math.ceil(filteredAsignaturas.length / itemsPerPage)) {
+      setPage(
+        Math.max(1, Math.ceil(filteredAsignaturas.length / itemsPerPage))
+      );
+    }
+  }, [filteredAsignaturas.length, itemsPerPage, page]);
+
+  // Datos paginados
+  const paginatedAsignaturas = filteredAsignaturas.slice(
+    (page - 1) * itemsPerPage,
+    page * itemsPerPage
+  );
 
   // Crear
   const handleCreateAsignatura = () => {
@@ -195,18 +238,21 @@ export function AsignaturasModule() {
       nombre: asignatura.nombre !== 'N/A' ? asignatura.nombre : '',
       horasSemanales: asignatura.horasSemanales || 1,
 
-      // 🟩 Busca en los catálogos el ID correspondiente por nombre
+      // Busca en los catálogos el ID correspondiente por nombre
       id_curso:
         cursos.find((c) => c.nombre === asignatura.nivel)?.id_curso ?? null,
 
       id_metodo_evaluacion:
-        metodos.find((m) => m.nombre === asignatura.metodoEvaluacion)?.id_metodo_evaluacion ?? null,
+        metodos.find((m) => m.nombre === asignatura.metodoEvaluacion)
+          ?.id_metodo_evaluacion ?? null,
 
       id_tipo_asignatura:
-        tipos.find((t) => t.nombre === asignatura.tipoAsignatura)?.id_tipo_asignatura ?? null,
+        tipos.find((t) => t.nombre === asignatura.tipoAsignatura)
+          ?.id_tipo_asignatura ?? null,
 
       id_sistema_evaluacion:
-        sistemas.find((s) => s.nombre === asignatura.sistemaEvaluacion)?.id_sistema_evaluacion ?? null,
+        sistemas.find((s) => s.nombre === asignatura.sistemaEvaluacion)
+          ?.id_sistema_evaluacion ?? null,
     });
 
     setIsDialogOpen(true);
@@ -247,26 +293,13 @@ export function AsignaturasModule() {
       setIsDialogOpen(false);
     } catch (err: any) {
       console.error(err);
-      const msg = err?.response?.data?.message || 'Error al guardar la asignatura.';
+      const msg =
+        err?.response?.data?.message || 'Error al guardar la asignatura.';
       toast.error(Array.isArray(msg) ? msg.join(', ') : msg);
     } finally {
       setSaving(false);
     }
   };
-
-// const handleDeleteAsignatura = async (asignatura: Asignatura) => {
-//   if (window.confirm(`¿Seguro que deseas eliminar "${asignatura.nombre}"?`)) {
-//     try {
-//       await api.delete(`/asignaturas/${asignatura.id}`);
-//       toast.success('Asignatura eliminada correctamente');
-//       await reloadAsignaturas();
-//     } catch (err: any) {
-//       console.error('Error al eliminar asignatura:', err);
-//       const msg = err?.response?.data?.message || 'No se pudo eliminar la asignatura.';
-//       toast.error(Array.isArray(msg) ? msg.join(', ') : msg);
-//     }
-//   }
-// };
 
   // Estados de carga
   if (loading) {
@@ -280,8 +313,11 @@ export function AsignaturasModule() {
   if (error) {
     return (
       <div className="p-6 text-center space-y-3">
-        <p className="text-red-600 font-medium">⚠️ {error}</p>
-        <Button onClick={reloadAsignaturas} className="bg-blue-600 hover:bg-blue-700">
+        <p className="text-red-600 font-medium"> {error}</p>
+        <Button
+          onClick={reloadAsignaturas}
+          className="bg-blue-600 hover:bg-blue-700"
+        >
           Reintentar
         </Button>
       </div>
@@ -294,10 +330,17 @@ export function AsignaturasModule() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Gestión de Asignaturas</h1>
-          <p className="text-gray-600">Administra las materias del plan de estudios</p>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Gestión de Asignaturas
+          </h1>
+          <p className="text-gray-600">
+            Administra las materias del plan de estudios
+          </p>
         </div>
-        <Button onClick={handleCreateAsignatura} className="bg-blue-600 hover:bg-blue-700">
+        <Button
+          onClick={handleCreateAsignatura}
+          className="bg-blue-600 hover:bg-blue-700"
+        >
           <Plus className="w-4 h-4 mr-2" />
           Nueva Asignatura
         </Button>
@@ -311,7 +354,9 @@ export function AsignaturasModule() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Total Asignaturas</p>
-                <p className="text-2xl font-bold text-blue-600">{asignaturas.length}</p>
+                <p className="text-2xl font-bold text-blue-600">
+                  {asignaturas.length}
+                </p>
               </div>
               <BookOpen className="w-8 h-8 text-blue-600" />
             </div>
@@ -323,7 +368,9 @@ export function AsignaturasModule() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Promedio de Horas/Semana</p>
+                <p className="text-sm text-gray-600">
+                  Promedio de Horas/Semana
+                </p>
                 <p className="text-2xl font-bold text-purple-600">
                   {asignaturas.length > 0
                     ? (
@@ -347,7 +394,10 @@ export function AsignaturasModule() {
               <div>
                 <p className="text-sm text-gray-600">Horas Totales Semanales</p>
                 <p className="text-2xl font-bold text-orange-600">
-                  {asignaturas.reduce((acc, a) => acc + (a.horasSemanales || 0), 0)}
+                  {asignaturas.reduce(
+                    (acc, a) => acc + (a.horasSemanales || 0),
+                    0
+                  )}
                 </p>
               </div>
               <FileText className="w-8 h-8 text-orange-600" />
@@ -362,7 +412,10 @@ export function AsignaturasModule() {
               <div>
                 <p className="text-sm text-gray-600">Sin Curso Asignado</p>
                 <p className="text-2xl font-bold text-red-500">
-                  {asignaturas.filter((a) => a.nivel === 'N/A' || !a.nivel).length}
+                  {
+                    asignaturas.filter((a) => a.nivel === 'N/A' || !a.nivel)
+                      .length
+                  }
                 </p>
               </div>
               <Trash2 className="w-8 h-8 text-red-500" />
@@ -376,90 +429,191 @@ export function AsignaturasModule() {
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
             <BookOpen className="w-5 h-5" />
-            <span>Lista de Asignaturas ({filteredAsignaturas.length})</span>
+            <span>Lista de Asignaturas ({totalItems})</span>
           </CardTitle>
-          {/* Buscador */}
-          <div className="flex items-center justify-between mb-3">
-            <div className="relative w-full md:w-1/3">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <div className="flex flex-col md:flex-row gap-4 mb-3">
+            {/* Buscador */}
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <Input
-                type="text"
                 placeholder="Buscar por nombre de asignatura..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-8 pr-8"
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setPage(1); // Volver a la primera página cuando se busca
+                }}
+                className="pl-10"
               />
-              {searchTerm && (
-                <button
-                  type="button"
-                  onClick={() => setSearchTerm('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  title="Limpiar búsqueda"
-                >
-                  ✕
-                </button>
-              )}
             </div>
-          </div>
 
+            {/* Filtro por Curso */}
+            <Select
+              value={filterNivel}
+              onValueChange={(value) => {
+                setFilterNivel(value);
+                setPage(1); // Volver a la primera página cuando se cambia el filtro
+              }}
+            >
+              <SelectTrigger className="w-full md:w-48">
+                <SelectValue placeholder="Filtrar por curso" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos los Cursos</SelectItem>
+                {cursos.map((curso) => (
+                  <SelectItem key={curso.id_curso} value={curso.nombre}>
+                    {curso.nombre}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Filtro por Método de Evaluación */}
+            <Select
+              value={filterMetodo}
+              onValueChange={(value) => {
+                setFilterMetodo(value);
+                setPage(1); // Volver a la primera página cuando se cambia el filtro
+              }}
+            >
+              <SelectTrigger className="w-full md:w-48">
+                <SelectValue placeholder="Filtrar por método" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos los Métodos</SelectItem>
+                {metodos.map((metodo) => (
+                  <SelectItem
+                    key={metodo.id_metodo_evaluacion}
+                    value={metodo.nombre}
+                  >
+                    {metodo.nombre}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nombre</TableHead>
-                <TableHead>Nivel</TableHead>
-                <TableHead>Método Evaluación</TableHead>
-                <TableHead>Horas/Semana</TableHead>
-                <TableHead>Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredAsignaturas.length > 0 ? (
-                filteredAsignaturas.map((asignatura) => (
-                  <TableRow key={asignatura.id}>
-                    <TableCell>{asignatura.nombre}</TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className="capitalize">
-                        {asignatura.nivel || 'N/A'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{asignatura.metodoEvaluacion || 'N/A'}</Badge>
-                    </TableCell>
-                    <TableCell className="text-center">{asignatura.horasSemanales}</TableCell>
-                    <TableCell>
-                      <div className="flex space-x-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleEditAsignatura(asignatura)}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        {/* 
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDeleteAsignatura(asignatura)}
-                          className="text-red-600 hover:text-red-700 border-red-300"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                        */}
-                      </div>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead style={{ width: '20%' }}>Nombre</TableHead>
+                  <TableHead style={{ width: '15%' }}>Cursos</TableHead>
+                  <TableHead style={{ width: '10%' }}>
+                    Método Evaluación
+                  </TableHead>
+                  <TableHead style={{ width: '10%', textAlign: 'center' }}>
+                    Horas/Semana
+                  </TableHead>
+                  <TableHead style={{ width: '10%', textAlign: 'center' }}>
+                    Acciones
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center p-4">
+                      <Loader2 className="w-6 h-6 animate-spin inline-block" />
                     </TableCell>
                   </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-gray-500 py-6">
-                    📭 No hay asignaturas registradas.
-                  </TableCell>
-                </TableRow>
+                ) : error ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={5}
+                      className="text-center text-red-600 p-4"
+                    >
+                      <AlertCircle className="w-6 h-6 inline-block mr-2" />
+                      {error}
+                    </TableCell>
+                  </TableRow>
+                ) : paginatedAsignaturas.length > 0 ? (
+                  paginatedAsignaturas.map((asignatura) => (
+                    <TableRow key={asignatura.id}>
+                      <TableCell>{asignatura.nombre}</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="capitalize">
+                          {asignatura.nivel || 'N/A'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">
+                          {asignatura.metodoEvaluacion || 'N/A'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell style={{ textAlign: 'center' }}>
+                        {asignatura.horasSemanales}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex justify-center">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleEditAsignatura(asignatura)}
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell
+                      colSpan={5}
+                      className="text-center text-gray-500 py-6"
+                    >
+                      No hay asignaturas registradas.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Paginación */}
+          <div className="flex items-center justify-between space-x-2 py-4">
+            <p className="text-sm text-gray-600">
+              Mostrando{' '}
+              <span className="font-semibold">
+                {paginatedAsignaturas.length}
+              </span>{' '}
+              de <span className="font-semibold">{totalItems}</span> resultados
+              {(searchTerm ||
+                filterNivel !== 'todos' ||
+                filterMetodo !== 'todos') && (
+                <Badge
+                  variant="outline"
+                  className="ml-2 bg-blue-50 text-blue-700"
+                >
+                  Filtrado
+                </Badge>
               )}
-            </TableBody>
-          </Table>
+            </p>
+            <div className="flex items-center space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+                disabled={page === 1}
+              >
+                Anterior
+              </Button>
+              <span className="text-sm text-gray-600">
+                Página {page} de {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setPage((prev) => (prev < totalPages ? prev + 1 : prev))
+                }
+                disabled={page >= totalPages}
+              >
+                Siguiente
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -473,8 +627,8 @@ export function AsignaturasModule() {
                   ? 'Actualizando asignatura...'
                   : 'Editar Asignatura'
                 : saving
-                ? 'Guardando nueva asignatura...'
-                : 'Crear Nueva Asignatura'}
+                  ? 'Guardando nueva asignatura...'
+                  : 'Crear Nueva Asignatura'}
             </DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -483,7 +637,9 @@ export function AsignaturasModule() {
               <Input
                 id="nombre"
                 value={formData.nombre}
-                onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, nombre: e.target.value })
+                }
                 placeholder="Ej: Matemáticas"
                 required
               />
@@ -504,7 +660,10 @@ export function AsignaturasModule() {
                   </SelectTrigger>
                   <SelectContent>
                     {cursos.map((c) => (
-                      <SelectItem key={c.id_curso} value={c.id_curso.toString()}>
+                      <SelectItem
+                        key={c.id_curso}
+                        value={c.id_curso.toString()}
+                      >
                         {c.nombre}
                       </SelectItem>
                     ))}
@@ -518,7 +677,10 @@ export function AsignaturasModule() {
                 <Select
                   value={formData.id_metodo_evaluacion?.toString() || ''}
                   onValueChange={(value) =>
-                    setFormData({ ...formData, id_metodo_evaluacion: parseInt(value) })
+                    setFormData({
+                      ...formData,
+                      id_metodo_evaluacion: parseInt(value),
+                    })
                   }
                 >
                   <SelectTrigger>
@@ -545,7 +707,10 @@ export function AsignaturasModule() {
                 <Select
                   value={formData.id_tipo_asignatura?.toString() || ''}
                   onValueChange={(value) =>
-                    setFormData({ ...formData, id_tipo_asignatura: parseInt(value) })
+                    setFormData({
+                      ...formData,
+                      id_tipo_asignatura: parseInt(value),
+                    })
                   }
                 >
                   <SelectTrigger>
@@ -570,7 +735,10 @@ export function AsignaturasModule() {
                 <Select
                   value={formData.id_sistema_evaluacion?.toString() || ''}
                   onValueChange={(value) =>
-                    setFormData({ ...formData, id_sistema_evaluacion: parseInt(value) })
+                    setFormData({
+                      ...formData,
+                      id_sistema_evaluacion: parseInt(value),
+                    })
                   }
                 >
                   <SelectTrigger>
@@ -600,7 +768,10 @@ export function AsignaturasModule() {
                 max="20"
                 value={formData.horasSemanales}
                 onChange={(e) =>
-                  setFormData({ ...formData, horasSemanales: parseInt(e.target.value) || 1 })
+                  setFormData({
+                    ...formData,
+                    horasSemanales: parseInt(e.target.value) || 1,
+                  })
                 }
               />
             </div>
@@ -624,8 +795,8 @@ export function AsignaturasModule() {
                     ? 'Actualizando...'
                     : 'Guardando...'
                   : editingAsignatura
-                  ? 'Actualizar'
-                  : 'Crear Asignatura'}
+                    ? 'Actualizar'
+                    : 'Crear Asignatura'}
               </Button>
             </DialogFooter>
           </form>
