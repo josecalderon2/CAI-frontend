@@ -312,6 +312,7 @@ export function LoginForm() {
             />
           </div>
           <CardTitle className="text-2xl mb-2">{config.systemName}</CardTitle>
+          <h1 className="text-4xl font-bold text-black-600 mb-1">CAI</h1>
           <p className="text-sm text-muted-foreground">{config.schoolName}</p>
           <p className="text-xs text-muted-foreground mt-1">
             {config.location}
