@@ -61,6 +61,7 @@ interface MetodoEvaluacion {
 interface Curso {
   id_curso: number;
   nombre: string;
+  seccion?: string;
 }
 
 interface TipoAsignatura {
@@ -110,7 +111,12 @@ export function AsignaturasModule() {
               : [];
 
         setMetodos(safeData(resMet.data));
-        setCursos(safeData(resCur.data));
+        // Adaptar cursos para incluir sección si existe
+        const cursosAdaptados = safeData(resCur.data).map((c: any) => ({
+          ...c,
+          seccion: c.seccion || '',
+        }));
+        setCursos(cursosAdaptados);
         setTipos(safeData(resTip.data));
         setSistemas(safeData(resSis.data));
       } catch (err) {
@@ -458,7 +464,14 @@ export function AsignaturasModule() {
                   <SelectItem value="todos">Todos los Cursos</SelectItem>
                   {cursos.map((curso) => (
                     <SelectItem key={curso.id_curso} value={curso.nombre}>
-                      {curso.nombre}
+                      <div>
+                        <span className="font-medium">{curso.nombre}</span>
+                        {curso.seccion && (
+                          <span className="text-xs text-gray-500 ml-1">
+                            Sección: {curso.seccion}
+                          </span>
+                        )}
+                      </div>
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -541,6 +554,14 @@ export function AsignaturasModule() {
                         className="text-blue-700 border-blue-200 bg-blue-50 capitalize"
                       >
                         {asignatura.nivel || 'N/A'}
+                        {(() => {
+                          const curso = cursos.find(
+                            (c) => c.nombre === asignatura.nivel
+                          );
+                          return curso && curso.seccion
+                            ? ` (Sección: ${curso.seccion})`
+                            : '';
+                        })()}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -676,7 +697,14 @@ export function AsignaturasModule() {
                         key={c.id_curso}
                         value={c.id_curso.toString()}
                       >
-                        {c.nombre}
+                        <div>
+                          <span className="font-medium">{c.nombre}</span>
+                          {c.seccion && (
+                            <span className="text-xs text-gray-500 ml-1">
+                              Sección: {c.seccion}
+                            </span>
+                          )}
+                        </div>
                       </SelectItem>
                     ))}
                   </SelectContent>

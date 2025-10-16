@@ -106,6 +106,86 @@ interface AsignacionUI {
 }
 
 export function AsignacionesModule() {
+  // Maneja el submit del formulario de asignación
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Validaciones
+    if (!formData.orientadorId || !formData.cursoId || !formData.asignaturaId) {
+      toast.error('Todos los campos son obligatorios');
+      return;
+    }
+
+    // Verificar que el curso tenga asignaturas asignadas
+    if (getAsignaturasCompatibles(formData.cursoId).length === 0) {
+      toast.error(
+        'Este curso no tiene asignaturas asignadas. Por favor, seleccione otro curso.'
+      );
+      return;
+    }
+
+    // Verificar que no exista duplicado (ignorando el registro actual si estamos en modo edición)
+    const exists = asignaciones.some(
+      (a) =>
+        a.orientadorId === Number(formData.orientadorId) &&
+        a.cursoId === Number(formData.cursoId) &&
+        a.asignaturaId === Number(formData.asignaturaId) &&
+        a.estado === 'ACTIVO' &&
+        (!isEditMode || (isEditMode && a.id !== editingId)) // Ignorar el registro actual en modo edición
+    );
+
+    if (exists) {
+      toast.error(
+        'Ya existe una asignación activa para este orientador, curso y asignatura'
+      );
+      return;
+    }
+
+    // Verificar si hay un orientador principal diferente al actual ya asignado al curso
+    const existeOtroOrientadorPrincipal = asignaciones.some(
+      (a) =>
+        a.cursoId === Number(formData.cursoId) &&
+        a.estado === 'ACTIVO' &&
+        a.esOrientador === true &&
+        a.orientadorId !== Number(formData.orientadorId) &&
+        (!isEditMode || (isEditMode && a.id !== editingId)) // Ignorar registro actual si es edición
+    );
+
+    // Si ya existe otro orientador como principal y estamos intentando asignar a este como principal
+    if (existeOtroOrientadorPrincipal && formData.esOrientador) {
+      // Configurar estado para mostrar el diálogo de confirmación
+      setConfirmDialogContent({
+        title: 'Confirmación requerida',
+        message:
+          'Ya existe un orientador principal para este curso. ¿Está seguro de continuar con esta asignación?',
+        confirmLabel: 'Aceptar',
+        cancelLabel: 'Cancelar',
+        onConfirm: () => {
+          // Al confirmar, mostramos la segunda confirmación
+          setConfirmDialogContent({
+            title: 'Advertencia',
+            message:
+              'Esta acción reemplazará al orientador principal actual del curso. ¿Confirma que desea continuar?',
+            confirmLabel: 'Confirmar',
+            cancelLabel: 'Cancelar',
+            onConfirm: () => {
+              // Si confirma ambos diálogos, procedemos con la operación
+              setConfirmDialogOpen(false);
+              procederConSubmit();
+            },
+            onCancel: () => setConfirmDialogOpen(false),
+          });
+        },
+        onCancel: () => setConfirmDialogOpen(false),
+      });
+
+      setConfirmDialogOpen(true);
+      return;
+    }
+
+    // Si no hay orientador principal o no estamos asignando a este como principal, procedemos directamente
+    procederConSubmit();
+  };
   // Estado para controlar la pestaña activa
   const [activeTab, setActiveTab] = useState('asignaciones');
 
@@ -604,189 +684,6 @@ export function AsignacionesModule() {
   };
   // Función para proceder con la creación/actualización una vez pasadas las confirmaciones
   const procederConSubmit = async () => {
-    try {
-      const loadingToast = toast.loading(
-        isEditMode ? 'Actualizando asignación...' : 'Creando asignación...'
-      );
-
-      // Preparar payload según operación
-      // Preparamos el payload común para ambas operaciones
-      const commonPayload = {
-        id_orientador: Number(formData.orientadorId),
-        id_asignatura: Number(formData.asignaturaId),
-        id_curso: Number(formData.cursoId), // Necesario para validación en el backend
-        cargaHorariaSemanal: Number(formData.cargaHoraria), // Aseguramos que sea número
-        es_orientador: Boolean(formData.esOrientador), // Aseguramos que sea boolean
-      };
-
-      let response;
-
-      if (isEditMode && editingId) {
-        // Lógica de edición existente...
-        // Resto del código de actualización...
-
-        // Paso 1: Obtener la asignación actual antes de actualizarla
-        try {
-          const asignacionActual =
-            await asignacionesService.getAsignacionById(editingId);
-
-          // Paso 2: Registrar el estado actual en el historial antes de actualizarlo
-          await asignacionesService.createHistorial({
-            id_asignatura_orientador: asignacionActual.id_asignatura_orientador,
-            id_curso: asignacionActual.curso.id_curso,
-            id_orientador: asignacionActual.docente.id_orientador,
-            id_asignatura: asignacionActual.asignatura.id_asignatura,
-            es_orientador: asignacionActual.esOrientador,
-            anio_academico: asignacionActual.anio_academico || undefined,
-            fecha_asignacion: asignacionActual.fechaAsignacion,
-            fecha_fin: new Date().toISOString(), // Fecha actual como cierre
-          });
-
-          console.log('Registro histórico creado correctamente');
-        } catch (historialError) {
-          console.error(
-            'Error al crear el registro histórico:',
-            historialError
-          );
-          // Continuamos con la actualización aunque el historial falle
-        }
-
-        // Paso 3: Actualizar la asignación normalmente
-        response = await asignacionesService.updateAsignacion(
-          editingId,
-          commonPayload
-        );
-
-        toast.dismiss(loadingToast);
-        toast.success('Asignación actualizada correctamente');
-      } else {
-        // Para creación necesitamos todos los campos
-        const createDto = {
-          ...commonPayload,
-          anio_academico: new Date().getFullYear().toString(),
-          activo: true,
-        };
-
-        // Loguear para debug
-        console.log('Creando nueva asignación:', createDto);
-
-        // Llamar a la API de creación
-        response = await asignacionesService.createAsignacion(createDto);
-
-        // Log para debug
-        console.log('Respuesta API:', response);
-
-        // Obtener la asignación recién creada con formato UI
-        const newAsignacion: AsignacionUI = {
-          id: response.id_asignatura_orientador,
-          orientadorId: response.docente.id_orientador,
-          cursoId: response.curso.id_curso,
-          asignaturaId: response.asignatura.id_asignatura,
-          fechaAsignacion: response.fechaAsignacion,
-          estado: response.estado,
-          cargaHoraria: response.cargaHorariaSemanal,
-          esOrientador: response.esOrientador || false,
-          orientador: {
-            id: response.docente.id_orientador,
-            nombre: response.docente.nombreCompleto,
-          },
-          curso: {
-            id: response.curso.id_curso,
-            nombre: response.curso.nombre,
-            seccion: response.curso.seccion || '',
-          },
-          asignatura: {
-            id: response.asignatura.id_asignatura,
-            nombre: response.asignatura.nombre,
-            codigo: response.asignatura.orden_en_reporte || '',
-          },
-        };
-
-        setAsignaciones([...asignaciones, newAsignacion]);
-        toast.dismiss(loadingToast);
-        toast.success('Asignación creada correctamente');
-      }
-
-      await fetchData();
-      setIsDialogOpen(false);
-    } catch (error: any) {
-      // Error al procesar la asignación
-      console.error(
-        `Error al ${isEditMode ? 'editar' : 'crear'} asignación:`,
-        error
-      );
-
-      // Manejo de errores existente...
-      if (error.response) {
-        // El servidor respondió con un error
-        console.error('Respuesta de error:', error.response.data);
-
-        // Mostrar mensaje específico según el código de error
-        if (error.response.status === 400) {
-          if (error.response.data?.message) {
-            if (Array.isArray(error.response.data.message)) {
-              toast.error(`Error: ${error.response.data.message[0]}`);
-            } else {
-              toast.error(`Error: ${error.response.data.message}`);
-            }
-          } else {
-            toast.error(
-              'Los datos enviados no son válidos. Revise el formulario.'
-            );
-          }
-        } else {
-          toast.error(
-            `Error del servidor (${error.response.status}). Por favor, intente nuevamente.`
-          );
-        }
-      } else if (error.request) {
-        // No se recibió respuesta
-        toast.error(
-          'No se pudo conectar con el servidor. Verifique su conexión.'
-        );
-      } else {
-        // Error al preparar la petición
-        toast.error(
-          `Error al ${isEditMode ? 'editar' : 'crear'} asignación. Por favor, intente nuevamente.`
-        );
-      }
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    // Validaciones
-    if (!formData.orientadorId || !formData.cursoId || !formData.asignaturaId) {
-      toast.error('Todos los campos son obligatorios');
-      return;
-    }
-
-    // Verificar que el curso tenga asignaturas asignadas
-    if (getAsignaturasCompatibles(formData.cursoId).length === 0) {
-      toast.error(
-        'Este curso no tiene asignaturas asignadas. Por favor, seleccione otro curso.'
-      );
-      return;
-    }
-
-    // Verificar que no exista duplicado (ignorando el registro actual si estamos en modo edición)
-    const exists = asignaciones.some(
-      (a) =>
-        a.orientadorId === Number(formData.orientadorId) &&
-        a.cursoId === Number(formData.cursoId) &&
-        a.asignaturaId === Number(formData.asignaturaId) &&
-        a.estado === 'ACTIVO' &&
-        (!isEditMode || (isEditMode && a.id !== editingId)) // Ignorar el registro actual en modo edición
-    );
-
-    if (exists) {
-      toast.error(
-        'Ya existe una asignación activa para este orientador, curso y asignatura'
-      );
-      return;
-    }
-
     // Verificar si hay un orientador principal diferente al actual ya asignado al curso
     const existeOtroOrientadorPrincipal = asignaciones.some(
       (a) =>
@@ -829,27 +726,27 @@ export function AsignacionesModule() {
       return;
     }
 
-    // Si no hay orientador principal o no estamos asignando a este como principal, procedemos directamente
-    procederConSubmit();
+    // Si no hay orientador principal o no estamos asignando a este como principal, continuar con la lógica (no llamar recursivamente)
 
     // Verificar compatibilidad de nivel
-    const curso = cursos.find((c) => c.id.toString() === formData.cursoId);
+    const cursoSel = cursos.find((c) => c.id.toString() === formData.cursoId);
     const asignatura = asignaturas.find(
       (a) => a.id.toString() === formData.asignaturaId
     );
 
     if (
-      curso &&
+      cursoSel &&
       asignatura &&
-      curso.nivel &&
+      cursoSel.nivel &&
       asignatura.nivel &&
-      curso.nivel !== asignatura.nivel
+      cursoSel.nivel !== asignatura.nivel
     ) {
       toast.error('La asignatura no es compatible con el nivel del curso');
       return;
     }
 
     try {
+      // Mostrar el toast de carga solo después de todas las validaciones
       const loadingToast = toast.loading(
         isEditMode ? 'Actualizando asignación...' : 'Creando asignación...'
       );
@@ -955,6 +852,8 @@ export function AsignacionesModule() {
       await fetchData();
       setIsDialogOpen(false);
     } catch (error: any) {
+      // Siempre cerrar cualquier toast de carga antes de mostrar errores
+      toast.dismiss();
       // Error al procesar la asignación
       console.error(
         `Error al ${isEditMode ? 'editar' : 'crear'} asignación:`,
@@ -966,7 +865,11 @@ export function AsignacionesModule() {
         console.error('Respuesta de error:', error.response.data);
 
         // Mostrar mensaje específico según el código de error
-        if (error.response.status === 400) {
+        if (error.response.status === 409) {
+          toast.error(
+            'Ya existe una asignación activa para este orientador, curso y asignatura. Por favor, revise los datos.'
+          );
+        } else if (error.response.status === 400) {
           if (error.response.data?.message) {
             if (Array.isArray(error.response.data.message)) {
               toast.error(`Error: ${error.response.data.message[0]}`);

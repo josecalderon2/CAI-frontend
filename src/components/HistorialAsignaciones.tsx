@@ -1,5 +1,6 @@
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Button } from './ui/button';
+
 import {
   Table,
   TableBody,
@@ -15,10 +16,93 @@ import {
   SelectTrigger,
   SelectValue,
 } from './ui/select';
-import { Clock, Filter, Database } from 'lucide-react';
 import { Input } from './ui/input';
+import { toast } from 'sonner';
+import { Clock, Filter, Database, Loader2 } from 'lucide-react';
+import historialService, {
+  type HistorialItem,
+} from '../api/services/historialService';
+import { formatDate } from '../utils/formatDate';
 
 export function HistorialAsignaciones() {
+  const [historial, setHistorial] = useState<HistorialItem[]>([]);
+  const [filteredHistorial, setFilteredHistorial] = useState<HistorialItem[]>(
+    []
+  );
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Estados para filtros individuales
+  const [filterOrientador, setFilterOrientador] = useState<string>('todos');
+  const [filterCurso, setFilterCurso] = useState<string>('todos');
+  const [filterEstado, setFilterEstado] = useState<string>('todos');
+
+  useEffect(() => {
+    loadHistorial();
+  }, []);
+
+  // Normaliza texto: quita acentos/espacios extras y pone en minúsculas
+  const norm = (s: string) =>
+    (s ?? '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .trim();
+
+  // Efecto para manejar la búsqueda + filtros SIN debounce
+  useEffect(() => {
+    const q = norm(searchTerm);
+
+    setFilteredHistorial(
+      historial.filter((item) => {
+        // Campos a buscar (normalizados)
+        const orientador = norm(item.orientador.nombreCompleto);
+        const curso = norm(item.curso.nombre);
+        const asignatura = norm(item.asignatura?.nombre || '');
+
+        // Coincidencia por texto (desde la 1ª letra)
+        const matchesSearch =
+          q === '' ||
+          orientador.includes(q) ||
+          curso.includes(q) ||
+          asignatura.includes(q);
+
+        // Filtros adicionales
+        const matchesOrientador =
+          filterOrientador === 'todos' ||
+          item.orientador.id_orientador.toString() === filterOrientador;
+
+        const matchesCurso =
+          filterCurso === 'todos' ||
+          item.curso.id_curso.toString() === filterCurso;
+
+        const matchesEstado =
+          filterEstado === 'todos' ||
+          (filterEstado === 'abierto' ? item.abierto : !item.abierto);
+
+        return (
+          matchesSearch && matchesOrientador && matchesCurso && matchesEstado
+        );
+      })
+    );
+  }, [searchTerm, filterOrientador, filterCurso, filterEstado, historial]);
+
+  const loadHistorial = async () => {
+    try {
+      setIsLoading(true);
+      const response = await historialService.getHistorial();
+      setHistorial(response.data);
+      setFilteredHistorial(response.data);
+      setError(null);
+    } catch (err) {
+      setError('Error al cargar el historial');
+      toast.error('No se pudo cargar el historial de asignaciones');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <>
       <Card className="mb-6 mt-4">
@@ -30,60 +114,73 @@ export function HistorialAsignaciones() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div>
-              <Input placeholder="Buscar en historial..." className="mb-2" />
-            </div>
-            <Select>
+            <Input
+              placeholder="Buscar en historial..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="mb-2"
+            />
+
+            {/* Filtro de Orientadores */}
+            <Select
+              value={filterOrientador}
+              onValueChange={setFilterOrientador}
+            >
               <SelectTrigger>
-                <SelectValue placeholder="Filtrar por orientador" />
+                <SelectValue placeholder="Todos los orientadores" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="todos">Todos los orientadores</SelectItem>
-                <SelectItem value="1">Ejemplo orientador 1</SelectItem>
-                <SelectItem value="2">Ejemplo orientador 2</SelectItem>
+                {Array.from(
+                  new Set(
+                    historial.map((item) => item.orientador.id_orientador)
+                  )
+                ).map((id) => {
+                  const orientador = historial.find(
+                    (item) => item.orientador.id_orientador === id
+                  )?.orientador;
+                  if (!orientador) return null;
+                  return (
+                    <SelectItem key={id} value={id.toString()}>
+                      {orientador.nombreCompleto}
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
-            <Select>
+
+            {/* Filtro de Cursos */}
+            <Select value={filterCurso} onValueChange={setFilterCurso}>
               <SelectTrigger>
-                <SelectValue placeholder="Filtrar por curso" />
+                <SelectValue placeholder="Todos los cursos" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="todos">Todos los cursos</SelectItem>
-                <SelectItem value="101">Curso A (A)</SelectItem>
-                <SelectItem value="102">Curso B (B)</SelectItem>
+                {Array.from(
+                  new Set(historial.map((item) => item.curso.id_curso))
+                ).map((id) => {
+                  const curso = historial.find(
+                    (item) => item.curso.id_curso === id
+                  )?.curso;
+                  if (!curso) return null;
+                  return (
+                    <SelectItem key={id} value={id.toString()}>
+                      {curso.nombre}
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
-            <Select>
+
+            {/* Filtro de Estado */}
+            <Select value={filterEstado} onValueChange={setFilterEstado}>
               <SelectTrigger>
-                <SelectValue placeholder="Filtrar por asignatura" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todas las asignaturas</SelectItem>
-                <SelectItem value="null">
-                  Sin asignatura (Solo orientador)
-                </SelectItem>
-                <SelectItem value="201">Matemáticas</SelectItem>
-                <SelectItem value="202">Lengua</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select>
-              <SelectTrigger>
-                <SelectValue placeholder="Filtrar por año académico" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos los años</SelectItem>
-                <SelectItem value="2024">2024</SelectItem>
-                <SelectItem value="2025">2025</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select>
-              <SelectTrigger>
-                <SelectValue placeholder="Filtrar por vigencia" />
+                <SelectValue placeholder="Todos los estados" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="todos">Todos los estados</SelectItem>
-                <SelectItem value="abierto">Vigente</SelectItem>
-                <SelectItem value="cerrado">Finalizado</SelectItem>
+                <SelectItem value="abierto">Vigentes</SelectItem>
+                <SelectItem value="cerrado">Finalizados</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -95,59 +192,73 @@ export function HistorialAsignaciones() {
           <div className="flex justify-between items-center">
             <CardTitle className="flex items-center space-x-2">
               <Clock className="w-5 h-5" />
-              <span>Historial de Asignaciones (0)</span>
+              <span>
+                Historial de Asignaciones ({filteredHistorial.length})
+              </span>
             </CardTitle>
-            <Button variant="outline" size="sm" disabled>
-              Verificar API
-            </Button>
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Orientador</TableHead>
-                <TableHead>Curso</TableHead>
-                <TableHead>Asignatura</TableHead>
-                <TableHead>Año Académico</TableHead>
-                <TableHead>Rol</TableHead>
-                <TableHead>Fecha Inicio</TableHead>
-                <TableHead>Fecha Término</TableHead>
-                <TableHead>Vigencia</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow>
-                <TableCell colSpan={8} className="h-24 text-center">
-                  <div className="flex flex-col items-center justify-center space-y-2">
-                    <Database className="w-8 h-8 text-gray-300" />
-                    <p className="text-gray-500 font-medium">
-                      No hay datos para mostrar (vista estática)
-                    </p>
-                    <span className="text-xs text-gray-400">
-                      Conecta la API para ver registros reales.
-                    </span>
-                  </div>
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-
-          <div className="flex items-center justify-between space-x-2 py-4">
-            <p className="text-sm text-gray-600">
-              Mostrando <span className="font-semibold">0</span> de{' '}
-              <span className="font-semibold">0</span> registros
-            </p>
-            <div className="flex items-center space-x-2">
-              <Button variant="outline" size="sm" disabled>
-                Anterior
-              </Button>
-              <span className="text-sm text-gray-600">Página 1 de 1</span>
-              <Button variant="outline" size="sm" disabled>
-                Siguiente
-              </Button>
+          {isLoading ? (
+            <div className="flex justify-center items-center h-24">
+              <Loader2 className="h-8 w-8 animate-spin" />
             </div>
-          </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center h-24 text-red-500">
+              <Database className="w-8 h-8 mb-2" />
+              <p>{error}</p>
+            </div>
+          ) : filteredHistorial.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-24 text-gray-500">
+              <Database className="w-8 h-8 mb-2" />
+              <p>No hay registros en el historial</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Orientador</TableHead>
+                  <TableHead>Curso</TableHead>
+                  <TableHead>Asignatura</TableHead>
+                  <TableHead>Año Académico</TableHead>
+                  <TableHead>Rol</TableHead>
+                  <TableHead>Fecha Inicio</TableHead>
+                  <TableHead>Fecha Término</TableHead>
+                  <TableHead>Estado</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredHistorial.map((item) => (
+                  <TableRow key={item.id_historial_curso_orientador}>
+                    <TableCell>{item.orientador.nombreCompleto}</TableCell>
+                    <TableCell>{item.curso.nombre}</TableCell>
+                    <TableCell>{item.asignatura?.nombre || 'N/A'}</TableCell>
+                    <TableCell>{item.anio_academico || 'N/A'}</TableCell>
+                    <TableCell>
+                      {item.es_orientador ? 'Orientador' : 'Docente'}
+                    </TableCell>
+                    <TableCell>
+                      {formatDate(item.fecha_asignacion || '')}
+                    </TableCell>
+                    <TableCell>
+                      {item.fecha_fin ? formatDate(item.fecha_fin) : 'Vigente'}
+                    </TableCell>
+                    <TableCell>
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs ${
+                          item.abierto
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}
+                      >
+                        {item.abierto ? 'Vigente' : 'Finalizado'}
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </>
