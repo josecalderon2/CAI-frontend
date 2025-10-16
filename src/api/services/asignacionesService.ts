@@ -41,6 +41,30 @@ export interface AsignacionesQueryParams {
   soloOrientador?: boolean;
 }
 
+export interface HistorialQueryParams {
+  page?: number;
+  limit?: number;
+  id_orientador?: number;
+  id_asignatura?: number | null;
+  id_curso?: number;
+  anio_academico?: string | null;
+  es_orientador?: boolean;
+  estado?: 'abierto' | 'cerrado';
+  all?: boolean;
+  order?: 'asc' | 'desc';
+}
+
+export interface CreateHistorialDto {
+  id_asignatura_orientador: number;
+  id_curso: number;
+  id_orientador: number;
+  id_asignatura?: number;
+  es_orientador?: boolean;
+  anio_academico?: string;
+  fecha_asignacion?: string;
+  fecha_fin?: string;
+}
+
 // Tipos para la respuesta del backend
 export interface Orientador {
   id_orientador: number;
@@ -82,6 +106,37 @@ export interface AsignacionesResponse {
   total: number;
   count: number;
   data: Asignacion[];
+}
+
+// Interfaces para el historial
+export interface HistorialItem {
+  id_historial_curso_orientador: number;
+  curso: {
+    id_curso: number;
+    nombre: string;
+    seccion: string | null;
+  };
+  asignatura: {
+    id_asignatura: number | null;
+    nombre: string | null;
+  };
+  orientador: {
+    id_orientador: number;
+    nombreCompleto: string;
+  };
+  es_orientador: boolean;
+  anio_academico: string | null;
+  fecha_asignacion: string | null;
+  fecha_fin: string | null;
+  abierto: boolean;
+}
+
+export interface HistorialResponse {
+  page: number;
+  pageSize: number;
+  total: number;
+  count: number;
+  data: HistorialItem[];
 }
 
 // Servicio de asignaciones
@@ -492,6 +547,222 @@ const asignacionesService = {
       throw new Error(
         `No se pudieron obtener las asignaturas para el curso ID ${cursoId}`
       );
+    }
+  },
+  // Obtener historial de asignaciones
+  getHistorial: async (
+    params: HistorialQueryParams = {}
+  ): Promise<HistorialResponse> => {
+    try {
+      console.log('Solicitando historial con params:', params);
+
+      // Creamos un objeto limpio con solo los parámetros admitidos por el backend
+      const cleanParams: any = {};
+
+      // Parámetros de paginación (siempre permitidos)
+      // Convertimos explícitamente a enteros para prevenir errores de validación
+      if (params.page !== undefined) {
+        const pageNum = parseInt(String(params.page), 10);
+        if (!isNaN(pageNum) && pageNum > 0) {
+          cleanParams.page = pageNum;
+        } else {
+          cleanParams.page = 1; // Valor predeterminado válido
+        }
+      } else {
+        cleanParams.page = 1; // Asegurar que siempre enviemos página 1 por defecto
+      }
+
+      if (params.limit !== undefined) {
+        const limitNum = parseInt(String(params.limit), 10);
+        if (!isNaN(limitNum) && limitNum > 0) {
+          cleanParams.limit = limitNum;
+        } else {
+          cleanParams.limit = 10; // Valor predeterminado válido
+        }
+      } else {
+        cleanParams.limit = 10; // Asegurar que siempre enviemos limit 10 por defecto
+      }
+
+      // Filtros específicos, solo pasamos valores válidos y definidos
+      if (
+        params.id_orientador !== undefined &&
+        !isNaN(Number(params.id_orientador))
+      ) {
+        cleanParams.id_orientador = Number(params.id_orientador);
+      }
+
+      if (params.id_curso !== undefined && !isNaN(Number(params.id_curso))) {
+        cleanParams.id_curso = Number(params.id_curso);
+      }
+
+      // Para asignatura, manejo especial para permitir nulos explícitos
+      if (params.id_asignatura === null) {
+        cleanParams.id_asignatura = null;
+      } else if (
+        params.id_asignatura !== undefined &&
+        !isNaN(Number(params.id_asignatura))
+      ) {
+        cleanParams.id_asignatura = Number(params.id_asignatura);
+      }
+
+      // Año académico, validamos que sea un string no vacío
+      if (
+        params.anio_academico &&
+        typeof params.anio_academico === 'string' &&
+        params.anio_academico.trim() !== ''
+      ) {
+        cleanParams.anio_academico = params.anio_academico.trim();
+      }
+
+      // Estado (solo aceptamos valores específicos)
+      if (params.estado === 'abierto' || params.estado === 'cerrado') {
+        cleanParams.estado = params.estado;
+      }
+
+      // Es orientador (solo si es boolean explícito)
+      if (params.es_orientador === true || params.es_orientador === false) {
+        cleanParams.es_orientador = params.es_orientador;
+      }
+
+      // Nunca enviamos el parámetro all=true que podría estar causando problemas
+
+      // Añadir orden si está especificado
+      if (params.order === 'asc' || params.order === 'desc') {
+        cleanParams.order = params.order;
+      }
+
+      console.log('URL de historial:', '/asignaciones/historial');
+      console.log('Parámetros limpios enviados:', cleanParams);
+
+      const response = await api.get<HistorialResponse>(
+        '/asignaciones/historial',
+        {
+          params: cleanParams,
+        }
+      );
+
+      console.log('Respuesta del historial recibida correctamente');
+
+      // Verificamos si la respuesta tiene datos
+      if (
+        !response.data ||
+        (typeof response.data === 'object' &&
+          Object.keys(response.data).length === 0)
+      ) {
+        console.warn('La respuesta del historial está vacía');
+        return {
+          page: 1,
+          pageSize: 10,
+          total: 0,
+          count: 0,
+          data: [],
+        };
+      }
+
+      // Si la respuesta viene directamente como un array en lugar de un objeto paginado
+      if (Array.isArray(response.data)) {
+        console.log('Respuesta es un array, convirtiendo a formato paginado');
+        return {
+          page: 1,
+          pageSize: response.data.length,
+          total: response.data.length,
+          count: response.data.length,
+          data: response.data,
+        };
+      }
+
+      // Verificamos que la respuesta tenga la estructura esperada
+      if (!response.data.data || !Array.isArray(response.data.data)) {
+        console.warn(
+          'La respuesta del historial no tiene el formato esperado:',
+          response.data
+        );
+        return {
+          page: 1,
+          pageSize: 10,
+          total: 0,
+          count: 0,
+          data: [],
+        };
+      }
+
+      console.log('Datos de historial recibidos:', {
+        total: response.data.total,
+        count: response.data.count,
+        page: response.data.page,
+        dataLength: response.data.data.length,
+      });
+
+      return response.data;
+    } catch (error: any) {
+      console.error('Error al obtener historial:', error);
+
+      // Mostrar detalles específicos del error para diagnóstico
+      if (error.response) {
+        console.error(
+          'Detalles del error:',
+          error.response?.data || error.message
+        );
+        console.error('Status del error:', error.response?.status);
+        console.error('Headers:', error.response?.headers);
+
+        // Para errores 400 (Bad Request), mostrar detalles de validación
+        if (error.response.status === 400 && error.response.data) {
+          if (error.response.data.message) {
+            console.error('Mensaje de error:', error.response.data.message);
+
+            // Si hay errores específicos de validación, mostrarlos para diagnóstico
+            if (Array.isArray(error.response.data.message)) {
+              error.response.data.message.forEach(
+                (msg: string, index: number) => {
+                  console.error(`Validación ${index + 1}:`, msg);
+                }
+              );
+            }
+          }
+
+          if (error.response.data.error) {
+            console.error('Error detallado:', error.response.data.error);
+          }
+        }
+      } else {
+        console.error('Error sin respuesta del servidor:', error.message);
+      }
+
+      // Verificamos el tipo de error antes de asumir que no hay datos
+      if (error.response && error.response.status === 404) {
+        // Si el endpoint no existe o no hay datos (404 Not Found)
+        console.log(
+          'El endpoint de historial no existe o no se encontraron datos'
+        );
+        return {
+          page: 1,
+          pageSize: 10,
+          total: 0,
+          count: 0,
+          data: [], // Array vacío para que el componente muestre "No se encontraron registros"
+        };
+      }
+
+      // Para otros tipos de errores, lanzamos el error para que el componente pueda manejarlo
+      // y mostrar mensajes de error apropiados
+      console.error('Error al obtener historial, lanzando excepción');
+      throw error;
+    }
+  },
+
+  // Registrar un nuevo historial de asignación
+  // Este endpoint debe ser llamado antes de actualizar una asignación
+  // para mantener un registro histórico completo
+  createHistorial: async (dto: CreateHistorialDto): Promise<any> => {
+    try {
+      console.log('Creando registro histórico:', dto);
+      const response = await api.post('/asignaciones/create-historial', dto);
+      console.log('Registro histórico creado:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Error al crear registro histórico:', error);
+      throw error;
     }
   },
 };
