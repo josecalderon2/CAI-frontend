@@ -51,6 +51,7 @@ interface Asignatura {
   sistemaEvaluacion: string;
   fechaCreacion: string;
   horasSemanales: number;
+  ordenEnReporte?: string;
 }
 
 interface MetodoEvaluacion {
@@ -146,6 +147,7 @@ export function AsignaturasModule() {
             sistemaEvaluacion: a.sistemaEvaluacion?.nombre ?? 'N/A',
             fechaCreacion: a.createdAt ?? 'N/A',
             horasSemanales: a.horas_semanas ?? 0,
+            ordenEnReporte: a.orden_en_reporte ?? 'N/A',
           }))
         : [];
 
@@ -182,6 +184,7 @@ export function AsignaturasModule() {
   // Form
   const [formData, setFormData] = useState({
     nombre: '',
+    orden_en_reporte: '',
     horasSemanales: 1,
     id_curso: null as number | null,
     id_metodo_evaluacion: null as number | null,
@@ -228,6 +231,7 @@ export function AsignaturasModule() {
     setEditingAsignatura(null);
     setFormData({
       nombre: '',
+      orden_en_reporte: '',
       horasSemanales: 1,
       id_curso: null,
       id_metodo_evaluacion: null,
@@ -243,6 +247,8 @@ export function AsignaturasModule() {
     setFormData({
       nombre: asignatura.nombre !== 'N/A' ? asignatura.nombre : '',
       horasSemanales: asignatura.horasSemanales || 1,
+
+      orden_en_reporte: asignatura.ordenEnReporte ?? '',
 
       // Busca en los catálogos el ID correspondiente por nombre
       id_curso:
@@ -279,6 +285,7 @@ export function AsignaturasModule() {
       const payload = Object.fromEntries(
         Object.entries({
           nombre: formData.nombre,
+          orden_en_reporte: formData.orden_en_reporte,
           horas_semanas: formData.horasSemanales,
           id_curso: formData.id_curso,
           id_metodo_evaluacion: formData.id_metodo_evaluacion,
@@ -520,6 +527,7 @@ export function AsignaturasModule() {
                 <TableHead>Cursos</TableHead>
                 <TableHead>Método Evaluación</TableHead>
                 <TableHead>Horas/Semana</TableHead>
+                <TableHead>Orden en Reporte</TableHead>
                 <TableHead>Acciones</TableHead>
               </TableRow>
             </TableHeader>
@@ -579,6 +587,14 @@ export function AsignaturasModule() {
                           {asignatura.horasSemanales}h/sem
                         </span>
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className="text-gray-700 border-gray-200 bg-gray-50"
+                      >
+                        {asignatura.ordenEnReporte || 'N/A'}
+                      </Badge>
                     </TableCell>
                     <TableCell className="flex items-center gap-2">
                       <Button
@@ -675,6 +691,18 @@ export function AsignaturasModule() {
                 }
                 placeholder="Ej: Matemáticas"
                 required
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="orden_en_reporte">Orden en Reporte</Label>
+              <Input
+                id="orden_en_reporte"
+                value={formData.orden_en_reporte}
+                onChange={(e) =>
+                  setFormData({ ...formData, orden_en_reporte: e.target.value })
+                }
+                placeholder="Ej: 01"
               />
             </div>
 
