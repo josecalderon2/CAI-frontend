@@ -9,6 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from './ui/table';
+import { Badge } from './ui/badge';
 import {
   Select,
   SelectContent,
@@ -221,7 +222,7 @@ export function HistorialAsignaciones() {
                   <TableHead>Curso</TableHead>
                   <TableHead>Asignatura</TableHead>
                   <TableHead>Año Académico</TableHead>
-                  <TableHead>Rol</TableHead>
+                  <TableHead>Cargo</TableHead>
                   <TableHead>Fecha Inicio</TableHead>
                   <TableHead>Fecha Término</TableHead>
                   <TableHead>Estado</TableHead>
@@ -235,7 +236,17 @@ export function HistorialAsignaciones() {
                     <TableCell>{item.asignatura?.nombre || 'N/A'}</TableCell>
                     <TableCell>{item.anio_academico || 'N/A'}</TableCell>
                     <TableCell>
-                      {item.es_orientador ? 'Orientador' : 'Docente'}
+                      <Badge
+                        className={
+                          item.es_orientador
+                            ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                            : 'bg-orange-100 text-orange-800 hover:bg-orange-200'
+                        }
+                      >
+                        {item.es_orientador
+                          ? 'Orientador Principal'
+                          : 'Docente'}
+                      </Badge>
                     </TableCell>
                     <TableCell>
                       {formatDate(item.fecha_asignacion || '')}
@@ -244,15 +255,15 @@ export function HistorialAsignaciones() {
                       {item.fecha_fin ? formatDate(item.fecha_fin) : 'Vigente'}
                     </TableCell>
                     <TableCell>
-                      <span
-                        className={`px-2 py-1 rounded-full text-xs ${
+                      <Badge
+                        className={
                           item.abierto
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-gray-100 text-gray-800'
-                        }`}
+                            ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                            : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                        }
                       >
                         {item.abierto ? 'Vigente' : 'Finalizado'}
-                      </span>
+                      </Badge>
                     </TableCell>
                   </TableRow>
                 ))}
