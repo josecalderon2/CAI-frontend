@@ -118,28 +118,44 @@ function ForgotPasswordDialog({
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  const resetState = () => { setMsg(null); setErr(null); };
+  const resetState = () => {
+    setMsg(null);
+    setErr(null);
+  };
 
   const handleSend = async () => {
     resetState();
     const ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-    if (!ok) { setErr('Ingresa un correo válido'); return; }
+    if (!ok) {
+      setErr('Ingresa un correo válido');
+      return;
+    }
 
     setSending(true);
-        try {
+    try {
       await api.post('/auth/forgot-password', { email: email.trim() });
       // Mensaje genérico: no revelar si el correo existe
-      setMsg('Te enviamos un enlace para restablecer tu contraseña (si el correo existe).');
+      setMsg(
+        'Te enviamos un enlace para restablecer tu contraseña (si el correo existe).'
+      );
     } catch {
       // Mantener genérico también en error (evita enumeración de correos)
-      setMsg('Te enviamos un enlace para restablecer tu contraseña (si el correo existe).');
+      setMsg(
+        'Te enviamos un enlace para restablecer tu contraseña (si el correo existe).'
+      );
     } finally {
       setSending(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) resetState(); }}>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        onOpenChange(v);
+        if (!v) resetState();
+      }}
+    >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Recuperar Contraseña</DialogTitle>
@@ -172,7 +188,11 @@ function ForgotPasswordDialog({
         </div>
 
         <DialogFooter className="sm:justify-between">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
             Cancelar
           </Button>
           <Button
@@ -229,20 +249,21 @@ export function LoginForm() {
           // Guarda sesión (deja tu implementación tal cual)
           setAuth(data);
 
-          // Decide destino por rol
+          // Redireccionar según el rol
           const role = data.user.role;
-          const target =
-            role === 'Admin'
-              ? '/admin'
-              : role === 'P.A'
-              ? '/pa'
-              : '/';
-
-          navigate(target, { replace: true });
+          if (role === 'Admin') {
+            navigate('/admin', { replace: true });
+          } else if (role === 'Orientador') {
+            navigate('/orientador', { replace: true });
+          } else if (role === 'P.A') {
+            navigate('/pa', { replace: true });
+          } else {
+            // Si no tiene un rol específico o es desconocido, ir a la raíz
+            navigate('/', { replace: true });
+          }
         } else {
           throw new Error('Respuesta del servidor inválida');
         }
-
       } catch (err: any) {
         setError(getErrorMessage(err));
       } finally {
@@ -291,6 +312,7 @@ export function LoginForm() {
             />
           </div>
           <CardTitle className="text-2xl mb-2">{config.systemName}</CardTitle>
+          <h1 className="text-4xl font-bold text-black-600 mb-1">CAI</h1>
           <p className="text-sm text-muted-foreground">{config.schoolName}</p>
           <p className="text-xs text-muted-foreground mt-1">
             {config.location}
@@ -319,11 +341,11 @@ export function LoginForm() {
             {/* Recuperar contraseña debajo, centrado y estilo pill */}
             <div className="mt-3 text-center">
               <button
-              type="button"
-              onClick={() => setForgotOpen(true)}
-              className="inline-flex items-center justify-center rounded-xl bg-white px-4 py-2 text-sm text-blue-700 shadow-sm hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                type="button"
+                onClick={() => setForgotOpen(true)}
+                className="inline-flex items-center justify-center rounded-xl bg-white px-4 py-2 text-sm text-blue-700 shadow-sm hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-              ¿Olvidaste tu contraseña?
+                ¿Olvidaste tu contraseña?
               </button>
             </div>
 

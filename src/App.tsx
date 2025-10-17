@@ -18,8 +18,16 @@ import ProtectedRoute from './components/ProtectedRoute/ProtectedRoute';
 import AdminDashboard from './components/AdminDashboard';
 import { UsuariosModule } from './components/UsuariosModule';
 import { AlumnosModule } from './components/AlumnosModule';
+import { OrientadorDashboard } from './components/OrientadorDashboard';
 import ResetPassword from './components/ResetPassword';
 import { AdministrativoDashboard } from './components/AdministrativoDashboard';
+import { GradosAcademicosModule } from './components/GradosAcademicosModule';
+import { CursosModule } from './components/CursosModule';
+import { AsignaturasModule } from './components/AsignaturasModule';
+import { AsignacionesModule } from './components/AsignacionesModule';
+import { PerfilModule }  from './components/PerfilModule';
+import { ConfiguracionModule } from './components/ConfiguracionModule';
+
 
 // ================= Helpers de auth =================
 function getUser() {
@@ -57,15 +65,25 @@ function Dashboard() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (u?.role === 'Admin' && location.pathname === '/') {
-      navigate('/admin', { replace: true });
+    // Solo redirigir si estamos en la ruta raíz
+    if (location.pathname === '/') {
+      // Redirigir según el rol del usuario
+      if (u?.role === 'Admin') {
+        navigate('/admin', { replace: true });
+      } else if (u?.role === 'Orientador' || u?.role === 'orientador') {
+        navigate('/orientador', { replace: true });
+      } else if (u?.role === 'P.A') {
+        navigate('/pa', { replace: true });
+      }
     }
     if (u?.role === 'P.A' && location.pathname === '/') {
       navigate('/pa', { replace: true });
     }
   }, [u, location, navigate]);
 
-  if (u?.role === 'Admin') return null;
+  // No renderizar nada si el usuario va a ser redirigido
+  if (u?.role === 'Admin' || u?.role === 'Orientador' || u?.role === 'P.A')
+    return null;
 
   return (
     <div className="p-6">
@@ -179,17 +197,34 @@ function AdministrativoPage() {
   return <AdministrativoDashboard user={uiUser} onNavigate={onNavigate} />;
 }
 
-function OrientadorDashboard() {
+function OrientadorDashboardWrapper() {
   const u = getUser();
-  return (
-    <div className="p-6">
-      <h2 className="text-xl font-semibold">
-        Bienvenido, {u?.nombre ?? 'Orientador'}
-      </h2>
-      <p className="text-gray-600">Rol: Orientador</p>
-      <p className="mt-4">Este es el dashboard para orientadores.</p>
-    </div>
-  );
+  const navigate = useNavigate();
+
+  // Verificar que el usuario esté autenticado y tenga el rol adecuado
+  if (!u) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // Permitir acceso tanto si tiene rol Orientador (backend) como orientador (UI)
+  if (u.role !== 'Orientador' && u.role !== 'orientador') {
+    console.log(
+      `Usuario con rol ${u.role} intentando acceder al dashboard de orientador`
+    );
+    return <Navigate to="/" replace />;
+  }
+
+  const uiUser = {
+    id: String(u.id),
+    name: u.nombre ?? u.email,
+    email: u.email,
+    role: 'docente' as const, // El componente OrientadorDashboard espera 'admin' o 'docente' como rol
+  };
+
+  const onNavigate = (section: string) =>
+    navigate(section === 'dashboard' ? '/' : `/${section}`);
+
+  return <OrientadorDashboard user={uiUser} onNavigate={onNavigate} />;
 }
 
 // ===================== Rutas =====================
@@ -222,7 +257,7 @@ function AppRoutes() {
           path="/orientador"
           element={
             <ProtectedRoute>
-              <OrientadorDashboard />
+              <OrientadorDashboardWrapper />
             </ProtectedRoute>
           }
         />
@@ -256,6 +291,73 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/grados-academicos"
+          element={
+            <ProtectedRoute>
+              <GradosAcademicosModule />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/cursos"
+          element={
+            <ProtectedRoute>
+              <CursosModule />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/asignaturas"
+          element={
+            <ProtectedRoute>
+              <AsignaturasModule />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/asignaciones"
+          element={
+            <ProtectedRoute>
+              <AsignacionesModule />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+  path="/configuracion"  // Agregar el slash inicial
+  element={
+    <ProtectedRoute>
+      <ConfiguracionModule 
+        user={{
+          id: String(getUser()?.id),
+          name: getUser()?.nombre || getUser()?.email || '',
+          email: getUser()?.email || '',
+          role: getUser()?.role === 'Admin' ? 'admin' : 
+                getUser()?.role === 'P.A' ? 'administrativo' : 'docente'
+        }} 
+      />
+    </ProtectedRoute>
+  }
+/>
+
+<Route
+  path="/perfil"
+  element={
+    <ProtectedRoute>
+      <PerfilModule 
+        user={{
+          id: String(getUser()?.id),
+          name: getUser()?.nombre || getUser()?.email || '',
+          email: getUser()?.email || '',
+          role: getUser()?.role === 'Admin' ? 'admin' : 
+                getUser()?.role === 'P.A' ? 'administrativo' : 'docente'
+        }}
+      />
+    </ProtectedRoute>
+  }
+/>
 
         {/* Catch-all manda a home del rol */}
         <Route

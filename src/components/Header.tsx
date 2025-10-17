@@ -25,6 +25,8 @@ import {
   FileText,
   Calendar,
   Edit,
+  UserCheck,
+  Award,
 } from 'lucide-react';
 
 import logo from '../../public/logoCai.png';
@@ -56,6 +58,7 @@ export function Header({
     { id: 'usuarios', label: 'Usuarios', icon: Users },
     { id: 'alumnos', label: 'Alumnos', icon: GraduationCap },
     { id: 'asignaturas', label: 'Asignaturas', icon: BookOpen },
+    { id: 'grados-academicos', label: 'Grados', icon: Award },
     { id: 'cursos', label: 'Cursos', icon: School },
     { id: 'asignaciones', label: 'Asignaciones', icon: ClipboardList },
     { id: 'reportes', label: 'Reportes', icon: FileText },
@@ -63,6 +66,7 @@ export function Header({
 
   const orientadorMenuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: Home },
+    { id: 'asistencia', label: 'Asistencia', icon: UserCheck },
     { id: 'evaluaciones', label: 'Evaluaciones', icon: Calendar },
     { id: 'notas', label: 'Notas', icon: Edit },
     { id: 'reportes', label: 'Reportes', icon: FileText },
@@ -72,6 +76,7 @@ export function Header({
     { id: 'dashboard', label: 'Dashboard', icon: Home },
     { id: 'alumnos', label: 'Alumnos', icon: GraduationCap },
     { id: 'asignaturas', label: 'Asignaturas', icon: BookOpen },
+    { id: 'grados-academicos', label: 'Grados', icon: Award },
     { id: 'cursos', label: 'Cursos', icon: School },
     { id: 'asignaciones', label: 'Asignaciones', icon: ClipboardList },
     { id: 'reportes', label: 'Reportes', icon: FileText },
@@ -101,6 +106,8 @@ export function Header({
         return 'Perfil';
       case 'configuracion':
         return 'Configuración';
+      case 'asistencia':
+        return 'Asistencia';
       default:
         return 'Dashboard';
     }
@@ -233,6 +240,11 @@ export function Header({
               ) {
                 isActive = true;
               }
+            } else if (
+              item.id === 'asistencia' &&
+              window.location.pathname === '/asistencia'
+            ) {
+              isActive = true;
             } else {
               isActive = currentSection === item.id;
             }
@@ -260,21 +272,44 @@ export function Header({
       {mobileMenuOpen && (
         <div className="lg:hidden bg-white border-b border-gray-200">
           <nav className="px-4 py-2 space-y-1">
-            {menuItems.map((item) => (
-              <Button
-                key={item.id}
-                variant={currentSection === item.id ? 'default' : 'ghost'}
-                size="sm"
-                className={`w-full justify-start ${currentSection === item.id ? 'bg-blue-600 text-white' : ''}`}
-                onClick={() => {
-                  onNavigate(item.id);
-                  setMobileMenuOpen(false);
-                }}
-              >
-                <item.icon className="w-4 h-4 mr-2" />
-                {item.label}
-              </Button>
-            ))}
+            {menuItems.map((item) => {
+              // Determinar si el ítem está activo
+              let isActive = false;
+              if (item.id === 'dashboard') {
+                if (
+                  (user.role === 'admin' &&
+                    window.location.pathname === '/admin') ||
+                  (user.role === 'orientador' &&
+                    window.location.pathname === '/orientador') ||
+                  (user.role === 'P.A' && window.location.pathname === '/pa')
+                ) {
+                  isActive = true;
+                }
+              } else if (
+                item.id === 'asistencia' &&
+                window.location.pathname === '/asistencia'
+              ) {
+                isActive = true;
+              } else {
+                isActive = currentSection === item.id;
+              }
+
+              return (
+                <Button
+                  key={item.id}
+                  variant={isActive ? 'default' : 'ghost'}
+                  size="sm"
+                  className={`w-full justify-start ${isActive ? 'bg-blue-600 text-white' : ''}`}
+                  onClick={() => {
+                    onNavigate(item.id);
+                    setMobileMenuOpen(false);
+                  }}
+                >
+                  <item.icon className="w-4 h-4 mr-2" />
+                  {item.label}
+                </Button>
+              );
+            })}
           </nav>
         </div>
       )}

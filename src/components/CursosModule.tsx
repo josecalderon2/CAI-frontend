@@ -1,0 +1,1128 @@
+import { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
+import { Badge } from './ui/badge';
+import { Textarea } from './ui/textarea';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from './ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from './ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from './ui/select';
+import {
+  School,
+  Plus,
+  Edit,
+  Search,
+  Users,
+  MapPin,
+  ToggleLeft,
+  ToggleRight,
+  GraduationCap,
+  BookOpen,
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { cursosService } from '../api/services/cursosService';
+import type { Curso as CursoType } from '../api/services/cursosService';
+import { gradoAcademicoService } from '../api/services/gradoAcademicoService';
+
+interface Jornada {
+  id_jornada: number;
+  nombre: string;
+}
+
+interface GradoAcademico {
+  id_grado_academico: number;
+  nombre: string;
+  opcion?: string | null;
+  n_anios?: number | null;
+  nota_minima?: number | null;
+  id_jornada?: number | null;
+  rcup?: boolean | null;
+  jornada?: Jornada | null;
+}
+
+interface CursoCupos {
+  id_curso: number;
+  nombre: string;
+  seccion?: string;
+  descripcion?: string;
+  cupoTotal: number;
+  cuposOcupados: number;
+  cuposDisponibles: number;
+  porcentajeOcupacion: number;
+}
+
+interface Curso extends CursoType {
+  // Datos adicionales para la UI (solo para la visualización en la interfaz)
+  alumnosInscritos?: number; // Será reemplazado por alumnosCount cuando esté disponible desde el backend
+  cupoData?: CursoCupos; // Información de cupos del curso
+}
+
+export function CursosModule() {
+  const [cursos, setCursos] = useState<Curso[]>([]);
+  const [gradosAcademicos, setGradosAcademicos] = useState<GradoAcademico[]>(
+    []
+  );
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [filtrosInicializados, setFiltrosInicializados] = useState(false);
+
+  // Estados para la paginación
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const itemsPerPage = 10; // Cantidad de cursos por página
+
+  // Función para obtener el porcentaje de ocupación desde los datos de cupos
+  const getOcupacionInfo = (curso: Curso) => {
+    if (curso.cupoData) {
+      // Usar información directa del endpoint de cupos
+      return {
+        porcentaje: curso.cupoData.porcentajeOcupacion,
+        ocupados: curso.cupoData.cuposOcupados,
+        total: curso.cupoData.cupoTotal,
+        disponibles: curso.cupoData.cuposDisponibles,
+      };
+    } else {
+      // Fallback a cálculo antiguo si no hay datos de cupos
+      const total = curso.cupo || 0;
+      const ocupados = curso.alumnosInscritos || 0;
+      const disponibles = Math.max(0, total - ocupados);
+      const porcentaje =
+        total > 0 ? Math.min(100, Math.round((ocupados / total) * 100)) : 0;
+      return { porcentaje, ocupados, total, disponibles };
+    }
+  };
+  const [stats, setStats] = useState({
+    totalCursos: 0,
+    cursosActivos: 0,
+    capacidadTotal: 0,
+    promedioAlumnosPorCurso: 0,
+  });
+
+  // Función para extraer y actualizar los valores únicos de secciones y aulas desde los cursos
+  const actualizarFiltrosDisponibles = (cursosList: Curso[]) => {
+    console.log(
+      'Actualizando filtros disponibles con',
+      cursosList.length,
+      'cursos'
+    );
+
+    // Extraer aulas únicas y asegurar que son strings válidos
+    const aulasUnicas = Array.from(
+      new Set(
+        cursosList
+          .map((curso) => curso.aula)
+          .filter(
+            (aula) => aula !== null && aula !== undefined && aula.trim() !== ''
+          )
+      )
+    ) as string[];
+
+    // Ordenar las aulas numéricamente cuando sea posible
+    const aulasOrdenadas = aulasUnicas.sort((a, b) => {
+      // Intentar convertir a números para ordenar numéricamente
+      const numA = parseInt(a);
+      const numB = parseInt(b);
+
+      // Si ambos son números válidos, ordenar numéricamente
+      if (!isNaN(numA) && !isNaN(numB)) {
+        return numA - numB;
+      }
+      // Caer en ordenamiento alfabético si no son números
+      return a.localeCompare(b);
+    });
+
+    console.log('Aulas ordenadas:', aulasOrdenadas);
+    setAulasDisponibles(aulasOrdenadas);
+
+    // Extraer secciones únicas
+    const seccionesUnicas = Array.from(
+      new Set(
+        cursosList
+          .map((curso) => curso.seccion)
+          .filter(
+            (seccion) =>
+              seccion !== null && seccion !== undefined && seccion.trim() !== ''
+          )
+      )
+    ).sort();
+    console.log('Secciones únicas encontradas:', seccionesUnicas);
+    setSeccionesDisponibles(seccionesUnicas as string[]);
+
+    // Marcar filtros como inicializados
+    setFiltrosInicializados(true);
+  };
+
+  // Efecto para cargar los datos iniciales
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        // Cargar grados académicos
+        const gradosData = await gradoAcademicoService.list({ limit: 100 });
+        setGradosAcademicos(gradosData.items);
+
+        // Cargar cursos con información de cupos
+        const cursosCuposData = await cursosService.getAllCursosCupos({
+          limit: 100,
+        });
+
+        // Cargar cursos básicos para tener toda la información
+        const cursosData = await cursosService.list({ limit: 100 });
+        console.log('Cursos cargados:', cursosData.items);
+
+        // Combinar la información de ambos endpoints
+        const cursosProcesados = cursosData.items.map((curso) => {
+          // Encontrar la información de cupos para este curso
+          const cupoInfo = cursosCuposData.items.find(
+            (item) => item.id_curso === curso.id_curso
+          );
+
+          return {
+            ...curso,
+            // Usar descripción del backend si existe, de lo contrario generar una
+            descripcion:
+              curso.descripcion ||
+              `Curso de ${curso.gradoAcademico?.nombre || ''} ${curso.seccion || ''}`,
+            // Usar el conteo real de alumnos del backend si está disponible, de lo contrario mostrar 0
+            alumnosInscritos:
+              curso.alumnosCount !== undefined
+                ? curso.alumnosCount
+                : cupoInfo?.cuposOcupados || 0,
+            // Añadir la información de cupos
+            cupoData: cupoInfo,
+          };
+        });
+
+        setCursos(cursosProcesados);
+
+        // Cargar estadísticas
+        const statsData = await cursosService.stats();
+        setStats(statsData);
+
+        // Los filtros se actualizarán automáticamente con el useEffect que observa cursos
+      } catch (err) {
+        console.error('Error cargando datos:', err);
+        setError('Error al cargar los datos. Por favor, intente nuevamente.');
+        toast.error('Error al cargar los datos');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  // Efecto para actualizar los filtros cuando cambian los cursos
+  useEffect(() => {
+    if (cursos.length > 0) {
+      actualizarFiltrosDisponibles(cursos);
+    }
+  }, [cursos]);
+
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterEstado, setFilterEstado] = useState<string>('todos');
+  const [filterGradoAcademico, setFilterGradoAcademico] =
+    useState<string>('todos');
+  const [filterSeccion, setFilterSeccion] = useState<string>('todos');
+  const [filterAula, setFilterAula] = useState<string>('todos');
+  const [aulasDisponibles, setAulasDisponibles] = useState<string[]>([
+    '1',
+    '2',
+    '3',
+  ]);
+  const [seccionesDisponibles, setSeccionesDisponibles] = useState<string[]>([
+    'A',
+    'B',
+    'C',
+  ]);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingCurso, setEditingCurso] = useState<Curso | null>(null);
+
+  // Form data para curso
+  const [formData, setFormData] = useState({
+    nombre: '',
+    seccion: '',
+    id_grado_academico: 0,
+    cupo: 30,
+    aula: '',
+    descripcion: '',
+  });
+
+  // Estado para las opciones de nombre del curso
+  const [nombreOptions, setNombreOptions] = useState<string[]>([]);
+
+  // Función para generar las opciones de nombre según el grado académico
+  const generateNombreOptions = (gradoId: number) => {
+    const gradoSeleccionado = gradosAcademicos.find(
+      (grado) => grado.id_grado_academico === gradoId
+    );
+
+    if (!gradoSeleccionado) {
+      setNombreOptions([]);
+      return;
+    }
+
+    // Obtener el nombre del grado para determinar el nivel
+    const nombreGrado = gradoSeleccionado.nombre.toLowerCase();
+    let options: string[] = [];
+
+    if (
+      nombreGrado.includes('primera infancia') ||
+      nombreGrado.includes('kinder')
+    ) {
+      options = ['Kinder 4', 'Kinder 5', 'Kinder 6'];
+    } else if (nombreGrado.includes('primaria')) {
+      options = [
+        'Primer Grado',
+        'Segundo Grado',
+        'Tercer Grado',
+        'Cuarto Grado',
+        'Quinto Grado',
+        'Sexto Grado',
+      ];
+    } else if (
+      nombreGrado.includes('secundaria') ||
+      nombreGrado.includes('bachillerato')
+    ) {
+      options = [
+        'Séptimo Grado',
+        'Octavo Grado',
+        'Noveno Grado',
+        'Primer Año de Bachillerato',
+        'Segundo Año de Bachillerato',
+      ];
+    } else {
+      // Para cualquier otro tipo de grado académico
+      options = [`Curso de ${gradoSeleccionado.nombre}`];
+    }
+
+    setNombreOptions(options);
+  };
+
+  // Filtrar cursos
+  const filteredCursos = cursos.filter((curso) => {
+    const matchesSearch =
+      curso.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      curso.aula?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      curso.gradoAcademico?.nombre
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase());
+
+    // En el backend, el grado académico solo tiene id y nombre en la relación
+
+    const matchesEstado =
+      filterEstado === 'todos' ||
+      (filterEstado === 'activo' ? curso.activo : !curso.activo);
+
+    const matchesGradoAcademico =
+      filterGradoAcademico === 'todos' ||
+      curso.id_grado_academico?.toString() === filterGradoAcademico;
+
+    const matchesSeccion =
+      filterSeccion === 'todos' || curso.seccion === filterSeccion;
+
+    const matchesAula = filterAula === 'todos' || curso.aula === filterAula;
+
+    return (
+      matchesSearch &&
+      matchesEstado &&
+      matchesGradoAcademico &&
+      matchesSeccion &&
+      matchesAula
+    );
+  });
+
+  // Actualizar estados para la paginación
+  useEffect(() => {
+    setTotalItems(filteredCursos.length);
+    setTotalPages(Math.max(1, Math.ceil(filteredCursos.length / itemsPerPage)));
+  }, [filteredCursos.length, itemsPerPage]);
+
+  // Cuando cambian los filtros, volvemos a la primera página
+  useEffect(() => {
+    setPage(1);
+  }, [
+    searchTerm,
+    filterEstado,
+    filterGradoAcademico,
+    filterSeccion,
+    filterAula,
+  ]);
+
+  // Efecto para inicializar los filtros si no se han cargado datos
+  useEffect(() => {
+    if (!loading && !filtrosInicializados) {
+      console.log('Inicializando filtros con valores predeterminados...');
+      setSeccionesDisponibles(['A', 'B', 'C']);
+      setAulasDisponibles(['1', '2', '3']);
+      setFiltrosInicializados(true);
+    }
+  }, [loading, filtrosInicializados]);
+
+  // Aplicar paginación
+  const paginatedCursos = filteredCursos.slice(
+    (page - 1) * itemsPerPage,
+    page * itemsPerPage
+  );
+
+  const handleCreateCurso = () => {
+    setEditingCurso(null);
+    setFormData({
+      nombre: '',
+      seccion: '',
+      id_grado_academico: 0,
+      cupo: 30,
+      aula: '',
+      descripcion: '',
+    });
+    setNombreOptions([]);
+    setIsDialogOpen(true);
+  };
+
+  const handleEditCurso = (curso: Curso) => {
+    setEditingCurso(curso);
+
+    const gradoId = curso.id_grado_academico || 0;
+
+    setFormData({
+      nombre: curso.nombre || '',
+      seccion: curso.seccion || '',
+      id_grado_academico: gradoId,
+      cupo: curso.cupo || 30,
+      aula: curso.aula || '',
+      descripcion: curso.descripcion || '',
+    });
+
+    // Generar opciones de nombre para este grado
+    if (gradoId > 0) {
+      generateNombreOptions(gradoId);
+    }
+
+    setIsDialogOpen(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Validaciones
+    if (
+      !formData.nombre ||
+      !formData.seccion ||
+      !formData.id_grado_academico ||
+      !formData.aula
+    ) {
+      toast.error(
+        'Los campos nombre, sección, grado académico y aula son obligatorios'
+      );
+      return;
+    }
+
+    // Validar que el nombre seleccionado está entre las opciones válidas
+    if (!nombreOptions.includes(formData.nombre)) {
+      toast.error('Debes seleccionar un nombre válido del menú desplegable');
+      return;
+    }
+
+    // Encontrar el grado académico seleccionado
+    const gradoAcademico = gradosAcademicos.find(
+      (g) => g.id_grado_academico === formData.id_grado_academico
+    );
+
+    if (!gradoAcademico) {
+      toast.error('El grado académico seleccionado no es válido');
+      return;
+    }
+
+    // Usar el nombre directamente del formulario
+    const nombreCurso = formData.nombre;
+
+    // Verificar si ya existe un curso con el mismo nombre y la misma sección
+    const cursoExists = cursos.some(
+      (c) =>
+        c.nombre === formData.nombre &&
+        c.seccion === formData.seccion &&
+        c.id_curso !== editingCurso?.id_curso
+    );
+
+    if (cursoExists) {
+      toast.error(
+        `Ya existe un curso llamado "${formData.nombre}" con sección "${formData.seccion}"`
+      );
+      return;
+    }
+
+    try {
+      if (editingCurso) {
+        // Editar curso existente mediante API
+        const updatedCurso = await cursosService.update(
+          editingCurso.id_curso as number,
+          {
+            nombre: nombreCurso,
+            seccion: formData.seccion,
+            id_grado_academico: formData.id_grado_academico,
+            cupo: formData.cupo,
+            aula: formData.aula,
+            descripcion: formData.descripcion,
+          }
+        );
+
+        // Actualizar estado local
+        setCursos(
+          cursos.map((c) =>
+            c.id_curso === editingCurso.id_curso
+              ? {
+                  ...updatedCurso,
+                  descripcion: formData.descripcion,
+                  alumnosInscritos: c.alumnosInscritos,
+                }
+              : c
+          )
+        );
+        toast.success('Curso actualizado correctamente');
+      } else {
+        // Crear nuevo curso mediante API
+        const newCursoData = {
+          nombre: nombreCurso,
+          seccion: formData.seccion,
+          id_grado_academico: formData.id_grado_academico,
+          cupo: formData.cupo,
+          aula: formData.aula,
+          descripcion: formData.descripcion,
+          activo: true,
+        };
+
+        const createdCurso = await cursosService.create(newCursoData);
+
+        // Añadir al estado local con datos adicionales para la UI
+        const newCurso: Curso = {
+          ...createdCurso,
+          descripcion: formData.descripcion,
+          // Un curso nuevo siempre empezará con 0 alumnos
+          alumnosInscritos:
+            createdCurso.alumnosCount !== undefined
+              ? createdCurso.alumnosCount
+              : 0,
+        };
+
+        setCursos([...cursos, newCurso]);
+        toast.success('Curso creado correctamente');
+      }
+
+      // Actualizar estadísticas después de cambios
+      const statsData = await cursosService.stats();
+      setStats(statsData);
+
+      setIsDialogOpen(false);
+    } catch (err) {
+      console.error('Error guardando curso:', err);
+      toast.error('Error al guardar el curso');
+    }
+  };
+  const handleToggleStatus = async (curso: Curso) => {
+    try {
+      if (!curso.id_curso) {
+        throw new Error('ID de curso inválido');
+      }
+
+      const newStatus = !curso.activo;
+
+      if (newStatus) {
+        // Activar curso
+        await cursosService.restore(curso.id_curso);
+      } else {
+        // Desactivar curso
+        await cursosService.remove(curso.id_curso);
+      }
+
+      // Actualizar estado local
+      setCursos(
+        cursos.map((c) =>
+          c.id_curso === curso.id_curso ? { ...c, activo: newStatus } : c
+        )
+      );
+
+      // Actualizar estadísticas
+      const statsData = await cursosService.stats();
+      setStats(statsData);
+
+      toast.success(
+        `Curso ${newStatus ? 'activado' : 'desactivado'} correctamente`
+      );
+    } catch (err) {
+      console.error('Error cambiando estado del curso:', err);
+      toast.error('Error al cambiar el estado del curso');
+    }
+  };
+
+  return (
+    <div className="p-6 space-y-6">
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Gestión de Cursos
+          </h1>
+          <p className="text-gray-600">
+            Administra los cursos y secciones del colegio
+          </p>
+        </div>
+        <Button
+          onClick={handleCreateCurso}
+          className="bg-blue-600 hover:bg-blue-700"
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          Nuevo Curso
+        </Button>
+      </div>
+
+      {/* Estadísticas */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="border-l-4 border-l-blue-600">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Total Cursos</p>
+                <p className="text-2xl font-bold text-blue-600">
+                  {cursos.length}
+                </p>
+              </div>
+              <School className="w-8 h-8 text-blue-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-green-600">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Cursos Activos</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {cursos.filter((c) => c.activo).length}
+                </p>
+              </div>
+              <BookOpen className="w-8 h-8 text-green-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-purple-600">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Capacidad Total</p>
+                <p className="text-2xl font-bold text-purple-600">
+                  {cursos
+                    .filter((c) => c.activo)
+                    .reduce((sum, c) => sum + (c.cupo || 0), 0)}
+                </p>
+              </div>
+              <Users className="w-8 h-8 text-purple-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-orange-600">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Alumnos Inscritos</p>
+                <p className="text-2xl font-bold text-orange-600">
+                  {cursos
+                    .filter((c) => c.activo)
+                    .reduce((sum, c) => sum + (c.alumnosInscritos || 0), 0)}
+                </p>
+              </div>
+              <GraduationCap className="w-8 h-8 text-orange-600" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Filtros y búsqueda */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="flex-1">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <Input
+                    placeholder="Buscar por nombre, grado o aula..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+
+              <Select value={filterEstado} onValueChange={setFilterEstado}>
+                <SelectTrigger className="w-full md:w-48">
+                  <SelectValue placeholder="Filtrar por estado" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos los estados</SelectItem>
+                  <SelectItem value="activo">Activo</SelectItem>
+                  <SelectItem value="inactivo">Inactivo</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Filtros adicionales */}
+            <div className="flex flex-col md:flex-row gap-4">
+              <Select
+                value={filterGradoAcademico}
+                onValueChange={setFilterGradoAcademico}
+              >
+                <SelectTrigger className="w-full md:w-[200px]">
+                  <SelectValue placeholder="Filtrar por grado" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos los grados</SelectItem>
+                  {gradosAcademicos.map((grado) => (
+                    <SelectItem
+                      key={grado.id_grado_academico}
+                      value={grado.id_grado_academico.toString()}
+                    >
+                      {grado.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={filterSeccion}
+                disabled={!filtrosInicializados}
+                onValueChange={(value) => {
+                  console.log('Sección seleccionada:', value);
+                  setFilterSeccion(value);
+                }}
+              >
+                <SelectTrigger className="w-full md:w-[200px]">
+                  <SelectValue placeholder="Filtrar por sección" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todas las secciones</SelectItem>
+                  {!filtrosInicializados ? (
+                    <SelectItem value="cargando" disabled>
+                      Cargando secciones...
+                    </SelectItem>
+                  ) : seccionesDisponibles.length === 0 ? (
+                    <SelectItem value="no-hay" disabled>
+                      No hay secciones disponibles
+                    </SelectItem>
+                  ) : (
+                    seccionesDisponibles.map((seccion) => (
+                      <SelectItem key={seccion} value={seccion}>
+                        Sección {seccion}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={filterAula}
+                disabled={!filtrosInicializados}
+                onValueChange={(value) => {
+                  console.log('Aula seleccionada:', value);
+                  setFilterAula(value);
+                }}
+              >
+                <SelectTrigger className="w-full md:w-[200px]">
+                  <SelectValue placeholder="Filtrar por aula" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todas las aulas</SelectItem>
+                  {!filtrosInicializados ? (
+                    <SelectItem value="cargando" disabled>
+                      Cargando aulas...
+                    </SelectItem>
+                  ) : aulasDisponibles.length === 0 ? (
+                    <SelectItem value="no-hay" disabled>
+                      No hay aulas disponibles
+                    </SelectItem>
+                  ) : (
+                    aulasDisponibles.map((aula) => (
+                      <SelectItem key={aula} value={aula}>
+                        Aula {aula}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Tabla de cursos */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center space-x-2">
+            <School className="w-5 h-5" />
+            <span>Lista de Cursos ({filteredCursos.length})</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nombre</TableHead>
+                <TableHead>Sección</TableHead>
+                <TableHead>Grado Académico</TableHead>
+                <TableHead>Aula</TableHead>
+                <TableHead>Descripción</TableHead>
+                <TableHead className="w-[150px]">Ocupación / Cupo</TableHead>
+                <TableHead>Estado</TableHead>
+                <TableHead>Acciones</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {paginatedCursos.map((curso) => {
+                return (
+                  <TableRow key={curso.id_curso}>
+                    <TableCell>
+                      <div>
+                        <p className="font-medium">{curso.nombre}</p>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div>
+                        <p className="font-medium">{curso.seccion}</p>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div>
+                        <p className="font-medium">
+                          {curso.gradoAcademico?.nombre}
+                        </p>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center space-x-2">
+                        <MapPin className="w-4 h-4 text-gray-400" />
+                        <span className="text-sm">{curso.aula}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div>
+                        <p className="text-sm text-gray-600 truncate max-w-xs">
+                          {curso.descripcion || '-'}
+                        </p>
+                      </div>
+                    </TableCell>
+                    <TableCell className="w-[150px]">
+                      <div className="space-y-1">
+                        {(() => {
+                          const ocupacion = getOcupacionInfo(curso);
+                          return (
+                            <>
+                              <div className="flex justify-between text-xs">
+                                <span>
+                                  {ocupacion.ocupados} / {ocupacion.total}
+                                </span>
+                                <span className="font-medium">
+                                  {ocupacion.porcentaje.toFixed(1)}%
+                                </span>
+                              </div>
+                              <div className="w-full bg-gray-200 rounded-full h-2">
+                                <div
+                                  className={`h-2 rounded-full ${
+                                    ocupacion.porcentaje > 90
+                                      ? 'bg-red-500'
+                                      : ocupacion.porcentaje > 70
+                                        ? 'bg-amber-500'
+                                        : 'bg-emerald-500'
+                                  }`}
+                                  style={{
+                                    width: `${ocupacion.porcentaje}%`,
+                                    backgroundColor:
+                                      ocupacion.porcentaje > 90
+                                        ? '#dc2626'
+                                        : ocupacion.porcentaje > 70
+                                          ? '#f59e0b'
+                                          : '#10b981',
+                                  }}
+                                ></div>
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                {ocupacion.disponibles} cupos disponibles
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={curso.activo ? 'default' : 'destructive'}>
+                        {curso.activo ? 'Activo' : 'Inactivo'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex space-x-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleEditCurso(curso)}
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleToggleStatus(curso)}
+                          className={
+                            curso.activo
+                              ? 'text-orange-600 hover:text-orange-700'
+                              : 'text-green-600 hover:text-green-700'
+                          }
+                          title={
+                            curso.activo ? 'Desactivar curso' : 'Activar curso'
+                          }
+                        >
+                          {curso.activo ? (
+                            <ToggleLeft className="w-4 h-4" />
+                          ) : (
+                            <ToggleRight className="w-4 h-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+          <div className="flex items-center justify-between space-x-2 py-4">
+            <p className="text-sm text-gray-600">
+              Mostrando {(page - 1) * itemsPerPage + 1} -{' '}
+              {Math.min(page * itemsPerPage, totalItems)} de {totalItems}{' '}
+              resultados
+              {(searchTerm.trim() !== '' ||
+                filterEstado !== 'todos' ||
+                filterGradoAcademico !== 'todos' ||
+                filterSeccion !== 'todos' ||
+                filterAula !== 'todos') && (
+                <Badge
+                  variant="outline"
+                  className="ml-2 bg-blue-50 text-blue-700"
+                >
+                  Filtrado
+                </Badge>
+              )}
+            </p>
+            <div className="flex items-center space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+                disabled={page === 1}
+              >
+                Anterior
+              </Button>
+              <span className="text-sm text-gray-600">
+                Página {page} de {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setPage((prev) => (prev < totalPages ? prev + 1 : prev))
+                }
+                disabled={page >= totalPages}
+              >
+                Siguiente
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Dialog para crear/editar curso */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              {editingCurso ? 'Editar Curso' : 'Crear Nuevo Curso'}
+            </DialogTitle>
+            <DialogDescription>
+              {editingCurso
+                ? 'Modifica la información del curso'
+                : 'Completa los datos del nuevo curso'}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <Label htmlFor="nombre">Nombre del Curso *</Label>
+              <Select
+                value={formData.nombre}
+                onValueChange={(value) =>
+                  setFormData({
+                    ...formData,
+                    nombre: value,
+                  })
+                }
+                disabled={
+                  formData.id_grado_academico === 0 ||
+                  nombreOptions.length === 0
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue
+                    placeholder={
+                      formData.id_grado_academico === 0
+                        ? 'Primero selecciona un grado académico'
+                        : 'Selecciona el nombre del curso'
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {nombreOptions.map((nombre, index) => (
+                    <SelectItem key={index} value={nombre}>
+                      {nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {formData.id_grado_academico === 0 && (
+                <p className="text-xs text-amber-600 mt-1">
+                  Primero debes seleccionar un grado académico
+                </p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="grado_academico">Grado Académico *</Label>
+                <Select
+                  value={formData.id_grado_academico.toString()}
+                  onValueChange={(value) => {
+                    const gradoId = parseInt(value);
+                    setFormData({
+                      ...formData,
+                      id_grado_academico: gradoId,
+                      nombre: '', // Reseteamos el nombre al cambiar de grado
+                    });
+                    // Generamos las nuevas opciones de nombre según el grado seleccionado
+                    generateNombreOptions(gradoId);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona un grado" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {gradosAcademicos.map((grado: GradoAcademico) => (
+                      <SelectItem
+                        key={grado.id_grado_academico}
+                        value={grado.id_grado_academico.toString()}
+                      >
+                        {grado.nombre} {grado.opcion ? `- ${grado.opcion}` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="seccion">Sección *</Label>
+                <Input
+                  id="seccion"
+                  value={formData.seccion}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      seccion: e.target.value.toUpperCase(),
+                    })
+                  }
+                  placeholder="Ej: A, B, C"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="aula">Aula *</Label>
+                <Input
+                  id="aula"
+                  value={formData.aula}
+                  onChange={(e) =>
+                    setFormData({ ...formData, aula: e.target.value })
+                  }
+                  placeholder="Ej: Aula 201"
+                  required
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="cupo">Cupo Máximo *</Label>
+                <Input
+                  id="cupo"
+                  type="number"
+                  min="10"
+                  max="50"
+                  value={formData.cupo}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      cupo: parseInt(e.target.value) || 30,
+                    })
+                  }
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="descripcion">Descripción</Label>
+              <Textarea
+                id="descripcion"
+                value={formData.descripcion}
+                onChange={(e) =>
+                  setFormData({ ...formData, descripcion: e.target.value })
+                }
+                placeholder="Descripción del curso..."
+                rows={3}
+              />
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsDialogOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
+                {editingCurso ? 'Actualizar' : 'Crear'} Curso
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
