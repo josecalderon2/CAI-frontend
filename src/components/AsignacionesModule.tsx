@@ -108,122 +108,132 @@ interface AsignacionUI {
 export function AsignacionesModule() {
   // Maneja el submit del formulario de asignación
   const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
+    e.preventDefault();
 
-  // Esta función interna solo contiene la lógica para guardar los datos.
-  // No tiene las validaciones, por lo que no puede crear un bucle.
-  const realizarGuardado = async () => {
-    try {
-      const loadingToast = toast.loading(
-        isEditMode ? 'Actualizando asignación...' : 'Creando asignación...'
-      );
-
-      // Si se establece un nuevo orientador principal, se actualiza el anterior.
-      if (formData.esOrientador) {
-        const orientadorAnterior = asignaciones.find(
-          (a) =>
-            a.cursoId === Number(formData.cursoId) &&
-            a.esOrientador === true &&
-            a.estado === 'ACTIVO' &&
-            a.id !== editingId // No degradar al que se está editando
+    // Esta función interna solo contiene la lógica para guardar los datos.
+    // No tiene las validaciones, por lo que no puede crear un bucle.
+    const realizarGuardado = async () => {
+      try {
+        const loadingToast = toast.loading(
+          isEditMode ? 'Actualizando asignación...' : 'Creando asignación...'
         );
-        if (orientadorAnterior) {
-          // Usamos tu servicio para actualizar al orientador anterior.
-          await asignacionesService.updateAsignacion(orientadorAnterior.id, {
-            es_orientador: false,
-          });
+
+        // Si se establece un nuevo orientador principal, se actualiza el anterior.
+        if (formData.esOrientador) {
+          const orientadorAnterior = asignaciones.find(
+            (a) =>
+              a.cursoId === Number(formData.cursoId) &&
+              a.esOrientador === true &&
+              a.estado === 'ACTIVO' &&
+              a.id !== editingId // No degradar al que se está editando
+          );
+          if (orientadorAnterior) {
+            // Usamos tu servicio para actualizar al orientador anterior.
+            await asignacionesService.updateAsignacion(orientadorAnterior.id, {
+              es_orientador: false,
+            });
+          }
         }
+
+        // Prepara los datos para enviar a la API
+        const commonPayload = {
+          id_orientador: Number(formData.orientadorId),
+          id_asignatura: Number(formData.asignaturaId),
+          id_curso: Number(formData.cursoId),
+          cargaHorariaSemanal: Number(formData.cargaHoraria),
+          es_orientador: Boolean(formData.esOrientador),
+        };
+
+        if (isEditMode && editingId) {
+          await asignacionesService.updateAsignacion(editingId, commonPayload);
+          toast.success('Asignación actualizada correctamente');
+        } else {
+          const createDto = {
+            ...commonPayload,
+            anio_academico: new Date().getFullYear().toString(),
+            activo: true,
+          };
+          await asignacionesService.createAsignacion(createDto);
+          toast.success('Asignación creada correctamente');
+        }
+
+        toast.dismiss(loadingToast);
+        await fetchData(); // Recarga los datos de la tabla
+        setIsDialogOpen(false); // Cierra el formulario
+      } catch (error: any) {
+        toast.dismiss();
+        const errorMessage =
+          error.response?.data?.message || 'Error al guardar la asignación.';
+        toast.error(
+          Array.isArray(errorMessage) ? errorMessage[0] : errorMessage
+        );
       }
+    };
 
-      // Prepara los datos para enviar a la API
-      const commonPayload = {
-        id_orientador: Number(formData.orientadorId),
-        id_asignatura: Number(formData.asignaturaId),
-        id_curso: Number(formData.cursoId),
-        cargaHorariaSemanal: Number(formData.cargaHoraria),
-        es_orientador: Boolean(formData.esOrientador),
-      };
-
-      if (isEditMode && editingId) {
-        await asignacionesService.updateAsignacion(editingId, commonPayload);
-        toast.success('Asignación actualizada correctamente');
-      } else {
-        const createDto = { ...commonPayload, anio_academico: new Date().getFullYear().toString(), activo: true };
-        await asignacionesService.createAsignacion(createDto);
-        toast.success('Asignación creada correctamente');
-      }
-
-      toast.dismiss(loadingToast);
-      await fetchData(); // Recarga los datos de la tabla
-      setIsDialogOpen(false); // Cierra el formulario
-
-    } catch (error: any) {
-      toast.dismiss();
-      const errorMessage = error.response?.data?.message || 'Error al guardar la asignación.';
-      toast.error(Array.isArray(errorMessage) ? errorMessage[0] : errorMessage);
+    // --- VALIDACIONES (Tu lógica original sin cambios) ---
+    if (!formData.orientadorId || !formData.cursoId || !formData.asignaturaId) {
+      toast.error('Todos los campos son obligatorios');
+      return;
     }
+    if (getAsignaturasCompatibles(formData.cursoId).length === 0) {
+      toast.error('Este curso no tiene asignaturas asignadas.');
+      return;
+    }
+    const exists = asignaciones.some(
+      (a) =>
+        a.orientadorId === Number(formData.orientadorId) &&
+        a.cursoId === Number(formData.cursoId) &&
+        a.asignaturaId === Number(formData.asignaturaId) &&
+        a.estado === 'ACTIVO' &&
+        (!isEditMode || (isEditMode && a.id !== editingId))
+    );
+    if (exists) {
+      toast.error(
+        'Ya existe una asignación activa para este orientador, curso y asignatura'
+      );
+      return;
+    }
+    const existeOtroOrientadorPrincipal = asignaciones.some(
+      (a) =>
+        a.cursoId === Number(formData.cursoId) &&
+        a.estado === 'ACTIVO' &&
+        a.esOrientador === true &&
+        a.orientadorId !== Number(formData.orientadorId) &&
+        (!isEditMode || (isEditMode && a.id !== editingId))
+    );
+
+    // --- FLUJO DE CONFIRMACIÓN (Tu lógica original, pero llamando a `realizarGuardado`) ---
+    if (existeOtroOrientadorPrincipal && formData.esOrientador) {
+      setConfirmDialogContent({
+        title: 'Confirmación requerida',
+        message:
+          'Ya existe un orientador principal para este curso. ¿Está seguro de continuar con esta asignación?',
+        confirmLabel: 'Aceptar',
+        cancelLabel: 'Cancelar',
+        onConfirm: () => {
+          setConfirmDialogContent({
+            title: 'Advertencia',
+            message:
+              'Esta acción reemplazará al orientador principal actual. ¿Confirma que desea continuar?',
+            confirmLabel: 'Confirmar',
+            cancelLabel: 'Cancelar',
+            onConfirm: () => {
+              setConfirmDialogOpen(false);
+              // ✅ CAMBIO CLAVE: Llama a la función que solo guarda, rompiendo el bucle.
+              realizarGuardado();
+            },
+            onCancel: () => setConfirmDialogOpen(false),
+          });
+        },
+        onCancel: () => setConfirmDialogOpen(false),
+      });
+      setConfirmDialogOpen(true);
+      return;
+    }
+
+    // Si no se necesita confirmación, se llama a la función de guardado directamente.
+    await realizarGuardado();
   };
-
-  // --- VALIDACIONES (Tu lógica original sin cambios) ---
-  if (!formData.orientadorId || !formData.cursoId || !formData.asignaturaId) {
-    toast.error('Todos los campos son obligatorios');
-    return;
-  }
-  if (getAsignaturasCompatibles(formData.cursoId).length === 0) {
-    toast.error('Este curso no tiene asignaturas asignadas.');
-    return;
-  }
-  const exists = asignaciones.some(
-    (a) =>
-      a.orientadorId === Number(formData.orientadorId) &&
-      a.cursoId === Number(formData.cursoId) &&
-      a.asignaturaId === Number(formData.asignaturaId) &&
-      a.estado === 'ACTIVO' &&
-      (!isEditMode || (isEditMode && a.id !== editingId))
-  );
-  if (exists) {
-    toast.error('Ya existe una asignación activa para este orientador, curso y asignatura');
-    return;
-  }
-  const existeOtroOrientadorPrincipal = asignaciones.some(
-    (a) =>
-      a.cursoId === Number(formData.cursoId) &&
-      a.estado === 'ACTIVO' &&
-      a.esOrientador === true &&
-      a.orientadorId !== Number(formData.orientadorId) &&
-      (!isEditMode || (isEditMode && a.id !== editingId))
-  );
-
-  // --- FLUJO DE CONFIRMACIÓN (Tu lógica original, pero llamando a `realizarGuardado`) ---
-  if (existeOtroOrientadorPrincipal && formData.esOrientador) {
-    setConfirmDialogContent({
-      title: 'Confirmación requerida',
-      message: 'Ya existe un orientador principal para este curso. ¿Está seguro de continuar con esta asignación?',
-      confirmLabel: 'Aceptar',
-      cancelLabel: 'Cancelar',
-      onConfirm: () => {
-        setConfirmDialogContent({
-          title: 'Advertencia',
-          message: 'Esta acción reemplazará al orientador principal actual. ¿Confirma que desea continuar?',
-          confirmLabel: 'Confirmar',
-          cancelLabel: 'Cancelar',
-          onConfirm: () => {
-            setConfirmDialogOpen(false);
-            // ✅ CAMBIO CLAVE: Llama a la función que solo guarda, rompiendo el bucle.
-            realizarGuardado();
-          },
-          onCancel: () => setConfirmDialogOpen(false),
-        });
-      },
-      onCancel: () => setConfirmDialogOpen(false),
-    });
-    setConfirmDialogOpen(true);
-    return;
-  }
-
-  // Si no se necesita confirmación, se llama a la función de guardado directamente.
-  await realizarGuardado();
-};
   // Estado para controlar la pestaña activa
   const [activeTab, setActiveTab] = useState('asignaciones');
 
