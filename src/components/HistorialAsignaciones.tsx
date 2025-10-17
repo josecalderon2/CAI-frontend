@@ -39,6 +39,18 @@ export function HistorialAsignaciones() {
   const [filterCurso, setFilterCurso] = useState<string>('todos');
   const [filterEstado, setFilterEstado] = useState<string>('todos');
 
+  // Paginación
+  const [page, setPage] = useState(1);
+  const rowsPerPage = 10;
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredHistorial.length / rowsPerPage)
+  );
+  const paginatedHistorial = filteredHistorial.slice(
+    (page - 1) * rowsPerPage,
+    page * rowsPerPage
+  );
+
   useEffect(() => {
     loadHistorial();
   }, []);
@@ -54,39 +66,32 @@ export function HistorialAsignaciones() {
   // Efecto para manejar la búsqueda + filtros SIN debounce
   useEffect(() => {
     const q = norm(searchTerm);
-
     setFilteredHistorial(
       historial.filter((item) => {
-        // Campos a buscar (normalizados)
+        // ...existing code...
         const orientador = norm(item.orientador.nombreCompleto);
         const curso = norm(item.curso.nombre);
         const asignatura = norm(item.asignatura?.nombre || '');
-
-        // Coincidencia por texto (desde la 1ª letra)
         const matchesSearch =
           q === '' ||
           orientador.includes(q) ||
           curso.includes(q) ||
           asignatura.includes(q);
-
-        // Filtros adicionales
         const matchesOrientador =
           filterOrientador === 'todos' ||
           item.orientador.id_orientador.toString() === filterOrientador;
-
         const matchesCurso =
           filterCurso === 'todos' ||
           item.curso.id_curso.toString() === filterCurso;
-
         const matchesEstado =
           filterEstado === 'todos' ||
           (filterEstado === 'abierto' ? item.abierto : !item.abierto);
-
         return (
           matchesSearch && matchesOrientador && matchesCurso && matchesEstado
         );
       })
     );
+    setPage(1); // Reiniciar a la primera página si cambian los filtros
   }, [searchTerm, filterOrientador, filterCurso, filterEstado, historial]);
 
   const loadHistorial = async () => {
@@ -229,7 +234,7 @@ export function HistorialAsignaciones() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredHistorial.map((item) => (
+                {paginatedHistorial.map((item) => (
                   <TableRow key={item.id_historial_curso_orientador}>
                     <TableCell>{item.orientador.nombreCompleto}</TableCell>
                     <TableCell>{item.curso.nombre}</TableCell>
@@ -270,6 +275,37 @@ export function HistorialAsignaciones() {
               </TableBody>
             </Table>
           )}
+          {/* Paginación */}
+          <div className="flex items-center justify-between space-x-2 py-4">
+            <p className="text-sm text-gray-600">
+              Mostrando{' '}
+              <span className="font-semibold">{paginatedHistorial.length}</span>{' '}
+              de{' '}
+              <span className="font-semibold">{filteredHistorial.length}</span>{' '}
+              resultados
+            </p>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+                disabled={page === 1}
+                className="text-sm px-4 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Anterior
+              </button>
+              <span className="text-sm text-gray-700">
+                Página {page} de {totalPages}
+              </span>
+              <button
+                onClick={() =>
+                  setPage((prev) => (prev < totalPages ? prev + 1 : prev))
+                }
+                disabled={page >= totalPages}
+                className="text-sm px-4 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Siguiente
+              </button>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </>
