@@ -23,10 +23,11 @@ import { perfilService, type UserProfile } from '../api/services/perfilService';
 import { getUser } from '../utils/auth';
 
 interface PerfilModuleProps {
-  // Opcional: puedes recibir props adicionales si es necesario
+  // Sin props necesarias por ahora
 }
 
 export function PerfilModule({}: PerfilModuleProps) {
+  // Usar directamente getUser para obtener los datos del usuario autenticado
   const [isLoading, setIsLoading] = useState(true);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
