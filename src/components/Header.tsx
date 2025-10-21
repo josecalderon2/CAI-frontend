@@ -104,8 +104,6 @@ export function Header({
     switch (currentSection) {
       case 'perfil':
         return 'Perfil';
-      case 'configuracion':
-        return 'Configuración';
       case 'asistencia':
         return 'Asistencia';
       default:
@@ -208,12 +206,6 @@ export function Header({
                 <UserIcon className="w-4 h-4 mr-2" />
                 Perfil
               </DropdownMenuItem>
-              {user.role === 'admin' && (
-                <DropdownMenuItem onClick={() => onNavigate('configuracion')}>
-                  <Settings className="w-4 h-4 mr-2" />
-                  Configuración
-                </DropdownMenuItem>
-              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={onLogout} className="text-red-600">
                 <LogOut className="w-4 h-4 mr-2" />

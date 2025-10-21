@@ -25,9 +25,7 @@ import { GradosAcademicosModule } from './components/GradosAcademicosModule';
 import { CursosModule } from './components/CursosModule';
 import { AsignaturasModule } from './components/AsignaturasModule';
 import { AsignacionesModule } from './components/AsignacionesModule';
-import { PerfilModule }  from './components/PerfilModule';
-import { ConfiguracionModule } from './components/ConfiguracionModule';
-
+import { PerfilModule } from './components/PerfilModule';
 
 // ================= Helpers de auth =================
 function getUser() {
@@ -326,38 +324,13 @@ function AppRoutes() {
         />
 
         <Route
-  path="/configuracion"  // Agregar el slash inicial
-  element={
-    <ProtectedRoute>
-      <ConfiguracionModule 
-        user={{
-          id: String(getUser()?.id),
-          name: getUser()?.nombre || getUser()?.email || '',
-          email: getUser()?.email || '',
-          role: getUser()?.role === 'Admin' ? 'admin' : 
-                getUser()?.role === 'P.A' ? 'administrativo' : 'docente'
-        }} 
-      />
-    </ProtectedRoute>
-  }
-/>
-
-<Route
-  path="/perfil"
-  element={
-    <ProtectedRoute>
-      <PerfilModule 
-        user={{
-          id: String(getUser()?.id),
-          name: getUser()?.nombre || getUser()?.email || '',
-          email: getUser()?.email || '',
-          role: getUser()?.role === 'Admin' ? 'admin' : 
-                getUser()?.role === 'P.A' ? 'administrativo' : 'docente'
-        }}
-      />
-    </ProtectedRoute>
-  }
-/>
+          path="/perfil"
+          element={
+            <ProtectedRoute>
+              <PerfilModule />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Catch-all manda a home del rol */}
         <Route
