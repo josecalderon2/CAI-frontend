@@ -13,6 +13,8 @@ import {
   eliminarResponsable,
   actualizarAlumnoCompleto,
 } from '../api/services/alumnosService';
+import { importMatricula } from '../api/services/alumnosService';
+import ImportButton from './ui/importButton';
 
 import {
   actualizarSoloResponsable,
@@ -2372,13 +2374,25 @@ export function AlumnosModule() {
             Administra la información completa de los estudiantes
           </p>
         </div>
-        <Button
-          onClick={handleCreateAlumno}
-          className="bg-blue-600 hover:bg-blue-700"
-        >
-          <UserPlus className="w-4 h-4 mr-2" />
-          Nuevo Alumno
-        </Button>
+        <div className="flex items-center space-x-2">
+          <Button
+            onClick={handleCreateAlumno}
+            className="bg-blue-600 hover:bg-blue-700"
+          >
+            <UserPlus className="w-4 h-4 mr-2" />
+            Nuevo Alumno
+          </Button>
+
+          <ImportButton
+            triggerLabel="Importar"
+            onImport={async (file) => {
+              const res = await importMatricula(file);
+              // refrescar lista
+              await cargarAlumnos();
+              return res;
+            }}
+          />
+        </div>
       </div>
 
       {/* Estadísticas */}
@@ -4789,7 +4803,8 @@ export function AlumnosModule() {
                       <div>
                         <p className="text-sm text-gray-500">Vive Con</p>
                         <p className="font-medium">
-                          {selectedAlumno.detalle.viveCon || 'No especificado'}
+                          {selectedAlumno?.detalle?.viveCon ||
+                            'No especificado'}
                         </p>
                       </div>
 
@@ -4798,13 +4813,13 @@ export function AlumnosModule() {
                           Dependencia Económica
                         </p>
                         <p className="font-medium">
-                          {selectedAlumno.detalle.dependenciaEconomica ||
+                          {selectedAlumno?.detalle?.dependenciaEconomica ||
                             'No especificado'}
                         </p>
                       </div>
 
                       <div className="flex items-center space-x-2">
-                        {selectedAlumno.detalle.capacidadPago ? (
+                        {selectedAlumno?.detalle?.capacidadPago ? (
                           <CheckCircle className="w-4 h-4 text-green-600" />
                         ) : (
                           <XCircle className="w-4 h-4 text-red-600" />
@@ -4813,7 +4828,7 @@ export function AlumnosModule() {
                       </div>
 
                       <div className="flex items-center space-x-2">
-                        {selectedAlumno.detalle.tieneHermanosEnColegio ? (
+                        {selectedAlumno?.detalle?.tieneHermanosEnColegio ? (
                           <CheckCircle className="w-4 h-4 text-green-600" />
                         ) : (
                           <XCircle className="w-4 h-4 text-red-600" />
@@ -4823,26 +4838,27 @@ export function AlumnosModule() {
                         </span>
                       </div>
 
-                      {selectedAlumno.detalle.tieneHermanosEnColegio &&
-                        selectedAlumno.detalle.hermanosEnColegio.length > 0 && (
+                      {selectedAlumno?.detalle?.tieneHermanosEnColegio &&
+                        (selectedAlumno?.detalle?.hermanosEnColegio?.length ??
+                          0) > 0 && (
                           <div className="md:col-span-2">
                             <p className="text-sm text-gray-500 mb-2">
                               Hermanos en el Colegio
                             </p>
                             <div className="space-y-1">
-                              {selectedAlumno.detalle.hermanosEnColegio.map(
-                                (hermano, index) => (
-                                  <div
-                                    key={index}
-                                    className="flex items-center space-x-2 text-sm"
-                                  >
-                                    <GraduationCap className="w-4 h-4 text-gray-400" />
-                                    <span>
-                                      {hermano.nombre} - {hermano.grado}
-                                    </span>
-                                  </div>
-                                )
-                              )}
+                              {(
+                                selectedAlumno?.detalle?.hermanosEnColegio || []
+                              ).map((hermano, index) => (
+                                <div
+                                  key={index}
+                                  className="flex items-center space-x-2 text-sm"
+                                >
+                                  <GraduationCap className="w-4 h-4 text-gray-400" />
+                                  <span>
+                                    {hermano.nombre} - {hermano.grado}
+                                  </span>
+                                </div>
+                              ))}
                             </div>
                           </div>
                         )}

@@ -766,3 +766,46 @@ export const actualizarAlumnoCompleto = async (
     throw error;
   }
 };
+
+/**
+ * Importa matrícula desde un archivo (Excel o CSV)
+ * Endpoint: POST /import/matricula (multipart/form-data, campo `file`)
+ * @param file Blob o File (input type="file")
+ */
+export const importMatricula = async (file: Blob | File) => {
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+  const token = localStorage.getItem('access_token');
+
+  try {
+    const form = new FormData();
+    form.append('file', file, (file as File).name || 'upload');
+
+    const response = await fetch(`${apiUrl}/import/matricula`, {
+      method: 'POST',
+      headers: {
+        // Nota: no establecer Content-Type al usar FormData
+        Authorization: token ? `Bearer ${token}` : '',
+      },
+      body: form,
+    });
+
+    const text = await response.text();
+    let data: any = null;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch (e) {
+      // Si la respuesta no es JSON, devolvemos el texto crudo
+      data = text;
+    }
+
+    if (!response.ok) {
+      const message =
+        (data && (data.message || data.error)) || response.statusText;
+      throw new Error(`Error ${response.status}: ${message}`);
+    }
+
+    return data;
+  } catch (error) {
+    throw error;
+  }
+};
