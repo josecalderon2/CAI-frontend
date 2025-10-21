@@ -8,28 +8,22 @@ import {
   DialogDescription,
   DialogFooter,
 } from './dialog';
-import { FileText } from 'lucide-react';
+import { FileText, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface ImportButtonProps {
-  /** Callback invoked when the user confirms import with a valid file */
   onImport: (file: File) => Promise<any> | void;
-  /** Label for the trigger button */
   triggerLabel?: string;
-  /** Maximum allowed file size in bytes (default 10MB) */
   maxSizeBytes?: number;
-  /** Accepted file extensions (input accept attribute) */
   accept?: string;
 }
 
-/**
- * ImportButton
- * Reusable component that opens a Dialog to select an Excel/CSV file and
- * calls the provided `onImport` callback with the selected File.
- *
- * Usage:
- * <ImportButton onImport={async (file) => await importMatricula(file)} />
- */
+const ACCEPTED_MIME = [
+  'text/csv',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+];
+
 export function ImportButton({
   onImport,
   triggerLabel = 'Importar',
@@ -42,16 +36,37 @@ export function ImportButton({
   const [isLoading, setIsLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
+  const resetInput = () => {
+    if (inputRef.current) {
+      inputRef.current.value = ''; // ← permite re-seleccionar el mismo archivo
+    }
+  };
+
+  const humanMB = (bytes: number) =>
+    new Intl.NumberFormat('es-SV', { maximumFractionDigits: 1 }).format(
+      bytes / (1024 * 1024)
+    );
+
   const validateFile = (f: File) => {
     if (!f) return 'Archivo inválido';
-    const allowed = /\.(xls|xlsx|csv)$/i.test(f.name);
-    if (!allowed) return 'Tipo de archivo no válido. Use .xls, .xlsx o .csv';
+
+    const nameOk = /\.(xls|xlsx|csv)$/i.test(f.name);
+    const mimeOk =
+      !f.type ||
+      ACCEPTED_MIME.includes(f.type) ||
+      /excel|spreadsheet|csv/i.test(f.type);
+
+    if (!nameOk && !mimeOk)
+      return 'Tipo de archivo no válido. Usa .xls, .xlsx o .csv';
+
     if (f.size > maxSizeBytes)
-      return `Archivo demasiado grande (máx. ${Math.round(maxSizeBytes / 1024 / 1024)}MB)`;
+      return `Archivo demasiado grande (máx. ${humanMB(maxSizeBytes)} MB)`;
+
     return null;
   };
 
   const handleSelectClick = () => {
+    resetInput();
     inputRef.current?.click();
   };
 
@@ -83,21 +98,21 @@ export function ImportButton({
       return;
     }
 
+    setIsLoading(true);
+    const loadingToast = toast.loading('Importando...');
     try {
-      setIsLoading(true);
-      const loadingToast = toast.loading('Importando...');
-      const result = await onImport(file);
-      toast.dismiss(loadingToast);
+      await onImport(file); // ← no relanzamos el error
       toast.success('Importación completada');
       setOpen(false);
       setFile(null);
       setError(null);
-      return result;
-    } catch (err: any) {
-      toast.error(err?.message || 'Error durante la importación');
-      setError(err?.message || 'Error durante la importación');
-      throw err;
+      resetInput();
+    } catch (err: unknown) {
+      const msg = (err as any)?.message || 'Error durante la importación';
+      toast.error(msg);
+      setError(msg);
     } finally {
+      toast.dismiss(loadingToast);
       setIsLoading(false);
     }
   };
@@ -109,12 +124,24 @@ export function ImportButton({
         {triggerLabel}
       </Button>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
+      <Dialog
+        open={open}
+        onOpenChange={(v) => {
+          setOpen(v);
+          if (!v) {
+            // ← limpiar estado también si se cierra con ESC/X
+            setFile(null);
+            setError(null);
+            setIsLoading(false);
+            resetInput();
+          }
+        }}
+      >
+        <DialogContent aria-busy={isLoading}>
           <DialogHeader>
             <DialogTitle>Importar Matrícula</DialogTitle>
             <DialogDescription>
-              Selecciona un archivo Excel o CSV que contenga la hoja "Alumnos".
+              Selecciona un archivo Excel o CSV que contenga la hoja “Alumnos”.
             </DialogDescription>
           </DialogHeader>
 
@@ -128,21 +155,32 @@ export function ImportButton({
             />
 
             <div className="flex flex-col sm:flex-row sm:items-center sm:gap-4">
-              <Button onClick={handleSelectClick} variant="outline">
+              <Button
+                onClick={handleSelectClick}
+                variant="outline"
+                disabled={isLoading}
+              >
                 Seleccionar archivo
               </Button>
+
               <div className="mt-2 sm:mt-0">
                 {file ? (
                   <p className="text-sm text-gray-700">
                     Archivo seleccionado:{' '}
                     <span className="font-medium">{file.name}</span>
+                    {' · '}
+                    <span>{humanMB(file.size)} MB</span>
                   </p>
                 ) : (
                   <p className="text-sm text-gray-500">
                     Ningún archivo seleccionado
                   </p>
                 )}
-                {error && <p className="text-sm text-red-600 mt-1">{error}</p>}
+                {error && (
+                  <p className="text-sm text-red-600 mt-1" aria-live="polite">
+                    {error}
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -154,7 +192,9 @@ export function ImportButton({
                 setOpen(false);
                 setFile(null);
                 setError(null);
+                resetInput();
               }}
+              disabled={isLoading} // ← evitar cerrar mientras carga
             >
               Cancelar
             </Button>
@@ -163,7 +203,14 @@ export function ImportButton({
               className="bg-green-600 hover:bg-green-700"
               disabled={!file || !!error || isLoading}
             >
-              Importar
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Importando…
+                </>
+              ) : (
+                'Importar'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
