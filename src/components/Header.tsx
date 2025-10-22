@@ -13,7 +13,6 @@ import {
 import {
   User as UserIcon,
   LogOut,
-  Settings,
   Home,
   Menu,
   X,
