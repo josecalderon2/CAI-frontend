@@ -43,6 +43,14 @@ export function PerfilModule({}: PerfilModuleProps) {
     telefono: '',
     direccion: '',
   });
+   // Helper: valida y formatea teléfono a XXXX-XXXX
+  const normalizeDigits = (s: string) => s.replace(/\D/g, '');
+  const isValidPhone = (s: string) => normalizeDigits(s).length === 8;
+  const formatPhone = (s: string) => {
+    const d = normalizeDigits(s);
+    if (d.length !== 8) return s;
+    return `${d.slice(0, 4)}-${d.slice(4)}`;
+  };
 
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: '',
@@ -131,6 +139,32 @@ export function PerfilModule({}: PerfilModuleProps) {
     if (!profileForm.nombre.trim()) {
       toast.error('El nombre es obligatorio');
       return;
+    }
+
+    if (!profileForm.apellido.trim()) {
+      toast.error('El apellido es obligatorio');
+      return;
+    }
+
+    // Validar que nombre y apellido no contengan números
+    if (/\d/.test(profileForm.nombre)) {
+      toast.error('El nombre no puede contener números');
+      return;
+    }
+
+    if (/\d/.test(profileForm.apellido)) {
+      toast.error('El apellido no puede contener números');
+      return;
+    }
+
+    // Validar teléfono si se ingresó
+    if (profileForm.telefono) {
+      if (!isValidPhone(profileForm.telefono)) {
+        toast.error('El teléfono debe tener 8 dígitos. Ejemplo: 1111-1111');
+        return;
+      }
+      // Asegurar formato antes de enviar
+      profileForm.telefono = formatPhone(profileForm.telefono);
     }
 
     try {
@@ -330,7 +364,7 @@ export function PerfilModule({}: PerfilModuleProps) {
                         onChange={(e) =>
                           setProfileForm({
                             ...profileForm,
-                            nombre: e.target.value,
+                            nombre: e.target.value.replace(/[0-9]/g, ''),
                           })
                         }
                         placeholder="Ingresa tu nombre"
@@ -353,7 +387,7 @@ export function PerfilModule({}: PerfilModuleProps) {
                         onChange={(e) =>
                           setProfileForm({
                             ...profileForm,
-                            apellido: e.target.value,
+                            apellido: e.target.value.replace(/[0-9]/g, ''),
                           })
                         }
                         placeholder="Ingresa tu apellido"
@@ -397,17 +431,18 @@ export function PerfilModule({}: PerfilModuleProps) {
                         onChange={(e) =>
                           setProfileForm({
                             ...profileForm,
-                            telefono: e.target.value,
-                          })
-                        }
-                        placeholder="Ingresa tu teléfono"
-                      />
-                    ) : (
-                      <div className="flex items-center space-x-2 p-2">
-                        <Phone className="w-4 h-4 text-gray-500" />
-                        <span>{userProfile.telefono || 'No disponible'}</span>
-                      </div>
-                    )}
+                             // mantener solo dígitos y formatear automáticamente cuando tenga 8
+                          telefono: formatPhone(e.target.value.replace(/[^\d]/g, '')),
+                    })
+                  }
+                  placeholder="Ingresa tu teléfono (ej. 7491-5623)"
+                />
+              ) : (
+                <div className="flex items-center space-x-2 p-2">
+                  <Phone className="w-4 h-4 text-gray-500" />
+                  <span>{userProfile.telefono || 'No disponible'}</span>
+                </div>
+              )}
                   </div>
 
                   {/* DUI (si está disponible) */}
