@@ -19,6 +19,7 @@ import {
 import { Input } from './ui/input';
 import { Checkbox } from './ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { Badge } from './ui/badge';
 import { toast } from 'sonner';
 import {
   ArrowUpRight,
@@ -96,7 +97,7 @@ export function PromocionesModule() {
         <CardHeader>
           <CardTitle className="text-2xl font-bold flex items-center gap-2">
             <GraduationCap className="h-6 w-6" />
-            Sistema de Promociones y Traslados
+            Sistema de Promociones y Historial
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -154,6 +155,11 @@ function AlumnosPorCursoTab({ defaultYear }: { defaultYear: string }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredAlumnos, setFilteredAlumnos] = useState<AlumnoCurso[]>([]);
 
+  // Estados para paginación
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const itemsPerPage = 10;
+
   useEffect(() => {
     loadCursos();
   }, []);
@@ -174,25 +180,27 @@ function AlumnosPorCursoTab({ defaultYear }: { defaultYear: string }) {
   useEffect(() => {
     if (searchTerm.trim() === '') {
       setFilteredAlumnos(alumnos);
+      setTotalPages(Math.ceil(alumnos.length / itemsPerPage));
     } else {
       const normalized = searchTerm
         .toLowerCase()
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '');
-      setFilteredAlumnos(
-        alumnos.filter((alumno) => {
-          const fullName = `${alumno.nombre} ${alumno.apellido}`
-            .toLowerCase()
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '');
-          return (
-            fullName.includes(normalized) ||
-            alumno.numero_matricula.includes(normalized)
-          );
-        })
-      );
+      const filtered = alumnos.filter((alumno) => {
+        const fullName = `${alumno.nombre} ${alumno.apellido}`
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '');
+        return (
+          fullName.includes(normalized) ||
+          alumno.numero_matricula.includes(normalized)
+        );
+      });
+      setFilteredAlumnos(filtered);
+      setTotalPages(Math.ceil(filtered.length / itemsPerPage));
     }
-  }, [alumnos, searchTerm]);
+    setPage(1); // Volver a la primera página al cambiar búsqueda
+  }, [alumnos, searchTerm, itemsPerPage]);
 
   const loadCursos = async () => {
     try {
@@ -284,10 +292,10 @@ function AlumnosPorCursoTab({ defaultYear }: { defaultYear: string }) {
   };
 
   const handleSelectAllChange = () => {
-    if (alumnosSeleccionados.length === filteredAlumnos.length) {
+    if (alumnosSeleccionados.length === paginatedAlumnos.length) {
       setAlumnosSeleccionados([]);
     } else {
-      setAlumnosSeleccionados(filteredAlumnos.map((a) => a.id_alumno));
+      setAlumnosSeleccionados(paginatedAlumnos.map((a) => a.id_alumno));
     }
   };
 
@@ -309,6 +317,12 @@ function AlumnosPorCursoTab({ defaultYear }: { defaultYear: string }) {
     setAlumnoSeleccionado(alumno);
     setShowFinalizarDialog(true);
   };
+
+  // Obtener alumnos paginados
+  const paginatedAlumnos = filteredAlumnos.slice(
+    (page - 1) * itemsPerPage,
+    page * itemsPerPage
+  );
 
   return (
     <div className="space-y-4">
@@ -380,14 +394,14 @@ function AlumnosPorCursoTab({ defaultYear }: { defaultYear: string }) {
                 <div className="flex items-center space-x-2">
                   <Checkbox
                     checked={
-                      alumnosSeleccionados.length === filteredAlumnos.length &&
-                      filteredAlumnos.length > 0
+                      alumnosSeleccionados.length === paginatedAlumnos.length &&
+                      paginatedAlumnos.length > 0
                     }
                     onCheckedChange={handleSelectAllChange}
                     id="select-all"
                   />
                   <label htmlFor="select-all" className="text-sm font-medium">
-                    Seleccionar todos ({filteredAlumnos.length})
+                    Seleccionar todos en esta página ({paginatedAlumnos.length})
                   </label>
                 </div>
 
@@ -425,7 +439,7 @@ function AlumnosPorCursoTab({ defaultYear }: { defaultYear: string }) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredAlumnos.map((alumno) => (
+                    {paginatedAlumnos.map((alumno) => (
                       <TableRow key={alumno.id_alumno}>
                         <TableCell>
                           <Checkbox
@@ -449,17 +463,17 @@ function AlumnosPorCursoTab({ defaultYear }: { defaultYear: string }) {
                           </>
                         )}
                         <TableCell>
-                          <span
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          <Badge
+                            variant={
                               alumno.estado === 'ACTIVO'
-                                ? 'bg-green-100 text-green-800'
+                                ? 'success'
                                 : alumno.estado === 'SUSPENDIDO'
-                                  ? 'bg-yellow-100 text-yellow-800'
-                                  : 'bg-red-100 text-red-800'
-                            }`}
+                                  ? 'warning'
+                                  : 'destructive'
+                            }
                           >
                             {alumno.estado}
-                          </span>
+                          </Badge>
                         </TableCell>
                         <TableCell>
                           {alumno.promedio_notas?.toFixed(2) || '-'}
@@ -499,6 +513,40 @@ function AlumnosPorCursoTab({ defaultYear }: { defaultYear: string }) {
                   </TableBody>
                 </Table>
               </div>
+
+              {/* Controles de paginación */}
+              {filteredAlumnos.length > 0 && (
+                <div className="flex items-center justify-between mt-4">
+                  <p className="text-sm text-gray-600">
+                    Mostrando {(page - 1) * itemsPerPage + 1} -{' '}
+                    {Math.min(page * itemsPerPage, filteredAlumnos.length)} de{' '}
+                    {filteredAlumnos.length} alumnos
+                  </p>
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+                      disabled={page === 1}
+                    >
+                      Anterior
+                    </Button>
+                    <span className="text-sm text-gray-600">
+                      Página {page} de {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setPage((prev) => (prev < totalPages ? prev + 1 : prev))
+                      }
+                      disabled={page >= totalPages}
+                    >
+                      Siguiente
+                    </Button>
+                  </div>
+                </div>
+              )}
             </>
           ) : (
             <div className="text-center py-8 text-gray-500">
@@ -580,6 +628,11 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Estados para paginación
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const itemsPerPage = 10;
+
   // Estado para almacenar notas y observaciones por alumno
   const [alumnosData, setAlumnosData] = useState<{
     [id_alumno: number]: {
@@ -632,6 +685,8 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
 
       setAlumnos(response.items);
       setAlumnosSeleccionados([]);
+      setTotalPages(Math.ceil(response.items.length / itemsPerPage));
+      setPage(1);
 
       // Inicializa el estado para cada alumno
       const initialData: { [id: number]: any } = {};
@@ -662,10 +717,10 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
   };
 
   const handleSelectAllChange = () => {
-    if (alumnosSeleccionados.length === alumnos.length) {
+    if (alumnosSeleccionados.length === paginatedAlumnos.length) {
       setAlumnosSeleccionados([]);
     } else {
-      setAlumnosSeleccionados(alumnos.map((a) => a.id_alumno));
+      setAlumnosSeleccionados(paginatedAlumnos.map((a) => a.id_alumno));
     }
   };
 
@@ -782,6 +837,12 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
     }
   };
 
+  // Obtener alumnos paginados
+  const paginatedAlumnos = alumnos.slice(
+    (page - 1) * itemsPerPage,
+    page * itemsPerPage
+  );
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
@@ -882,8 +943,8 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
                 <div className="flex items-center space-x-2">
                   <Checkbox
                     checked={
-                      alumnosSeleccionados.length === alumnos.length &&
-                      alumnos.length > 0
+                      alumnosSeleccionados.length === paginatedAlumnos.length &&
+                      paginatedAlumnos.length > 0
                     }
                     onCheckedChange={handleSelectAllChange}
                     id="select-all-masiva"
@@ -892,7 +953,7 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
                     htmlFor="select-all-masiva"
                     className="text-sm font-medium"
                   >
-                    Seleccionar todos ({alumnos.length})
+                    Seleccionar todos en esta página ({paginatedAlumnos.length})
                   </label>
                 </div>
 
@@ -926,7 +987,7 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {alumnos.map((alumno) => (
+                    {paginatedAlumnos.map((alumno) => (
                       <TableRow key={alumno.id_alumno}>
                         <TableCell>
                           <Checkbox
@@ -1011,6 +1072,40 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
                 </Table>
               </div>
 
+              {/* Controles de paginación */}
+              {alumnos.length > 0 && (
+                <div className="flex items-center justify-between mt-4">
+                  <p className="text-sm text-gray-600">
+                    Mostrando {(page - 1) * itemsPerPage + 1} -{' '}
+                    {Math.min(page * itemsPerPage, alumnos.length)} de{' '}
+                    {alumnos.length} alumnos
+                  </p>
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+                      disabled={page === 1}
+                    >
+                      Anterior
+                    </Button>
+                    <span className="text-sm text-gray-600">
+                      Página {page} de {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setPage((prev) => (prev < totalPages ? prev + 1 : prev))
+                      }
+                      disabled={page >= totalPages}
+                    >
+                      Siguiente
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               <div className="mt-6 flex justify-end">
                 <Button
                   onClick={handleSubmit}
@@ -1052,6 +1147,11 @@ function HistorialAcademicoTab({ defaultYear }: { defaultYear: string }) {
   const [alumnos, setAlumnos] = useState<
     Array<{ id_alumno: number; nombre: string; apellido: string }>
   >([]);
+
+  // Estados para paginación
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const itemsPerPage = 10;
 
   // Cargar lista de alumnos al montar el componente
   useEffect(() => {
@@ -1175,6 +1275,18 @@ function HistorialAcademicoTab({ defaultYear }: { defaultYear: string }) {
       : historialAcademico.filter((h) => h.anioAcademico === anioAcademico)
     : [];
 
+  // Actualizar paginación cuando cambia el historial filtrado
+  useEffect(() => {
+    setTotalPages(Math.ceil(historialFiltrado.length / itemsPerPage));
+    setPage(1);
+  }, [historialFiltrado.length, itemsPerPage]);
+
+  // Obtener historial paginado
+  const paginatedHistorial = historialFiltrado.slice(
+    (page - 1) * itemsPerPage,
+    page * itemsPerPage
+  );
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1277,7 +1389,7 @@ function HistorialAcademicoTab({ defaultYear }: { defaultYear: string }) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {historialFiltrado.map((registro, index) => (
+                    {paginatedHistorial.map((registro, index) => (
                       <TableRow key={`${registro.anioAcademico}-${index}`}>
                         {alumnoSeleccionado === 'todos' && (
                           <TableCell className="font-medium">
@@ -1289,23 +1401,23 @@ function HistorialAcademicoTab({ defaultYear }: { defaultYear: string }) {
                         <TableCell>{registro.gradoAcademico || '-'}</TableCell>
                         <TableCell>
                           {registro.estadoFinal ? (
-                            <span
-                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            <Badge
+                              variant={
                                 registro.estadoFinal === 'APROBADO'
-                                  ? 'bg-green-100 text-green-800'
+                                  ? 'success'
                                   : registro.estadoFinal === 'REPROBADO'
-                                    ? 'bg-red-100 text-red-800'
+                                    ? 'destructive'
                                     : registro.estadoFinal === 'FINALIZADO'
-                                      ? 'bg-blue-100 text-blue-800'
+                                      ? 'default'
                                       : registro.estadoFinal === 'TRASLADADO'
-                                        ? 'bg-yellow-100 text-yellow-800'
-                                        : 'bg-gray-100 text-gray-800'
-                              }`}
+                                        ? 'warning'
+                                        : 'outline'
+                              }
                             >
                               {registro.estadoFinal}
-                            </span>
+                            </Badge>
                           ) : (
-                            <span className="text-gray-400">En curso</span>
+                            <Badge variant="outline">En curso</Badge>
                           )}
                         </TableCell>
                         <TableCell>
@@ -1325,6 +1437,40 @@ function HistorialAcademicoTab({ defaultYear }: { defaultYear: string }) {
                   </TableBody>
                 </Table>
               </div>
+
+              {/* Controles de paginación */}
+              {historialFiltrado.length > 0 && (
+                <div className="flex items-center justify-between mt-4">
+                  <p className="text-sm text-gray-600">
+                    Mostrando {(page - 1) * itemsPerPage + 1} -{' '}
+                    {Math.min(page * itemsPerPage, historialFiltrado.length)} de{' '}
+                    {historialFiltrado.length} registros
+                  </p>
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+                      disabled={page === 1}
+                    >
+                      Anterior
+                    </Button>
+                    <span className="text-sm text-gray-600">
+                      Página {page} de {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setPage((prev) => (prev < totalPages ? prev + 1 : prev))
+                      }
+                      disabled={page >= totalPages}
+                    >
+                      Siguiente
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="text-center py-8 text-gray-500">
@@ -1373,7 +1519,6 @@ function PromocionDialog({
     alumno.promedio_notas?.toString() || ''
   );
   const [observaciones, setObservaciones] = useState<string>('');
-  const [isLoading, setIsLoading] = useState(false); // Se usa para controlar la carga de cursos
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -1384,14 +1529,11 @@ function PromocionDialog({
 
   const loadCursos = async () => {
     try {
-      setIsLoading(true);
       const response = await cursosService.list({ activo: true });
       setCursos(response.items);
     } catch (error) {
       console.error('Error al cargar cursos:', error);
       toast.error('No se pudieron cargar los cursos disponibles');
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -1622,7 +1764,7 @@ function NoReinscritoDialog({
       const finalizarDto = {
         alumnoId: alumno.id_alumno,
         anioActual: anioActual,
-        estado: 'NO_REINSCRITO', // Estado específico para no reinscritos
+        estado: 'NO REINSCRITO', // Estado específico para no reinscritos
         observaciones:
           observaciones || 'No se reinscribió para el siguiente año académico',
         marcarInactivo: true, // IMPORTANTE: Marca al alumno como inactivo
