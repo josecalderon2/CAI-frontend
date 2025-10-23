@@ -71,6 +71,43 @@ export interface HistorialAcademico {
 
 // Servicio para manejar todas las operaciones de promociones
 const promocionesService = {
+  // Obtener todos los alumnos para promoción (todos los cursos)
+  async getTodosLosAlumnos(anioAcademico: string) {
+    const response = await api.get('/promociones/alumnos', {
+      params: { anioAcademico },
+    });
+
+    console.log('🔍 Respuesta todos los alumnos:', response.data);
+
+    // El backend devuelve { anioAcademico, totalCursos, totalAlumnos, items }
+    const data: any = response.data;
+    const items = data.items || [];
+
+    // Mapear según la estructura del backend
+    // Ver promociones.service.ts línea 1018-1037
+    const itemsMapped = items.map((item: any) => ({
+      id_alumno_curso: item.id,
+      id_alumno: item.id,
+      id_curso: item.curso?.id, // ID del curso desde el objeto curso
+      nombre: item.nombre,
+      apellido: item.apellido,
+      numero_matricula: item.numeroMatricula || `MAT-${item.id}`,
+      estado: item.estadoActual || 'ACTIVO',
+      promedio_notas: item.notaPromedio,
+      anio_academico: anioAcademico,
+      curso_nombre: item.curso?.nombreCompleto, // nombreCompleto del curso desde backend
+      grado_academico: item.curso?.gradoAcademico, // nombre del grado académico
+    }));
+
+    console.log('✅ Todos los alumnos mapeados:', itemsMapped);
+
+    return {
+      items: itemsMapped,
+      totalCursos: data.totalCursos,
+      totalAlumnos: data.totalAlumnos,
+    };
+  },
+
   // Obtener alumnos por curso para promoción
   async getAlumnosPorCurso(cursoId: number, anioAcademico: string) {
     const response = await api.get(
@@ -80,24 +117,33 @@ const promocionesService = {
       }
     );
 
+    console.log('🔍 Respuesta completa del backend:', response.data);
+
     // El backend devuelve { curso, alumnos, total }
     const data: any = response.data;
-    const { alumnos = [] } = data;
+    const alumnos = data.alumnos || [];
+
+    console.log('📋 Alumnos extraídos:', alumnos);
 
     // Transformar al formato esperado por el frontend
-    const items = alumnos.map((alumno: any) => ({
-      id_alumno_curso: alumno.id_alumno_curso,
-      id_alumno: alumno.id_alumno,
-      id_curso: cursoId,
-      nombre: alumno.nombre,
-      apellido: alumno.apellido,
-      numero_matricula: alumno.numero_matricula || `${alumno.id_alumno}`,
-      estado: alumno.estado || 'ACTIVO',
-      promedio_notas: alumno.promedio_notas,
-      anio_academico: anioAcademico,
-    }));
+    const itemsMapped = alumnos.map((alumno: any) => {
+      console.log('👤 Procesando alumno:', alumno);
+      return {
+        id_alumno_curso: alumno.id, // No existe en backend, usar id
+        id_alumno: alumno.id,
+        id_curso: cursoId,
+        nombre: alumno.nombre,
+        apellido: alumno.apellido,
+        numero_matricula: alumno.numero_matricula || `MAT-${alumno.id}`,
+        estado: alumno.estadoActual || 'ACTIVO',
+        promedio_notas: alumno.notaPromedio,
+        anio_academico: anioAcademico,
+      };
+    });
 
-    return { items };
+    console.log('✅ Items mapeados:', itemsMapped);
+
+    return { items: itemsMapped };
   },
 
   // Obtener cursos disponibles para promoción
@@ -121,9 +167,7 @@ const promocionesService = {
     const response = await api.get(`/promociones/historial/${alumnoId}`);
 
     // El backend devuelve { alumno, historial }
-    const data: any = response.data;
-    const { historial = [] } = data;
-    return { items: historial };
+    return response.data;
   },
 
   // Promocionar o trasladar un alumno individualmente
@@ -134,8 +178,20 @@ const promocionesService = {
 
   // Finalizar estudios de un alumno
   async finalizarAlumno(data: FinalizarAlumnoDto) {
-    const response = await api.post('/promociones/finalizar-alumno', data);
-    return response.data;
+    console.log('🌐 promocionesService.finalizarAlumno - Iniciando');
+    console.log('🌐 URL:', '/promociones/finalizar-alumno');
+    console.log('🌐 Datos enviados:', data);
+
+    try {
+      const response = await api.post('/promociones/finalizar-alumno', data);
+      console.log('🌐 Respuesta recibida:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('🌐 Error en finalizarAlumno:', error);
+      console.error('🌐 Error response:', error.response);
+      console.error('🌐 Error data:', error.response?.data);
+      throw error;
+    }
   },
 
   // Realizar promoción masiva de alumnos

@@ -38,41 +38,42 @@ import {
 } from './ui/dialog';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
+import {
+  cursosService,
+  type Curso as CursoAPI,
+} from '../api/services/cursosService';
+import promocionesService from '../api/services/promocionesService';
+import { api } from '../api/axiosConfig';
 
-// Tipos locales (sin importar del servicio)
+// Tipos que coinciden con el backend
 interface AlumnoCurso {
   id_alumno_curso: number;
   id_alumno: number;
-  id_curso: number;
+  id_curso?: number; // ID del curso actual del alumno
   nombre: string;
   apellido: string;
   numero_matricula: string;
   estado: 'ACTIVO' | 'INACTIVO' | 'SUSPENDIDO';
   promedio_notas?: number | null;
   anio_academico: string;
+  curso_nombre?: string; // Cuando se obtienen todos los alumnos
+  grado_academico?: string; // Cuando se obtienen todos los alumnos
 }
 
-interface Curso {
-  id_curso: number;
-  nombre: string;
-  seccion?: string | null;
-  activo: boolean;
-}
+// Usar el tipo de Curso de la API
+type Curso = CursoAPI;
 
 interface HistorialAcademico {
   anioAcademico: string;
-  curso: {
-    nombre: string;
-    seccion: string | null;
-    gradoAcademico: {
-      nombre: string;
-    };
-  };
+  curso: string; // Cambiado: ahora es string directo
+  gradoAcademico: string; // Cambiado: ahora es string directo
   estadoFinal: string | null;
   notaPromedio: number | null;
-  fechaInicio: Date;
-  fechaFin: Date | null;
+  fechaInicio: Date | string;
+  fechaFin: Date | string | null;
   observaciones: string | null;
+  alumnoNombre?: string; // Cuando se obtienen todos los alumnos
+  alumnoId?: number; // Cuando se obtienen todos los alumnos
 }
 
 // Función helper para formatear fechas
@@ -163,10 +164,10 @@ function AlumnosPorCursoTab({ defaultYear }: { defaultYear: string }) {
     }
   }, [cursoSeleccionado, anioAcademico]);
 
-  // Auto-seleccionar el primer curso al cargar
+  // Auto-seleccionar "Todos" al cargar
   useEffect(() => {
     if (cursos.length > 0 && !cursoSeleccionado) {
-      setCursoSeleccionado(cursos[0].id_curso.toString());
+      setCursoSeleccionado('todos');
     }
   }, [cursos]);
 
@@ -196,15 +197,8 @@ function AlumnosPorCursoTab({ defaultYear }: { defaultYear: string }) {
   const loadCursos = async () => {
     try {
       setIsLoading(true);
-      // Datos simulados de cursos
-      const cursosMock: Curso[] = [
-        { id_curso: 1, nombre: 'Primer Grado', seccion: 'A', activo: true },
-        { id_curso: 2, nombre: 'Primer Grado', seccion: 'B', activo: true },
-        { id_curso: 3, nombre: 'Segundo Grado', seccion: 'A', activo: true },
-        { id_curso: 4, nombre: 'Tercer Grado', seccion: 'A', activo: true },
-        { id_curso: 5, nombre: 'Cuarto Grado', seccion: 'A', activo: true },
-      ];
-      setCursos(cursosMock);
+      const response = await cursosService.list({ activo: true });
+      setCursos(response.items);
     } catch (error) {
       console.error('Error al cargar cursos:', error);
       toast.error('No se pudieron cargar los cursos');
@@ -218,47 +212,62 @@ function AlumnosPorCursoTab({ defaultYear }: { defaultYear: string }) {
 
     try {
       setIsLoading(true);
-      // Datos simulados de alumnos
-      const alumnosMock: AlumnoCurso[] = [
-        {
-          id_alumno_curso: 1,
-          id_alumno: 1,
-          id_curso: parseInt(cursoSeleccionado),
-          nombre: 'Juan',
-          apellido: 'Pérez',
-          numero_matricula: '2024-001',
-          estado: 'ACTIVO',
-          promedio_notas: 8.5,
-          anio_academico: anioAcademico,
-        },
-        {
-          id_alumno_curso: 2,
-          id_alumno: 2,
-          id_curso: parseInt(cursoSeleccionado),
-          nombre: 'María',
-          apellido: 'González',
-          numero_matricula: '2024-002',
-          estado: 'ACTIVO',
-          promedio_notas: 9.2,
-          anio_academico: anioAcademico,
-        },
-        {
-          id_alumno_curso: 3,
-          id_alumno: 3,
-          id_curso: parseInt(cursoSeleccionado),
-          nombre: 'Carlos',
-          apellido: 'Martínez',
-          numero_matricula: '2024-003',
-          estado: 'ACTIVO',
-          promedio_notas: 7.8,
-          anio_academico: anioAcademico,
-        },
-      ];
-      setAlumnos(alumnosMock);
-      setAlumnosSeleccionados([]);
+
+      // Si año académico es "todos", necesitamos cargar todos los años
+      if (anioAcademico === 'todos') {
+        const years = [
+          parseInt(defaultYear) - 1,
+          parseInt(defaultYear),
+          parseInt(defaultYear) + 1,
+        ];
+
+        const allAlumnos: AlumnoCurso[] = [];
+
+        // Cargar alumnos de todos los años
+        for (const year of years) {
+          try {
+            if (cursoSeleccionado === 'todos') {
+              const response = await promocionesService.getTodosLosAlumnos(
+                year.toString()
+              );
+              allAlumnos.push(...response.items);
+            } else {
+              const response = await promocionesService.getAlumnosPorCurso(
+                parseInt(cursoSeleccionado),
+                year.toString()
+              );
+              allAlumnos.push(...response.items);
+            }
+          } catch (error) {
+            console.log(`No hay alumnos en ${year}`);
+          }
+        }
+
+        setAlumnos(allAlumnos);
+        setAlumnosSeleccionados([]);
+      } else {
+        // Año específico seleccionado
+        if (cursoSeleccionado === 'todos') {
+          const response =
+            await promocionesService.getTodosLosAlumnos(anioAcademico);
+          setAlumnos(response.items);
+          setAlumnosSeleccionados([]);
+        } else {
+          // Endpoint normal para un curso específico
+          const response = await promocionesService.getAlumnosPorCurso(
+            parseInt(cursoSeleccionado),
+            anioAcademico
+          );
+
+          // El servicio ya mapea la respuesta al formato esperado
+          setAlumnos(response.items);
+          setAlumnosSeleccionados([]);
+        }
+      }
     } catch (error) {
       console.error('Error al cargar alumnos:', error);
-      toast.error('No se pudieron cargar los alumnos');
+      toast.error('No se pudieron cargar los alumnos del curso');
+      setAlumnos([]);
     } finally {
       setIsLoading(false);
     }
@@ -288,11 +297,15 @@ function AlumnosPorCursoTab({ defaultYear }: { defaultYear: string }) {
   };
 
   const abrirDialogoTraslado = (alumno: AlumnoCurso) => {
+    console.log('📋 Abriendo diálogo No Reinscrito para:', alumno);
+    console.log('📋 Curso seleccionado actual:', cursoSeleccionado);
     setAlumnoSeleccionado(alumno);
     setShowTrasladadoDialog(true);
   };
 
   const abrirDialogoFinalizar = (alumno: AlumnoCurso) => {
+    console.log('📋 Abriendo diálogo Finalizar para:', alumno);
+    console.log('📋 Curso seleccionado actual:', cursoSeleccionado);
     setAlumnoSeleccionado(alumno);
     setShowFinalizarDialog(true);
   };
@@ -310,6 +323,7 @@ function AlumnosPorCursoTab({ defaultYear }: { defaultYear: string }) {
               <SelectValue placeholder="Seleccione un curso" />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="todos">Todos los cursos</SelectItem>
               {cursos.map((curso) => (
                 <SelectItem
                   key={curso.id_curso}
@@ -329,6 +343,7 @@ function AlumnosPorCursoTab({ defaultYear }: { defaultYear: string }) {
               <SelectValue placeholder="Seleccione un año" />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="todos">Todos los años</SelectItem>
               {[
                 parseInt(defaultYear) - 1,
                 parseInt(defaultYear),
@@ -346,7 +361,7 @@ function AlumnosPorCursoTab({ defaultYear }: { defaultYear: string }) {
           <Label htmlFor="search">Buscar</Label>
           <Input
             id="search"
-            placeholder="Buscar por nombre o matrícula"
+            placeholder="Buscar por nombre"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -397,8 +412,13 @@ function AlumnosPorCursoTab({ defaultYear }: { defaultYear: string }) {
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-[50px]"></TableHead>
-                      <TableHead>Matrícula</TableHead>
                       <TableHead>Nombre</TableHead>
+                      {cursoSeleccionado === 'todos' && (
+                        <>
+                          <TableHead>Curso</TableHead>
+                          <TableHead>Grado</TableHead>
+                        </>
+                      )}
                       <TableHead>Estado</TableHead>
                       <TableHead>Promedio</TableHead>
                       <TableHead className="text-right">Acciones</TableHead>
@@ -417,10 +437,17 @@ function AlumnosPorCursoTab({ defaultYear }: { defaultYear: string }) {
                             }
                           />
                         </TableCell>
-                        <TableCell>{alumno.numero_matricula}</TableCell>
                         <TableCell>
                           {alumno.nombre} {alumno.apellido}
                         </TableCell>
+                        {cursoSeleccionado === 'todos' && (
+                          <>
+                            <TableCell>{alumno.curso_nombre || '-'}</TableCell>
+                            <TableCell>
+                              {alumno.grado_academico || '-'}
+                            </TableCell>
+                          </>
+                        )}
                         <TableCell>
                           <span
                             className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
@@ -437,31 +464,35 @@ function AlumnosPorCursoTab({ defaultYear }: { defaultYear: string }) {
                         <TableCell>
                           {alumno.promedio_notas?.toFixed(2) || '-'}
                         </TableCell>
-                        <TableCell className="text-right space-x-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => abrirDialogoPromocion(alumno)}
-                          >
-                            <ArrowUpRight className="h-4 w-4 mr-1" />
-                            Promover
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => abrirDialogoTraslado(alumno)}
-                          >
-                            <ArrowRight className="h-4 w-4 mr-1" />
-                            Trasladar
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => abrirDialogoFinalizar(alumno)}
-                          >
-                            <GraduationCap className="h-4 w-4 mr-1" />
-                            Finalizar
-                          </Button>
+                        <TableCell className="text-right">
+                          <div className="flex flex-wrap gap-2 justify-end">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => abrirDialogoPromocion(alumno)}
+                            >
+                              <ArrowUpRight className="h-4 w-4 mr-1" />
+                              Promover
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => abrirDialogoTraslado(alumno)}
+                              className="bg-yellow-50 hover:bg-yellow-100 border-yellow-200"
+                            >
+                              <ArrowRight className="h-4 w-4 mr-1" />
+                              No Reinscrito
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => abrirDialogoFinalizar(alumno)}
+                              className="bg-green-50 hover:bg-green-100 border-green-200"
+                            >
+                              <GraduationCap className="h-4 w-4 mr-1" />
+                              Graduado
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -494,17 +525,20 @@ function AlumnosPorCursoTab({ defaultYear }: { defaultYear: string }) {
         />
       )}
 
-      {/* Modal de Traslado */}
+      {/* Modal de No Reinscrito */}
       {alumnoSeleccionado && (
-        <PromocionDialog
+        <NoReinscritoDialog
           alumno={alumnoSeleccionado}
           open={showTrasladadoDialog}
           onClose={() => setShowTrasladadoDialog(false)}
-          cursoOrigen={cursos.find(
-            (c) => c.id_curso === parseInt(cursoSeleccionado)
-          )}
-          anioOrigen={anioAcademico}
-          tipo="traslado"
+          cursoActual={
+            cursoSeleccionado === 'todos'
+              ? // Cuando es "Todos", buscar el curso desde el id_curso del alumno
+                cursos.find((c) => c.id_curso === alumnoSeleccionado.id_curso)
+              : // Cuando es un curso específico, usar el curso seleccionado
+                cursos.find((c) => c.id_curso === parseInt(cursoSeleccionado))
+          }
+          anioActual={anioAcademico}
           onSuccess={loadAlumnos}
         />
       )}
@@ -515,9 +549,13 @@ function AlumnosPorCursoTab({ defaultYear }: { defaultYear: string }) {
           alumno={alumnoSeleccionado}
           open={showFinalizarDialog}
           onClose={() => setShowFinalizarDialog(false)}
-          cursoActual={cursos.find(
-            (c) => c.id_curso === parseInt(cursoSeleccionado)
-          )}
+          cursoActual={
+            cursoSeleccionado === 'todos'
+              ? // Cuando es "Todos", buscar el curso desde el id_curso del alumno
+                cursos.find((c) => c.id_curso === alumnoSeleccionado.id_curso)
+              : // Cuando es un curso específico, usar el curso seleccionado
+                cursos.find((c) => c.id_curso === parseInt(cursoSeleccionado))
+          }
           anioActual={anioAcademico}
           onSuccess={loadAlumnos}
         />
@@ -564,23 +602,16 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
   // Auto-seleccionar el primer curso al cargar
   useEffect(() => {
     if (cursos.length > 0 && !cursoOrigen) {
-      setCursoOrigen(cursos[0].id_curso.toString());
-      setCursoDestino(cursos[1]?.id_curso.toString() || '');
+      setCursoOrigen(cursos[0].id_curso?.toString() || '');
+      setCursoDestino(cursos[1]?.id_curso?.toString() || '');
     }
   }, [cursos]);
 
   const loadCursos = async () => {
     try {
       setIsLoading(true);
-      // Datos simulados de cursos
-      const cursosMock: Curso[] = [
-        { id_curso: 1, nombre: 'Primer Grado', seccion: 'A', activo: true },
-        { id_curso: 2, nombre: 'Primer Grado', seccion: 'B', activo: true },
-        { id_curso: 3, nombre: 'Segundo Grado', seccion: 'A', activo: true },
-        { id_curso: 4, nombre: 'Tercer Grado', seccion: 'A', activo: true },
-        { id_curso: 5, nombre: 'Cuarto Grado', seccion: 'A', activo: true },
-      ];
-      setCursos(cursosMock);
+      const response = await cursosService.list({ activo: true });
+      setCursos(response.items);
     } catch (error) {
       console.error('Error al cargar cursos:', error);
       toast.error('No se pudieron cargar los cursos');
@@ -594,49 +625,17 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
 
     try {
       setIsLoading(true);
-      // Datos simulados de alumnos
-      const alumnosMock: AlumnoCurso[] = [
-        {
-          id_alumno_curso: 1,
-          id_alumno: 1,
-          id_curso: parseInt(cursoOrigen),
-          nombre: 'Juan',
-          apellido: 'Pérez',
-          numero_matricula: '2024-001',
-          estado: 'ACTIVO',
-          promedio_notas: 8.5,
-          anio_academico: anioOrigen,
-        },
-        {
-          id_alumno_curso: 2,
-          id_alumno: 2,
-          id_curso: parseInt(cursoOrigen),
-          nombre: 'María',
-          apellido: 'González',
-          numero_matricula: '2024-002',
-          estado: 'ACTIVO',
-          promedio_notas: 9.2,
-          anio_academico: anioOrigen,
-        },
-        {
-          id_alumno_curso: 3,
-          id_alumno: 3,
-          id_curso: parseInt(cursoOrigen),
-          nombre: 'Carlos',
-          apellido: 'Martínez',
-          numero_matricula: '2024-003',
-          estado: 'ACTIVO',
-          promedio_notas: 7.8,
-          anio_academico: anioOrigen,
-        },
-      ];
+      const response = await promocionesService.getAlumnosPorCurso(
+        parseInt(cursoOrigen),
+        anioOrigen
+      );
 
-      setAlumnos(alumnosMock);
+      setAlumnos(response.items);
       setAlumnosSeleccionados([]);
 
       // Inicializa el estado para cada alumno
       const initialData: { [id: number]: any } = {};
-      alumnosMock.forEach((alumno: AlumnoCurso) => {
+      response.items.forEach((alumno: AlumnoCurso) => {
         initialData[alumno.id_alumno] = {
           estado: 'APROBADO',
           nota_promedio: alumno.promedio_notas || undefined,
@@ -729,18 +728,55 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
     try {
       setIsSubmitting(true);
 
-      // Simulación de promoción masiva
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Preparar datos para el backend según el DTO PromocionMasivaDto
+      const promocionMasivaDto = {
+        anioActual: anioOrigen,
+        anioSiguiente: anioDestino,
+        promocionesPorCurso: [
+          {
+            cursoOrigenId: parseInt(cursoOrigen),
+            cursoDestinoId: parseInt(cursoDestino),
+            alumnos: alumnosSeleccionados.map((alumnoId) => {
+              const data = alumnosData[alumnoId] || {};
+              return {
+                alumnoId: alumnoId,
+                estado: data.estado || 'APROBADO',
+                notaPromedio: data.nota_promedio,
+                observaciones: data.observaciones,
+              };
+            }),
+          },
+        ],
+      };
+
+      console.log('📤 Datos de promoción masiva:', promocionMasivaDto);
+
+      // Llamar al endpoint de promoción masiva
+      const response = (await promocionesService.promocionMasiva(
+        promocionMasivaDto
+      )) as any;
+
+      console.log('✅ Respuesta del backend:', response);
+
+      // Contar alumnos promovidos exitosamente
+      const totalPromovidos = response.reduce(
+        (sum: number, resultado: any) =>
+          sum + (resultado.alumnosPromovidos || 0),
+        0
+      );
 
       toast.success(
-        `${alumnosSeleccionados.length} alumnos promovidos con éxito`
+        `${totalPromovidos} alumno${totalPromovidos !== 1 ? 's' : ''} promovido${totalPromovidos !== 1 ? 's' : ''} exitosamente`
       );
 
       // Recargar la lista de alumnos
       loadAlumnos();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error al realizar promoción masiva:', error);
-      toast.error('No se pudo completar la promoción masiva');
+      const mensaje =
+        error.response?.data?.message ||
+        'No se pudo completar la promoción masiva';
+      toast.error(mensaje);
     } finally {
       setIsSubmitting(false);
     }
@@ -875,13 +911,6 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
                   >
                     Reprobar Seleccionados
                   </Button>
-                  <Button
-                    variant="outline"
-                    disabled={alumnosSeleccionados.length === 0}
-                    onClick={() => aplicarEstadoMasivo('TRASLADADO')}
-                  >
-                    Trasladar Seleccionados
-                  </Button>
                 </div>
               </div>
 
@@ -1013,13 +1042,50 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
 
 // Tab de Historial Académico
 function HistorialAcademicoTab({ defaultYear }: { defaultYear: string }) {
-  const [alumnoSeleccionado, setAlumnoSeleccionado] = useState<string>('1');
+  const [alumnoSeleccionado, setAlumnoSeleccionado] = useState<string>('');
   const [anioAcademico, setAnioAcademico] = useState<string>('todos');
   const [historialAcademico, setHistorialAcademico] = useState<
     HistorialAcademico[]
   >([]);
   const [alumnoInfo, setAlumnoInfo] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [alumnos, setAlumnos] = useState<
+    Array<{ id_alumno: number; nombre: string; apellido: string }>
+  >([]);
+
+  // Cargar lista de alumnos al montar el componente
+  useEffect(() => {
+    loadAlumnos();
+  }, []);
+
+  const loadAlumnos = async () => {
+    try {
+      // Cargar alumnos activos desde el endpoint /alumnos
+      const response = await api.get('/alumnos', {
+        params: { incluirInactivos: 'false' },
+      });
+
+      // El backend devuelve un array de alumnos
+      const alumnosData = response.data as any[];
+
+      // Mapear solo los datos necesarios
+      const alumnosLista = alumnosData.map((alumno: any) => ({
+        id_alumno: alumno.id_alumno,
+        nombre: alumno.nombre,
+        apellido: alumno.apellido,
+      }));
+
+      setAlumnos(alumnosLista);
+
+      // Auto-seleccionar "Todos" por defecto
+      if (alumnosLista.length > 0 && !alumnoSeleccionado) {
+        setAlumnoSeleccionado('todos');
+      }
+    } catch (error) {
+      console.error('Error al cargar lista de alumnos:', error);
+      toast.error('No se pudo cargar la lista de alumnos');
+    }
+  };
 
   const loadHistorial = async () => {
     if (!alumnoSeleccionado) return;
@@ -1027,68 +1093,61 @@ function HistorialAcademicoTab({ defaultYear }: { defaultYear: string }) {
     try {
       setIsLoading(true);
 
-      const alumnoId = parseInt(alumnoSeleccionado);
+      // Si se selecciona "Todos", cargar historial de todos los alumnos
+      if (alumnoSeleccionado === 'todos') {
+        // Cargar historial de todos los alumnos
+        const todosHistoriales: HistorialAcademico[] = [];
 
-      // Datos simulados de diferentes alumnos
-      const alumnos = [
-        { id: 1, nombre: 'Juan', apellido: 'Pérez' },
-        { id: 2, nombre: 'María', apellido: 'González' },
-        { id: 3, nombre: 'Carlos', apellido: 'Martínez' },
-      ];
+        for (const alumno of alumnos) {
+          try {
+            const response = (await promocionesService.getHistorialAcademico(
+              alumno.id_alumno
+            )) as any;
 
-      const alumno = alumnos.find((a) => a.id === alumnoId) || alumnos[0];
+            // Agregar nombre del alumno a cada registro
+            if (response.historial && response.historial.length > 0) {
+              const historialConAlumno = response.historial.map((h: any) => ({
+                ...h,
+                alumnoNombre: `${alumno.nombre} ${alumno.apellido}`,
+                alumnoId: alumno.id_alumno,
+              }));
+              todosHistoriales.push(...historialConAlumno);
+            }
+          } catch (error) {
+            console.error(
+              `Error al cargar historial de ${alumno.nombre}:`,
+              error
+            );
+          }
+        }
 
-      // Datos simulados de historial académico
-      const historialMock: HistorialAcademico[] = [
-        {
-          anioAcademico: '2025',
-          curso: {
-            nombre: 'Primer Grado',
-            seccion: 'A',
-            gradoAcademico: { nombre: 'Primer Grado' },
-          },
-          estadoFinal: 'APROBADO',
-          notaPromedio: alumnoId === 1 ? 8.5 : alumnoId === 2 ? 9.2 : 7.8,
-          fechaInicio: new Date('2025-01-15'),
-          fechaFin: new Date('2025-11-30'),
-          observaciones: 'Excelente rendimiento académico',
-        },
-        {
-          anioAcademico: '2024',
-          curso: {
-            nombre: 'Parvularia',
-            seccion: 'B',
-            gradoAcademico: { nombre: 'Parvularia' },
-          },
-          estadoFinal: 'APROBADO',
-          notaPromedio: alumnoId === 1 ? 9.0 : alumnoId === 2 ? 8.8 : 8.2,
-          fechaInicio: new Date('2024-01-15'),
-          fechaFin: new Date('2024-11-30'),
-          observaciones: 'Adaptación exitosa',
-        },
-        {
-          anioAcademico: '2023',
-          curso: {
-            nombre: 'Pre-kinder',
-            seccion: 'A',
-            gradoAcademico: { nombre: 'Pre-kinder' },
-          },
-          estadoFinal: 'APROBADO',
-          notaPromedio: alumnoId === 1 ? 8.7 : alumnoId === 2 ? 9.5 : 7.5,
-          fechaInicio: new Date('2023-01-15'),
-          fechaFin: new Date('2023-11-30'),
-          observaciones: 'Buen desempeño general',
-        },
-      ];
+        // Ordenar por año académico descendente
+        todosHistoriales.sort((a, b) =>
+          b.anioAcademico.localeCompare(a.anioAcademico)
+        );
 
-      // Simular info del alumno
-      setAlumnoInfo({
-        id_alumno: alumnoId,
-        nombre: alumno.nombre,
-        apellido: alumno.apellido,
-      });
+        setAlumnoInfo(null);
+        setHistorialAcademico(todosHistoriales);
 
-      setHistorialAcademico(historialMock);
+        if (todosHistoriales.length === 0) {
+          toast.info('No hay historial académico registrado');
+        }
+      } else {
+        // Cargar historial de un alumno específico
+        const alumnoId = parseInt(alumnoSeleccionado);
+
+        const response = (await promocionesService.getHistorialAcademico(
+          alumnoId
+        )) as any;
+
+        // Extraer datos del alumno y su historial
+        setAlumnoInfo(response.alumno || null);
+        setHistorialAcademico(response.historial || []);
+
+        if (!response.historial || response.historial.length === 0) {
+          toast.info('Este alumno no tiene historial académico registrado');
+        }
+      }
     } catch (error) {
       console.error('Error al cargar historial académico:', error);
       toast.error('No se pudo cargar el historial académico');
@@ -1100,7 +1159,7 @@ function HistorialAcademicoTab({ defaultYear }: { defaultYear: string }) {
   };
 
   useEffect(() => {
-    if (alumnoSeleccionado) {
+    if (alumnoSeleccionado && alumnos.length > 0) {
       loadHistorial();
     }
   }, [alumnoSeleccionado]);
@@ -1110,10 +1169,11 @@ function HistorialAcademicoTab({ defaultYear }: { defaultYear: string }) {
   };
 
   // Filtrar historial por año académico si no es "todos"
-  const historialFiltrado =
-    anioAcademico === 'todos'
+  const historialFiltrado = historialAcademico
+    ? anioAcademico === 'todos'
       ? historialAcademico
-      : historialAcademico.filter((h) => h.anioAcademico === anioAcademico);
+      : historialAcademico.filter((h) => h.anioAcademico === anioAcademico)
+    : [];
 
   return (
     <div className="space-y-4">
@@ -1128,9 +1188,21 @@ function HistorialAcademicoTab({ defaultYear }: { defaultYear: string }) {
               <SelectValue placeholder="Seleccione un alumno" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="1">Juan Pérez</SelectItem>
-              <SelectItem value="2">María González</SelectItem>
-              <SelectItem value="3">Carlos Martínez</SelectItem>
+              <SelectItem value="todos">Todos los alumnos</SelectItem>
+              {alumnos.length > 0 ? (
+                alumnos.map((alumno) => (
+                  <SelectItem
+                    key={alumno.id_alumno}
+                    value={alumno.id_alumno.toString()}
+                  >
+                    {alumno.nombre} {alumno.apellido}
+                  </SelectItem>
+                ))
+              ) : (
+                <SelectItem value="0" disabled>
+                  No hay alumnos disponibles
+                </SelectItem>
+              )}
             </SelectContent>
           </Select>
         </div>
@@ -1191,6 +1263,9 @@ function HistorialAcademicoTab({ defaultYear }: { defaultYear: string }) {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      {alumnoSeleccionado === 'todos' && (
+                        <TableHead>Alumno</TableHead>
+                      )}
                       <TableHead>Año Académico</TableHead>
                       <TableHead>Curso</TableHead>
                       <TableHead>Grado Académico</TableHead>
@@ -1204,13 +1279,14 @@ function HistorialAcademicoTab({ defaultYear }: { defaultYear: string }) {
                   <TableBody>
                     {historialFiltrado.map((registro, index) => (
                       <TableRow key={`${registro.anioAcademico}-${index}`}>
+                        {alumnoSeleccionado === 'todos' && (
+                          <TableCell className="font-medium">
+                            {registro.alumnoNombre || '-'}
+                          </TableCell>
+                        )}
                         <TableCell>{registro.anioAcademico}</TableCell>
-                        <TableCell>
-                          {registro.curso.nombre} {registro.curso.seccion || ''}
-                        </TableCell>
-                        <TableCell>
-                          {registro.curso.gradoAcademico.nombre}
-                        </TableCell>
+                        <TableCell>{registro.curso || '-'}</TableCell>
+                        <TableCell>{registro.gradoAcademico || '-'}</TableCell>
                         <TableCell>
                           {registro.estadoFinal ? (
                             <span
@@ -1252,9 +1328,11 @@ function HistorialAcademicoTab({ defaultYear }: { defaultYear: string }) {
             </div>
           ) : (
             <div className="text-center py-8 text-gray-500">
-              {alumnoSeleccionado
+              {alumnoSeleccionado && alumnoSeleccionado !== 'todos'
                 ? 'No hay registros de historial académico para este alumno'
-                : 'Ingrese un ID de alumno para ver su historial académico'}
+                : alumnoSeleccionado === 'todos'
+                  ? 'No hay registros de historial académico'
+                  : 'Seleccione un alumno para ver su historial'}
             </div>
           )}
         </>
@@ -1307,15 +1385,8 @@ function PromocionDialog({
   const loadCursos = async () => {
     try {
       setIsLoading(true);
-      // Datos simulados de cursos
-      const cursosMock: Curso[] = [
-        { id_curso: 1, nombre: 'Primer Grado', seccion: 'A', activo: true },
-        { id_curso: 2, nombre: 'Primer Grado', seccion: 'B', activo: true },
-        { id_curso: 3, nombre: 'Segundo Grado', seccion: 'A', activo: true },
-        { id_curso: 4, nombre: 'Tercer Grado', seccion: 'A', activo: true },
-        { id_curso: 5, nombre: 'Cuarto Grado', seccion: 'A', activo: true },
-      ];
-      setCursos(cursosMock);
+      const response = await cursosService.list({ activo: true });
+      setCursos(response.items);
     } catch (error) {
       console.error('Error al cargar cursos:', error);
       toast.error('No se pudieron cargar los cursos disponibles');
@@ -1333,17 +1404,34 @@ function PromocionDialog({
     try {
       setIsSubmitting(true);
 
-      // Simulación de promoción
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Preparar datos para el backend
+      const promoverDto = {
+        alumnoId: alumno.id_alumno,
+        cursoDestinoId: parseInt(cursoDestino),
+        anioActual: anioOrigen,
+        anioDestino: anioDestino,
+        estado: estado,
+        observaciones: observaciones.trim() || undefined,
+        notaPromedio: notaPromedio ? parseFloat(notaPromedio) : undefined,
+      };
+
+      console.log('📤 Datos enviados al backend:', promoverDto);
+
+      // Llamar al endpoint de promoción
+      const response = (await promocionesService.promoverAlumno(
+        promoverDto
+      )) as any;
 
       toast.success(
-        `${tipo === 'promocion' ? 'Promoción' : 'Traslado'} realizado con éxito`
+        `Alumno promovido exitosamente a ${response.cursoNuevo || 'nuevo curso'}`
       );
       onSuccess();
       onClose();
-    } catch (error) {
-      console.error(`Error al realizar ${tipo}:`, error);
-      toast.error(`No se pudo completar el ${tipo}`);
+    } catch (error: any) {
+      console.error('Error al promover alumno:', error);
+      const mensaje =
+        error.response?.data?.message || 'No se pudo completar la promoción';
+      toast.error(mensaje);
     } finally {
       setIsSubmitting(false);
     }
@@ -1353,28 +1441,21 @@ function PromocionDialog({
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle>
-            {tipo === 'promocion' ? 'Promover Alumno' : 'Trasladar Alumno'}
-          </DialogTitle>
+          <DialogTitle>Promover Alumno al Siguiente Grado</DialogTitle>
           <DialogDescription>
-            {tipo === 'promocion'
-              ? 'Complete los detalles para promover al alumno al siguiente nivel.'
-              : 'Complete los detalles para trasladar al alumno a otro curso.'}
+            El alumno pasó de grado y se reinscribió. Complete los detalles de
+            su promoción.
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
           {/* Datos del alumno */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             <div>
               <Label className="text-gray-500">Alumno</Label>
               <div className="font-medium mt-1">
                 {alumno.nombre} {alumno.apellido}
               </div>
-            </div>
-            <div>
-              <Label className="text-gray-500">Matrícula</Label>
-              <div className="font-medium mt-1">{alumno.numero_matricula}</div>
             </div>
           </div>
 
@@ -1414,29 +1495,25 @@ function PromocionDialog({
               </Select>
             </div>
             <div>
-              <Label htmlFor="anio-destino">Año Académico Destino</Label>
+              <Label htmlFor="anio-destino">Año Académico Nuevo</Label>
               <Select value={anioDestino} onValueChange={setAnioDestino}>
                 <SelectTrigger>
                   <SelectValue placeholder="Seleccione un año" />
                 </SelectTrigger>
                 <SelectContent>
-                  {tipo === 'promocion' ? (
-                    <>
-                      <SelectItem value={anioOrigen}>{anioOrigen}</SelectItem>
-                      <SelectItem value={(parseInt(anioOrigen) + 1).toString()}>
-                        {parseInt(anioOrigen) + 1}
-                      </SelectItem>
-                    </>
-                  ) : (
-                    <SelectItem value={anioOrigen}>{anioOrigen}</SelectItem>
-                  )}
+                  <SelectItem value={anioOrigen}>
+                    {anioOrigen} (Repite el mismo año)
+                  </SelectItem>
+                  <SelectItem value={(parseInt(anioOrigen) + 1).toString()}>
+                    {parseInt(anioOrigen) + 1} (Promoción normal)
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
 
           <div>
-            <Label htmlFor="estado">Estado</Label>
+            <Label htmlFor="estado">Estado de Promoción</Label>
             <Select
               value={estado}
               onValueChange={(value: 'APROBADO' | 'REPROBADO' | 'TRASLADADO') =>
@@ -1447,14 +1524,10 @@ function PromocionDialog({
                 <SelectValue placeholder="Seleccione un estado" />
               </SelectTrigger>
               <SelectContent>
-                {tipo === 'promocion' ? (
-                  <>
-                    <SelectItem value="APROBADO">APROBADO</SelectItem>
-                    <SelectItem value="REPROBADO">REPROBADO</SelectItem>
-                  </>
-                ) : (
-                  <SelectItem value="TRASLADADO">TRASLADADO</SelectItem>
-                )}
+                <SelectItem value="APROBADO">APROBADO</SelectItem>
+                <SelectItem value="REPROBADO">
+                  REPROBADO (Repite grado)
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -1492,9 +1565,10 @@ function PromocionDialog({
           <Button
             onClick={handleSubmit}
             disabled={isSubmitting || !cursoDestino}
+            className="bg-blue-600 hover:bg-blue-700"
           >
             {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {tipo === 'promocion' ? 'Promover' : 'Trasladar'}
+            Confirmar Promoción
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1502,7 +1576,217 @@ function PromocionDialog({
   );
 }
 
-// Diálogo de Finalización de Estudios
+// Diálogo para marcar alumno como No Reinscrito (Inactivo)
+interface NoReinscritoDialogProps {
+  alumno: AlumnoCurso;
+  open: boolean;
+  onClose: () => void;
+  cursoActual: Curso | undefined;
+  anioActual: string;
+  onSuccess: () => void;
+}
+
+function NoReinscritoDialog({
+  alumno,
+  open,
+  onClose,
+  cursoActual,
+  anioActual,
+  onSuccess,
+}: NoReinscritoDialogProps) {
+  const [observaciones, setObservaciones] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+
+  const handleConfirm = () => {
+    setShowConfirmDialog(true);
+  };
+
+  const handleSubmit = async () => {
+    console.log('🚀 Iniciando handleSubmit de No Reinscrito');
+    console.log('📋 Datos del alumno:', alumno);
+    console.log('📋 Curso actual:', cursoActual);
+    console.log('📋 Año actual:', anioActual);
+
+    if (!cursoActual?.id_curso) {
+      console.error('❌ Curso actual no disponible');
+      toast.error('Información del curso no disponible');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      console.log('⏳ isSubmitting = true');
+
+      // Preparar datos para el DTO FinalizarAlumnoDto
+      const finalizarDto = {
+        alumnoId: alumno.id_alumno,
+        anioActual: anioActual,
+        estado: 'NO_REINSCRITO', // Estado específico para no reinscritos
+        observaciones:
+          observaciones || 'No se reinscribió para el siguiente año académico',
+        marcarInactivo: true, // IMPORTANTE: Marca al alumno como inactivo
+      };
+
+      console.log('📤 Enviando datos al backend:', finalizarDto);
+
+      // Llamar al endpoint real de finalización
+      const response = await promocionesService.finalizarAlumno(finalizarDto);
+
+      console.log('✅ Respuesta exitosa del backend:', response);
+
+      toast.success(
+        `${alumno.nombre} ${alumno.apellido} marcado como No Reinscrito (Inactivo)`
+      );
+      onSuccess();
+      onClose();
+    } catch (error: any) {
+      console.error('❌ Error completo:', error);
+      console.error('❌ Error response:', error.response);
+      console.error('❌ Error response data:', error.response?.data);
+      console.error('❌ Error message:', error.message);
+
+      const mensaje =
+        error.response?.data?.message ||
+        error.message ||
+        'No se pudo completar la operación';
+      toast.error(`Error: ${mensaje}`);
+    } finally {
+      console.log('✅ Finalizando - isSubmitting = false');
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-yellow-600">
+            <ArrowRight className="h-5 w-5" />
+            Marcar como No Reinscrito
+          </DialogTitle>
+          <DialogDescription>
+            El alumno no se reinscribió para el siguiente año académico.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Datos del alumno */}
+          <div className="rounded-lg border bg-gray-50 p-3">
+            <div className="space-y-2">
+              <div>
+                <Label className="text-xs text-gray-600">Alumno</Label>
+                <p className="font-semibold">
+                  {alumno.nombre} {alumno.apellido}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs text-gray-600">Último Curso</Label>
+                  <p className="text-sm font-medium">
+                    {cursoActual?.nombre} {cursoActual?.seccion || ''}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-xs text-gray-600">Último Año</Label>
+                  <p className="text-sm font-medium">{anioActual}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Advertencia */}
+          <div className="flex gap-2 rounded-lg border border-yellow-200 bg-yellow-50 p-2.5">
+            <span className="text-lg">⚠️</span>
+            <p className="flex-1 text-xs text-yellow-800">
+              Esta acción marcará al alumno como INACTIVO. No aparecerá en
+              listas de cursos activos.
+            </p>
+          </div>
+
+          {/* Observaciones */}
+          <div className="space-y-2">
+            <Label htmlFor="observaciones-inactivo">
+              Motivo / Observaciones
+            </Label>
+            <Textarea
+              id="observaciones-inactivo"
+              value={observaciones}
+              onChange={(e) => setObservaciones(e.target.value)}
+              placeholder="Ejemplo: No se reinscribió, cambió de colegio..."
+              rows={3}
+              className="resize-none"
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-4">
+          <Button variant="outline" onClick={onClose} type="button">
+            Cancelar
+          </Button>
+          <Button onClick={handleConfirm} disabled={isSubmitting} type="button">
+            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Marcar como No Reinscrito
+          </Button>
+        </div>
+      </DialogContent>
+
+      {/* Diálogo de Confirmación */}
+      <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span className="text-2xl">⚠️</span>
+              Confirmar Acción
+            </DialogTitle>
+            <DialogDescription>
+              Confirme que desea marcar al alumno como no reinscrito.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-3">
+            <p className="text-sm">
+              ¿Está seguro de marcar a{' '}
+              <span className="font-semibold">
+                {alumno.nombre} {alumno.apellido}
+              </span>{' '}
+              como No Reinscrito?
+            </p>
+            <p className="mt-2 text-xs text-gray-600">
+              El alumno será marcado como INACTIVO.
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowConfirmDialog(false)}
+              disabled={isSubmitting}
+              type="button"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                setShowConfirmDialog(false);
+                handleSubmit();
+              }}
+              disabled={isSubmitting}
+              type="button"
+            >
+              {isSubmitting && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Sí, Confirmar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </Dialog>
+  );
+}
+
+// Diálogo de Finalización de Estudios (Graduación)
 interface FinalizarDialogProps {
   alumno: AlumnoCurso;
   open: boolean;
@@ -1525,6 +1809,11 @@ function FinalizarDialog({
   );
   const [observaciones, setObservaciones] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+
+  const handleConfirm = () => {
+    setShowConfirmDialog(true);
+  };
 
   const handleSubmit = async () => {
     if (!cursoActual?.id_curso) {
@@ -1535,15 +1824,35 @@ function FinalizarDialog({
     try {
       setIsSubmitting(true);
 
-      // Simulación de finalización
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Preparar datos para el DTO FinalizarAlumnoDto
+      const finalizarDto = {
+        alumnoId: alumno.id_alumno,
+        anioActual: anioActual,
+        estado: 'FINALIZADO', // Estado para graduados
+        notaPromedio: notaPromedio ? parseFloat(notaPromedio) : undefined,
+        observaciones:
+          observaciones || 'Completó todos sus estudios en la institución',
+        marcarInactivo: true, // IMPORTANTE: Marca al alumno como inactivo (ya no está en el sistema)
+      };
 
-      toast.success('Finalización de estudios registrada con éxito');
+      console.log('📤 Datos de Graduación:', finalizarDto);
+
+      // Llamar al endpoint real de finalización
+      const response = await promocionesService.finalizarAlumno(finalizarDto);
+
+      console.log('✅ Respuesta del backend:', response);
+
+      toast.success(
+        `🎓 ${alumno.nombre} ${alumno.apellido} ha finalizado sus estudios exitosamente`
+      );
       onSuccess();
       onClose();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error al finalizar estudios:', error);
-      toast.error('No se pudo completar la finalización de estudios');
+      const mensaje =
+        error.response?.data?.message ||
+        'No se pudo completar la finalización de estudios';
+      toast.error(mensaje);
     } finally {
       setIsSubmitting(false);
     }
@@ -1551,45 +1860,59 @@ function FinalizarDialog({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Finalizar Estudios</DialogTitle>
+          <DialogTitle className="flex items-center gap-2 text-green-600">
+            <GraduationCap className="h-5 w-5" />
+            Graduación - Finalizar Estudios
+          </DialogTitle>
           <DialogDescription>
-            Registre la finalización de estudios del alumno.
+            El alumno ha completado todos sus estudios exitosamente.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4 py-4">
+        <div className="space-y-4">
           {/* Datos del alumno */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label className="text-gray-500">Alumno</Label>
-              <div className="font-medium mt-1">
-                {alumno.nombre} {alumno.apellido}
+          <div className="rounded-lg border bg-gray-50 p-3">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <GraduationCap className="h-5 w-5 text-green-600" />
+                <div>
+                  <Label className="text-xs text-gray-600">
+                    Alumno Graduado
+                  </Label>
+                  <p className="font-semibold">
+                    {alumno.nombre} {alumno.apellido}
+                  </p>
+                </div>
               </div>
-            </div>
-            <div>
-              <Label className="text-gray-500">Matrícula</Label>
-              <div className="font-medium mt-1">{alumno.numero_matricula}</div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs text-gray-600">Último Curso</Label>
+                  <p className="text-sm font-medium">
+                    {cursoActual?.nombre} {cursoActual?.seccion || ''}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-xs text-gray-600">
+                    Año de Graduación
+                  </Label>
+                  <p className="text-sm font-medium">{anioActual}</p>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label className="text-gray-500">Curso Actual</Label>
-              <div className="font-medium mt-1">
-                {cursoActual?.nombre} {cursoActual?.seccion || ''}
-              </div>
-            </div>
-            <div>
-              <Label className="text-gray-500">Año Académico</Label>
-              <div className="font-medium mt-1">{anioActual}</div>
-            </div>
+          {/* Mensaje de éxito */}
+          <div className="flex gap-2 rounded-lg border border-green-200 bg-green-50 p-2.5">
+            <span className="text-lg">🎓</span>
+            <p className="flex-1 text-xs text-green-800">
+              Este alumno completó exitosamente todos sus estudios.
+            </p>
           </div>
 
-          <div className="border-t my-2"></div>
-
-          <div>
+          {/* Nota promedio */}
+          <div className="space-y-2">
             <Label htmlFor="nota-final">Nota Promedio Final</Label>
             <Input
               id="nota-final"
@@ -1603,28 +1926,84 @@ function FinalizarDialog({
             />
           </div>
 
-          <div>
-            <Label htmlFor="observaciones-final">Observaciones</Label>
+          {/* Observaciones */}
+          <div className="space-y-2">
+            <Label htmlFor="observaciones-final">
+              Felicitaciones / Observaciones
+            </Label>
             <Textarea
               id="observaciones-final"
               value={observaciones}
               onChange={(e) => setObservaciones(e.target.value)}
-              placeholder="Escriba las observaciones aquí"
+              placeholder="Ejemplo: Graduado con honores..."
               rows={3}
+              className="resize-none"
             />
           </div>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+        <div className="flex justify-end gap-2 pt-4">
+          <Button variant="outline" onClick={onClose} type="button">
             Cancelar
           </Button>
-          <Button onClick={handleSubmit} disabled={isSubmitting}>
+          <Button onClick={handleConfirm} disabled={isSubmitting} type="button">
             {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Finalizar Estudios
+            🎓 Registrar Graduación
           </Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
+
+      {/* Diálogo de Confirmación */}
+      <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span className="text-2xl">🎓</span>
+              Confirmar Graduación
+            </DialogTitle>
+            <DialogDescription>
+              Confirme que desea registrar la graduación del alumno.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-3">
+            <p className="text-sm">
+              ¿Está seguro de marcar a{' '}
+              <span className="font-semibold">
+                {alumno.nombre} {alumno.apellido}
+              </span>{' '}
+              como Graduado?
+            </p>
+            <p className="mt-2 text-xs text-gray-600">
+              El alumno será marcado como GRADUADO e INACTIVO.
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowConfirmDialog(false)}
+              disabled={isSubmitting}
+              type="button"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                setShowConfirmDialog(false);
+                handleSubmit();
+              }}
+              disabled={isSubmitting}
+              type="button"
+            >
+              {isSubmitting && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Sí, Confirmar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }
