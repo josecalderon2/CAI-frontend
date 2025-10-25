@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Button } from './ui/button';
 import {
   Table,
   TableBody,
@@ -9,6 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from './ui/table';
+import { Badge } from './ui/badge';
 import {
   Select,
   SelectContent,
@@ -38,10 +38,17 @@ export function HistorialAsignaciones() {
   const [filterCurso, setFilterCurso] = useState<string>('todos');
   const [filterEstado, setFilterEstado] = useState<string>('todos');
 
-  // Estados para paginación
+  // Paginación
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const itemsPerPage = 10;
+  const rowsPerPage = 10;
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredHistorial.length / rowsPerPage)
+  );
+  const paginatedHistorial = filteredHistorial.slice(
+    (page - 1) * rowsPerPage,
+    page * rowsPerPage
+  );
 
   useEffect(() => {
     loadHistorial();
@@ -58,52 +65,33 @@ export function HistorialAsignaciones() {
   // Efecto para manejar la búsqueda + filtros SIN debounce
   useEffect(() => {
     const q = norm(searchTerm);
-
     setFilteredHistorial(
       historial.filter((item) => {
-        // Campos a buscar (normalizados)
+        // ...existing code...
         const orientador = norm(item.orientador.nombreCompleto);
         const curso = norm(item.curso.nombre);
         const asignatura = norm(item.asignatura?.nombre || '');
-
-        // Coincidencia por texto (desde la 1ª letra)
         const matchesSearch =
           q === '' ||
           orientador.includes(q) ||
           curso.includes(q) ||
           asignatura.includes(q);
-
-        // Filtros adicionales
         const matchesOrientador =
           filterOrientador === 'todos' ||
           item.orientador.id_orientador.toString() === filterOrientador;
-
         const matchesCurso =
           filterCurso === 'todos' ||
           item.curso.id_curso.toString() === filterCurso;
-
         const matchesEstado =
           filterEstado === 'todos' ||
           (filterEstado === 'abierto' ? item.abierto : !item.abierto);
-
         return (
           matchesSearch && matchesOrientador && matchesCurso && matchesEstado
         );
       })
     );
+    setPage(1); // Reiniciar a la primera página si cambian los filtros
   }, [searchTerm, filterOrientador, filterCurso, filterEstado, historial]);
-
-  // Actualizar paginación cuando cambia el historial filtrado
-  useEffect(() => {
-    setTotalPages(Math.ceil(filteredHistorial.length / itemsPerPage));
-    setPage(1);
-  }, [filteredHistorial.length, itemsPerPage]);
-
-  // Obtener historial paginado
-  const paginatedHistorial = filteredHistorial.slice(
-    (page - 1) * itemsPerPage,
-    page * itemsPerPage
-  );
 
   const loadHistorial = async () => {
     try {
@@ -231,88 +219,98 @@ export function HistorialAsignaciones() {
               <p>No hay registros en el historial</p>
             </div>
           ) : (
-            <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Orientador</TableHead>
-                    <TableHead>Curso</TableHead>
-                    <TableHead>Asignatura</TableHead>
-                    <TableHead>Año Académico</TableHead>
-                    <TableHead>Rol</TableHead>
-                    <TableHead>Fecha Inicio</TableHead>
-                    <TableHead>Fecha Término</TableHead>
-                    <TableHead>Estado</TableHead>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Orientador</TableHead>
+                  <TableHead>Curso</TableHead>
+                  <TableHead>Asignatura</TableHead>
+                  <TableHead>Año Académico</TableHead>
+                  <TableHead>Cargo</TableHead>
+                  <TableHead>Fecha Inicio</TableHead>
+                  <TableHead>Fecha Término</TableHead>
+                  <TableHead>Estado</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {paginatedHistorial.map((item) => (
+                  <TableRow key={item.id_historial_curso_orientador}>
+                    <TableCell>{item.orientador.nombreCompleto}</TableCell>
+                    <TableCell>{item.curso.nombre}</TableCell>
+                    <TableCell>{item.asignatura?.nombre || 'N/A'}</TableCell>
+                    <TableCell>{item.anio_academico || 'N/A'}</TableCell>
+                    <TableCell>
+                      <Badge
+                        className={
+                          item.es_orientador
+                            ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                            : 'bg-orange-100 text-orange-800 hover:bg-orange-200'
+                        }
+                      >
+                        {item.es_orientador
+                          ? 'Orientador Principal'
+                          : 'Docente'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {formatDate(item.fecha_asignacion || '')}
+                    </TableCell>
+                    <TableCell>
+                      {item.fecha_fin ? formatDate(item.fecha_fin) : 'Vigente'}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        className={
+                          item.abierto
+                            ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                            : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                        }
+                      >
+                        {item.abierto ? 'Vigente' : 'Finalizado'}
+                      </Badge>
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginatedHistorial.map((item) => (
-                    <TableRow key={item.id_historial_curso_orientador}>
-                      <TableCell>{item.orientador.nombreCompleto}</TableCell>
-                      <TableCell>{item.curso.nombre}</TableCell>
-                      <TableCell>{item.asignatura?.nombre || 'N/A'}</TableCell>
-                      <TableCell>{item.anio_academico || 'N/A'}</TableCell>
-                      <TableCell>
-                        {item.es_orientador ? 'Orientador' : 'Docente'}
-                      </TableCell>
-                      <TableCell>
-                        {formatDate(item.fecha_asignacion || '')}
-                      </TableCell>
-                      <TableCell>
-                        {item.fecha_fin
-                          ? formatDate(item.fecha_fin)
-                          : 'Vigente'}
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={`px-2 py-1 rounded-full text-xs ${
-                            item.abierto
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-gray-100 text-gray-800'
-                          }`}
-                        >
-                          {item.abierto ? 'Vigente' : 'Finalizado'}
-                        </span>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                ))}
+              </TableBody>
+            </Table>
+          )}
 
-              {/* Controles de Paginación */}
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between px-2 py-4 mt-4">
-                  <div className="text-sm text-gray-500">
-                    Mostrando {(page - 1) * itemsPerPage + 1} a{' '}
-                    {Math.min(page * itemsPerPage, filteredHistorial.length)} de{' '}
-                    {filteredHistorial.length} registros
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPage((p) => Math.max(1, p - 1))}
-                      disabled={page === 1}
-                    >
-                      Anterior
-                    </Button>
-                    <div className="text-sm">
-                      Página {page} de {totalPages}
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        setPage((p) => Math.min(totalPages, p + 1))
-                      }
-                      disabled={page === totalPages}
-                    >
-                      Siguiente
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </>
+          {/* Paginación */}
+          {filteredHistorial.length > 0 && totalPages > 1 && (
+            <div className="flex items-center justify-between space-x-2 py-4">
+              <p className="text-sm text-gray-600">
+                Mostrando{' '}
+                <span className="font-semibold">
+                  {paginatedHistorial.length}
+                </span>{' '}
+                de{' '}
+                <span className="font-semibold">
+                  {filteredHistorial.length}
+                </span>{' '}
+                resultados
+              </p>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+                  disabled={page === 1}
+                  className="text-sm px-4 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Anterior
+                </button>
+                <span className="text-sm text-gray-700">
+                  Página {page} de {totalPages}
+                </span>
+                <button
+                  onClick={() =>
+                    setPage((prev) => (prev < totalPages ? prev + 1 : prev))
+                  }
+                  disabled={page >= totalPages}
+                  className="text-sm px-4 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Siguiente
+                </button>
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>
