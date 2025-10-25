@@ -152,7 +152,7 @@ export function Header({
                   Sistema de Gestión Académica
                 </h1>
                 <p className="text-sm text-gray-600 hidden sm:block">
-                  Colegio Amigos de Israel
+                  Colegio Amigos de Israel <strong> - CAI </strong>
                 </p>
               </div>
             </div>

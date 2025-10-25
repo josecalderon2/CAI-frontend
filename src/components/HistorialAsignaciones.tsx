@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-
+import { Button } from './ui/button';
 import {
   Table,
   TableBody,
@@ -37,6 +37,11 @@ export function HistorialAsignaciones() {
   const [filterOrientador, setFilterOrientador] = useState<string>('todos');
   const [filterCurso, setFilterCurso] = useState<string>('todos');
   const [filterEstado, setFilterEstado] = useState<string>('todos');
+
+  // Estados para paginación
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const itemsPerPage = 10;
 
   useEffect(() => {
     loadHistorial();
@@ -87,6 +92,18 @@ export function HistorialAsignaciones() {
       })
     );
   }, [searchTerm, filterOrientador, filterCurso, filterEstado, historial]);
+
+  // Actualizar paginación cuando cambia el historial filtrado
+  useEffect(() => {
+    setTotalPages(Math.ceil(filteredHistorial.length / itemsPerPage));
+    setPage(1);
+  }, [filteredHistorial.length, itemsPerPage]);
+
+  // Obtener historial paginado
+  const paginatedHistorial = filteredHistorial.slice(
+    (page - 1) * itemsPerPage,
+    page * itemsPerPage
+  );
 
   const loadHistorial = async () => {
     try {
@@ -214,50 +231,88 @@ export function HistorialAsignaciones() {
               <p>No hay registros en el historial</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Orientador</TableHead>
-                  <TableHead>Curso</TableHead>
-                  <TableHead>Asignatura</TableHead>
-                  <TableHead>Año Académico</TableHead>
-                  <TableHead>Rol</TableHead>
-                  <TableHead>Fecha Inicio</TableHead>
-                  <TableHead>Fecha Término</TableHead>
-                  <TableHead>Estado</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredHistorial.map((item) => (
-                  <TableRow key={item.id_historial_curso_orientador}>
-                    <TableCell>{item.orientador.nombreCompleto}</TableCell>
-                    <TableCell>{item.curso.nombre}</TableCell>
-                    <TableCell>{item.asignatura?.nombre || 'N/A'}</TableCell>
-                    <TableCell>{item.anio_academico || 'N/A'}</TableCell>
-                    <TableCell>
-                      {item.es_orientador ? 'Orientador' : 'Docente'}
-                    </TableCell>
-                    <TableCell>
-                      {formatDate(item.fecha_asignacion || '')}
-                    </TableCell>
-                    <TableCell>
-                      {item.fecha_fin ? formatDate(item.fecha_fin) : 'Vigente'}
-                    </TableCell>
-                    <TableCell>
-                      <span
-                        className={`px-2 py-1 rounded-full text-xs ${
-                          item.abierto
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-gray-100 text-gray-800'
-                        }`}
-                      >
-                        {item.abierto ? 'Vigente' : 'Finalizado'}
-                      </span>
-                    </TableCell>
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Orientador</TableHead>
+                    <TableHead>Curso</TableHead>
+                    <TableHead>Asignatura</TableHead>
+                    <TableHead>Año Académico</TableHead>
+                    <TableHead>Rol</TableHead>
+                    <TableHead>Fecha Inicio</TableHead>
+                    <TableHead>Fecha Término</TableHead>
+                    <TableHead>Estado</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {paginatedHistorial.map((item) => (
+                    <TableRow key={item.id_historial_curso_orientador}>
+                      <TableCell>{item.orientador.nombreCompleto}</TableCell>
+                      <TableCell>{item.curso.nombre}</TableCell>
+                      <TableCell>{item.asignatura?.nombre || 'N/A'}</TableCell>
+                      <TableCell>{item.anio_academico || 'N/A'}</TableCell>
+                      <TableCell>
+                        {item.es_orientador ? 'Orientador' : 'Docente'}
+                      </TableCell>
+                      <TableCell>
+                        {formatDate(item.fecha_asignacion || '')}
+                      </TableCell>
+                      <TableCell>
+                        {item.fecha_fin
+                          ? formatDate(item.fecha_fin)
+                          : 'Vigente'}
+                      </TableCell>
+                      <TableCell>
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs ${
+                            item.abierto
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-gray-100 text-gray-800'
+                          }`}
+                        >
+                          {item.abierto ? 'Vigente' : 'Finalizado'}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+
+              {/* Controles de Paginación */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between px-2 py-4 mt-4">
+                  <div className="text-sm text-gray-500">
+                    Mostrando {(page - 1) * itemsPerPage + 1} a{' '}
+                    {Math.min(page * itemsPerPage, filteredHistorial.length)} de{' '}
+                    {filteredHistorial.length} registros
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={page === 1}
+                    >
+                      Anterior
+                    </Button>
+                    <div className="text-sm">
+                      Página {page} de {totalPages}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setPage((p) => Math.min(totalPages, p + 1))
+                      }
+                      disabled={page === totalPages}
+                    >
+                      Siguiente
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>

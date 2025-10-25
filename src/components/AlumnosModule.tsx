@@ -18,6 +18,11 @@ import {
   actualizarSoloResponsable,
   actualizarRelacionResponsable,
 } from '../api/services/responsableService';
+import inscripcionesService, {
+  type InscripcionResponse,
+} from '../api/services/inscripcionesService';
+import { cursosService, type Curso } from '../api/services/cursosService';
+import promocionesService from '../api/services/promocionesService';
 import {
   Table,
   TableBody,
@@ -67,6 +72,10 @@ import {
   Building,
   Stethoscope,
   Save,
+  BookOpen,
+  Trash2,
+  Loader2,
+  RefreshCcw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { DatosResponsable } from '../types';
@@ -226,6 +235,22 @@ interface Alumno {
 
   // Responsables
   responsables: ResponsableCompleto[];
+
+  // Inscripción activa (opcional - para mostrar curso actual)
+  inscripcionActiva?: {
+    id: number;
+    cursoId: number;
+    anioAcademico: string;
+    estado: string;
+    curso?: {
+      id_curso: number;
+      nombre: string;
+      seccion?: string;
+      gradoAcademico?: {
+        nombre: string;
+      };
+    };
+  };
 }
 
 // Hook para debounce del término de búsqueda
@@ -239,6 +264,716 @@ const useDebounce = (value: string, delay: number) => {
   }, [value, delay]);
   return debouncedValue;
 };
+
+// Componente para la pestaña de Inscripciones
+function InscripcionesTab() {
+  const currentYear = new Date().getFullYear().toString();
+
+  const [alumnos, setAlumnos] = useState<any[]>([]);
+  const [cursos, setCursos] = useState<Curso[]>([]);
+  const [alumnoSeleccionado, setAlumnoSeleccionado] = useState<string>('');
+  const [inscripciones, setInscripciones] = useState<InscripcionResponse[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showInscribirDialog, setShowInscribirDialog] = useState(false);
+  const [busquedaNombre, setBusquedaNombre] = useState<string>('');
+  const [showRetirarDialog, setShowRetirarDialog] = useState(false);
+  const [inscripcionARetirar, setInscripcionARetirar] = useState<number | null>(
+    null
+  );
+
+  // Estados para nueva inscripción
+  const [cursoId, setCursoId] = useState<string>('');
+  const [anioAcademico, setAnioAcademico] = useState<string>(currentYear);
+  const [seccionAsignada, setSeccionAsignada] = useState<string>('');
+  const [observaciones, setObservaciones] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Estados para paginación
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const itemsPerPage = 10;
+
+  // Cargar alumnos y cursos al montar el componente
+  useEffect(() => {
+    loadAlumnos();
+    loadCursos();
+  }, []);
+
+  // Cargar inscripciones cuando se selecciona un alumno
+  useEffect(() => {
+    if (alumnoSeleccionado) {
+      loadInscripciones();
+      // Actualizar la inscripción activa del alumno seleccionado
+      actualizarInscripcionActivaAlumno();
+    }
+  }, [alumnoSeleccionado]);
+
+  const actualizarInscripcionActivaAlumno = async () => {
+    if (!alumnoSeleccionado) return;
+
+    try {
+      const inscripcionesResponse =
+        await inscripcionesService.obtenerInscripcionesAlumno(
+          parseInt(alumnoSeleccionado)
+        );
+      // Buscar cualquier inscripción ACTIVA (sin filtrar por año)
+      const inscripcionActiva = inscripcionesResponse.find(
+        (insc) => insc.estado === 'ACTIVO'
+      );
+
+      // Actualizar el alumno en la lista
+      setAlumnos((prevAlumnos) =>
+        prevAlumnos.map((alumno) =>
+          alumno.id_alumno.toString() === alumnoSeleccionado
+            ? { ...alumno, inscripcionActiva }
+            : alumno
+        )
+      );
+    } catch (error) {
+      console.error('Error al actualizar inscripción activa:', error);
+    }
+  };
+
+  const loadAlumnos = async () => {
+    try {
+      const response = await api.get('/alumnos', {
+        params: { incluirInactivos: false },
+      });
+
+      // Cargar inscripción activa para cada alumno
+      const alumnosConInscripciones = await Promise.all(
+        (response.data as any[]).map(async (alumno) => {
+          let inscripcionActiva = undefined;
+          try {
+            const inscripcionesResponse =
+              await inscripcionesService.obtenerInscripcionesAlumno(
+                alumno.id_alumno
+              );
+            // Buscar cualquier inscripción ACTIVA (sin filtrar por año)
+            inscripcionActiva = inscripcionesResponse.find(
+              (insc) => insc.estado === 'ACTIVO'
+            );
+          } catch (error) {
+            // Si hay error al cargar inscripciones, continuar sin ellas
+          }
+          return { ...alumno, inscripcionActiva };
+        })
+      );
+
+      setAlumnos(alumnosConInscripciones);
+    } catch (error) {
+      console.error('Error al cargar alumnos:', error);
+      toast.error('No se pudieron cargar los alumnos');
+    }
+  };
+
+  const loadCursos = async () => {
+    try {
+      const response = await cursosService.list({ activo: true });
+      setCursos(response.items);
+    } catch (error) {
+      console.error('Error al cargar cursos:', error);
+      toast.error('No se pudieron cargar los cursos');
+    }
+  };
+
+  const loadInscripciones = async () => {
+    if (!alumnoSeleccionado) return;
+
+    try {
+      setIsLoading(true);
+
+      if (alumnoSeleccionado === 'todos') {
+        // Cargar inscripciones de todos los alumnos
+        const todasInscripciones: InscripcionResponse[] = [];
+
+        for (const alumno of alumnosFiltrados) {
+          try {
+            const data = await inscripcionesService.obtenerInscripcionesAlumno(
+              alumno.id_alumno
+            );
+            // Agregar nombre del alumno a cada inscripción para mostrar en la tabla
+            const inscripcionesConAlumno = data.map((insc) => ({
+              ...insc,
+              alumnoNombre: `${alumno.nombre} ${alumno.apellido}`,
+              alumnoId: alumno.id_alumno,
+            }));
+            todasInscripciones.push(...inscripcionesConAlumno);
+          } catch (error) {
+            console.error(
+              `Error al cargar inscripciones de ${alumno.nombre}:`,
+              error
+            );
+          }
+        }
+
+        setInscripciones(todasInscripciones);
+      } else {
+        // Cargar inscripciones de un alumno específico
+        const data = await inscripcionesService.obtenerInscripcionesAlumno(
+          parseInt(alumnoSeleccionado)
+        );
+        setInscripciones(data);
+      }
+    } catch (error) {
+      console.error('Error al cargar inscripciones:', error);
+      toast.error('No se pudieron cargar las inscripciones');
+      setInscripciones([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleInscribir = async () => {
+    if (!alumnoSeleccionado || !cursoId || !anioAcademico) {
+      toast.error('Complete todos los campos obligatorios');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await inscripcionesService.inscribirAlumnoCurso(
+        parseInt(alumnoSeleccionado),
+        {
+          cursoId: parseInt(cursoId),
+          anioAcademico,
+          seccionAsignada: seccionAsignada || undefined,
+          observaciones: observaciones || undefined,
+        }
+      );
+
+      toast.success('Alumno inscrito exitosamente');
+      setShowInscribirDialog(false);
+      resetForm();
+      await loadAlumnos(); // Recargar alumnos para actualizar inscripción activa
+      loadInscripciones();
+    } catch (error: any) {
+      console.error('Error al inscribir alumno:', error);
+      const mensaje =
+        error.response?.data?.message || 'No se pudo inscribir al alumno';
+      toast.error(mensaje);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRetirar = async (inscripcionId: number) => {
+    setInscripcionARetirar(inscripcionId);
+    setShowRetirarDialog(true);
+  };
+
+  const confirmarRetiro = async () => {
+    if (!inscripcionARetirar) return;
+
+    try {
+      // Buscar la inscripción para obtener el año académico
+      const inscripcion = inscripciones.find(
+        (i) => i.id === inscripcionARetirar
+      );
+
+      if (!inscripcion) {
+        toast.error('No se encontró la inscripción');
+        return;
+      }
+
+      // Usar el mismo endpoint que en PromocionesModule para garantizar consistencia
+      await promocionesService.finalizarAlumno({
+        alumnoId: parseInt(alumnoSeleccionado),
+        anioActual: inscripcion.anioAcademico,
+        estado: 'NO REINSCRITO',
+        marcarInactivo: true,
+      });
+
+      toast.success('Alumno retirado del curso exitosamente');
+      await loadAlumnos(); // Recargar alumnos para actualizar inscripción activa
+      loadInscripciones();
+    } catch (error: any) {
+      console.error('Error al retirar alumno:', error);
+      const mensaje =
+        error.response?.data?.message || 'No se pudo retirar al alumno';
+      toast.error(mensaje);
+    } finally {
+      setShowRetirarDialog(false);
+      setInscripcionARetirar(null);
+    }
+  };
+
+  const handleReactivarAlumno = async () => {
+    if (!alumnoSeleccionado) return;
+
+    try {
+      await reactivarAlumno(parseInt(alumnoSeleccionado));
+      toast.success('Alumno reactivado exitosamente');
+      await loadAlumnos(); // Recargar alumnos
+      loadInscripciones(); // Recargar inscripciones
+    } catch (error: any) {
+      console.error('Error al reactivar alumno:', error);
+      const mensaje =
+        error.response?.data?.message || 'No se pudo reactivar al alumno';
+      toast.error(mensaje);
+    }
+  };
+
+  const resetForm = () => {
+    setCursoId('');
+    setAnioAcademico(currentYear);
+    setSeccionAsignada('');
+    setObservaciones('');
+  };
+
+  const alumnoInfo = alumnos.find(
+    (a) => a.id_alumno.toString() === alumnoSeleccionado
+  );
+
+  // Filtrar alumnos por búsqueda de nombre
+  const alumnosFiltrados = alumnos.filter((alumno) => {
+    // Filtro por nombre
+    const coincideNombre =
+      !busquedaNombre.trim() ||
+      `${alumno.nombre} ${alumno.apellido}`
+        .toLowerCase()
+        .includes(busquedaNombre.toLowerCase());
+
+    return coincideNombre;
+  });
+
+  // Auto-seleccionar alumno si solo hay un resultado en la búsqueda
+  useEffect(() => {
+    if (busquedaNombre.trim() && alumnosFiltrados.length === 1) {
+      // Si hay exactamente 1 resultado, seleccionarlo automáticamente
+      setAlumnoSeleccionado(alumnosFiltrados[0].id_alumno.toString());
+    } else if (!busquedaNombre.trim()) {
+      // Si el campo está vacío, limpiar la selección
+      setAlumnoSeleccionado('');
+    } else if (busquedaNombre.trim() && alumnosFiltrados.length === 0) {
+      // Si no hay resultados, limpiar selección
+      setAlumnoSeleccionado('');
+    }
+  }, [busquedaNombre, alumnosFiltrados.length]);
+
+  // Actualizar paginación cuando cambian las inscripciones
+  useEffect(() => {
+    setTotalPages(Math.ceil(inscripciones.length / itemsPerPage));
+    setPage(1);
+  }, [inscripciones.length, itemsPerPage]);
+
+  // Obtener inscripciones paginadas
+  const paginatedInscripciones = inscripciones.slice(
+    (page - 1) * itemsPerPage,
+    page * itemsPerPage
+  );
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-2xl font-bold flex items-center gap-2">
+            <BookOpen className="h-6 w-6" />
+            Gestión de Inscripciones a Cursos
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Filtros en una sola línea */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {/* Campo de búsqueda por nombre */}
+            <div className="space-y-1">
+              <Label htmlFor="busqueda-nombre" className="text-xs">
+                Buscar por nombre
+              </Label>
+              <Input
+                id="busqueda-nombre"
+                type="text"
+                placeholder="Nombre del alumno..."
+                value={busquedaNombre}
+                onChange={(e) => setBusquedaNombre(e.target.value)}
+                className="h-9"
+              />
+            </div>
+
+            {/* Selector de alumno */}
+            <div className="space-y-1">
+              <Label htmlFor="alumno" className="text-xs">
+                Seleccionar Alumno
+              </Label>
+              <Select
+                value={alumnoSeleccionado}
+                onValueChange={setAlumnoSeleccionado}
+              >
+                <SelectTrigger id="alumno" className="h-9">
+                  <SelectValue placeholder="Seleccione un alumno" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos los alumnos</SelectItem>
+                  {alumnosFiltrados.map((alumno) => (
+                    <SelectItem
+                      key={alumno.id_alumno}
+                      value={alumno.id_alumno.toString()}
+                    >
+                      {alumno.nombre} {alumno.apellido}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Información de resultados y botón */}
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-gray-600">
+              {busquedaNombre ? (
+                <>
+                  {alumnosFiltrados.length === 0 ? (
+                    <span className="text-red-500">
+                      No se encontraron alumnos con ese nombre
+                    </span>
+                  ) : (
+                    <span>
+                      {alumnosFiltrados.length} alumno(s) encontrado(s)
+                    </span>
+                  )}
+                </>
+              ) : null}
+            </div>
+
+            {alumnoSeleccionado && alumnoSeleccionado !== 'todos' && (
+              <Button
+                onClick={() => setShowInscribirDialog(true)}
+                className="bg-blue-600 hover:bg-blue-700 h-9"
+                disabled={alumnoInfo && !alumnoInfo.activo}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                {alumnoInfo && !alumnoInfo.activo
+                  ? 'Alumno Inactivo'
+                  : 'Nueva Inscripción'}
+              </Button>
+            )}
+          </div>
+
+          {/* Información del alumno seleccionado */}
+          {alumnoInfo && alumnoSeleccionado !== 'todos' && (
+            <Card className="bg-blue-50">
+              <CardContent className="p-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600">Nombre completo</p>
+                    <p className="font-medium">
+                      {alumnoInfo.nombre} {alumnoInfo.apellido}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Curso Actual</p>
+                    <p className="font-medium">
+                      {alumnoInfo.inscripcionActiva?.curso?.nombre
+                        ? `${alumnoInfo.inscripcionActiva.curso.nombre} ${alumnoInfo.inscripcionActiva.curso.seccion || ''}`.trim()
+                        : '-'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Grado Académico</p>
+                    <p className="font-medium">
+                      {alumnoInfo.inscripcionActiva?.curso?.gradoAcademico
+                        ?.nombre || '-'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Estado</p>
+                    <Badge
+                      variant={alumnoInfo.activo ? 'success' : 'destructive'}
+                    >
+                      {alumnoInfo.activo ? 'ACTIVO' : 'INACTIVO'}
+                    </Badge>
+                  </div>
+                </div>
+
+                {/* Botón para reactivar alumno si está inactivo */}
+                {!alumnoInfo.activo && (
+                  <div className="mt-4 pt-4 border-t">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleReactivarAlumno}
+                      className="w-full bg-green-50 hover:bg-green-100 border-green-200 text-green-700"
+                    >
+                      <RefreshCcw className="w-4 h-4 mr-2" />
+                      Reactivar Alumno
+                    </Button>
+                    <p className="text-xs text-gray-500 mt-2 text-center">
+                      Al reactivar, podrás inscribir al alumno nuevamente
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Tabla de inscripciones */}
+          {alumnoSeleccionado && (
+            <>
+              {isLoading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
+                </div>
+              ) : inscripciones.length > 0 ? (
+                <>
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          {alumnoSeleccionado === 'todos' && (
+                            <TableHead>Alumno</TableHead>
+                          )}
+                          <TableHead>Curso / Sección</TableHead>
+                          <TableHead>Grado Académico</TableHead>
+                          <TableHead>Año Académico</TableHead>
+                          <TableHead>Estado</TableHead>
+                          <TableHead>Fecha Inscripción</TableHead>
+                          <TableHead>Fecha Retiro</TableHead>
+                          <TableHead>Observaciones</TableHead>
+                          <TableHead className="text-right">Acciones</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {paginatedInscripciones.map((inscripcion) => (
+                          <TableRow key={inscripcion.id}>
+                            {alumnoSeleccionado === 'todos' && (
+                              <TableCell className="font-medium">
+                                {(inscripcion as any).alumnoNombre || '-'}
+                              </TableCell>
+                            )}
+                            <TableCell className="font-medium">
+                              {inscripcion.curso?.nombre || '-'}
+                              {(inscripcion.seccionAsignada ||
+                                inscripcion.curso?.seccion) &&
+                                ` - ${inscripcion.seccionAsignada || inscripcion.curso?.seccion}`}
+                            </TableCell>
+                            <TableCell>
+                              {inscripcion.curso?.gradoAcademico?.nombre || '-'}
+                            </TableCell>
+                            <TableCell>{inscripcion.anioAcademico}</TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={
+                                  inscripcion.estado === 'ACTIVO'
+                                    ? 'success'
+                                    : 'destructive'
+                                }
+                              >
+                                {inscripcion.estado}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {new Date(
+                                inscripcion.fechaInscripcion
+                              ).toLocaleDateString('es-SV')}
+                            </TableCell>
+                            <TableCell>
+                              {inscripcion.fechaRetiro
+                                ? new Date(
+                                    inscripcion.fechaRetiro
+                                  ).toLocaleDateString('es-SV')
+                                : '-'}
+                            </TableCell>
+                            <TableCell>
+                              {inscripcion.observaciones || '-'}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {inscripcion.estado === 'ACTIVO' && (
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => handleRetirar(inscripcion.id)}
+                                >
+                                  <Trash2 className="w-4 h-4 mr-1" />
+                                  Retirar
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {/* Controles de Paginación */}
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between px-2 py-4">
+                      <div className="text-sm text-gray-500">
+                        Mostrando {(page - 1) * itemsPerPage + 1} a{' '}
+                        {Math.min(page * itemsPerPage, inscripciones.length)} de{' '}
+                        {inscripciones.length} inscripciones
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setPage((p) => Math.max(1, p - 1))}
+                          disabled={page === 1}
+                        >
+                          Anterior
+                        </Button>
+                        <div className="text-sm">
+                          Página {page} de {totalPages}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            setPage((p) => Math.min(totalPages, p + 1))
+                          }
+                          disabled={page === totalPages}
+                        >
+                          Siguiente
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  Este alumno no tiene inscripciones registradas
+                </div>
+              )}
+            </>
+          )}
+
+          {!alumnoSeleccionado && (
+            <div className="text-center py-8 text-gray-500">
+              Seleccione un alumno para ver sus inscripciones
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Dialog para nueva inscripción */}
+      <Dialog open={showInscribirDialog} onOpenChange={setShowInscribirDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Inscribir Alumno a Curso</DialogTitle>
+            <DialogDescription>
+              Complete los datos para inscribir al alumno en un nuevo curso
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="curso">Curso *</Label>
+              <Select value={cursoId} onValueChange={setCursoId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccione un curso" />
+                </SelectTrigger>
+                <SelectContent>
+                  {cursos.map((curso) => (
+                    <SelectItem
+                      key={curso.id_curso}
+                      value={curso.id_curso?.toString() || ''}
+                    >
+                      {curso.nombre} {curso.seccion || ''} -{' '}
+                      {curso.gradoAcademico?.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="anio">Año Académico *</Label>
+              <Select value={anioAcademico} onValueChange={setAnioAcademico}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccione un año" />
+                </SelectTrigger>
+                <SelectContent>
+                  {[
+                    parseInt(currentYear) - 1,
+                    parseInt(currentYear),
+                    parseInt(currentYear) + 1,
+                  ].map((year) => (
+                    <SelectItem key={year} value={year.toString()}>
+                      {year}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="obs">Observaciones</Label>
+              <Textarea
+                id="obs"
+                value={observaciones}
+                onChange={(e) => setObservaciones(e.target.value)}
+                placeholder="Observaciones sobre la inscripción"
+                rows={3}
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 mt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowInscribirDialog(false);
+                resetForm();
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleInscribir}
+              disabled={isSubmitting || !cursoId || !anioAcademico}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {isSubmitting && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Inscribir
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de confirmación para retirar */}
+      <Dialog open={showRetirarDialog} onOpenChange={setShowRetirarDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-red-600">
+              Confirmar Retiro
+            </DialogTitle>
+            <DialogDescription className="pt-4">
+              ¿Está seguro de retirar al alumno de este curso?
+              <br />
+              <br />
+              Esta acción marcará la inscripción como inactiva y registrará la
+              fecha de retiro.
+              <br />
+              <br />
+              <span className="font-semibold text-gray-700">
+                Esta acción no se puede deshacer.
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowRetirarDialog(false);
+                setInscripcionARetirar(null);
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={confirmarRetiro}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              Sí, Retirar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
 
 export function AlumnosModule() {
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
@@ -270,24 +1005,70 @@ export function AlumnosModule() {
         params: { incluirInactivos: true },
       });
 
-      // Aseguramos que cada alumno tenga la propiedad responsables definida
-      const alumnosData = (response.data as Alumno[]).map((alumno) => {
-        return {
-          ...alumno,
-          responsables: alumno.responsables || [],
-          detalle: alumno.detalle || {
-            viveCon: '',
-            dependenciaEconomica: '',
-            capacidadPago: false,
-            tieneHermanosEnColegio: false,
-            hermanosEnColegio: [],
-          },
-        };
-      });
+      const currentYear = new Date().getFullYear().toString();
+      console.log(' Año actual:', currentYear);
 
-      setAlumnos(alumnosData);
-      setTotalItems(alumnosData.length);
-      setTotalPages(Math.ceil(alumnosData.length / itemsPerPage));
+      // Aseguramos que cada alumno tenga la propiedad responsables definida
+      // Y cargamos su inscripción activa
+      const alumnosConInscripciones = await Promise.all(
+        (response.data as Alumno[]).map(async (alumno) => {
+          // Cargar inscripciones del alumno
+          let inscripcionActiva = undefined;
+          try {
+            const inscripcionesResponse =
+              await inscripcionesService.obtenerInscripcionesAlumno(
+                alumno.id_alumno
+              );
+
+            console.log(
+              ` Inscripciones de ${alumno.nombre}:`,
+              inscripcionesResponse
+            );
+
+            // Buscar la inscripción activa del año actual
+            inscripcionActiva = inscripcionesResponse.find(
+              (insc) =>
+                insc.estado === 'ACTIVO' && insc.anioAcademico === currentYear
+            );
+
+            if (inscripcionActiva) {
+              console.log(
+                ` Inscripción activa encontrada para ${alumno.nombre}:`,
+                inscripcionActiva
+              );
+            } else {
+              console.log(
+                ` No se encontró inscripción activa para ${alumno.nombre} en ${currentYear}`
+              );
+            }
+          } catch (error) {
+            // Si hay error al cargar inscripciones, continuamos sin ellas
+            console.log(
+              ` Error al cargar inscripciones del alumno ${alumno.id_alumno}:`,
+              error
+            );
+          }
+
+          return {
+            ...alumno,
+            responsables: alumno.responsables || [],
+            detalle: alumno.detalle || {
+              viveCon: '',
+              dependenciaEconomica: '',
+              capacidadPago: false,
+              tieneHermanosEnColegio: false,
+              hermanosEnColegio: [],
+            },
+            inscripcionActiva,
+          };
+        })
+      );
+
+      console.log(' Alumnos con inscripciones:', alumnosConInscripciones);
+
+      setAlumnos(alumnosConInscripciones);
+      setTotalItems(alumnosConInscripciones.length);
+      setTotalPages(Math.ceil(alumnosConInscripciones.length / itemsPerPage));
       setError(null);
     } catch (err) {
       setError('Error al cargar los alumnos. Intente de nuevo más tarde.');
@@ -369,7 +1150,7 @@ export function AlumnosModule() {
     nivel: 'basica' as 'parvularia' | 'basica' | 'media',
     grado: '',
     seccion: '',
-    fechaIngreso: '',
+    fechaIngreso: new Date().toISOString().split('T')[0],
     repiteGrado: false,
     condicionado: false,
 
@@ -460,7 +1241,7 @@ export function AlumnosModule() {
       nivel: 'basica',
       grado: '',
       seccion: '',
-      fechaIngreso: '',
+      fechaIngreso: new Date().toISOString().split('T')[0],
       repiteGrado: false,
       condicionado: false,
       viveCon: '',
@@ -2220,7 +3001,7 @@ export function AlumnosModule() {
           nivel: 'basica',
           grado: '',
           seccion: '',
-          fechaIngreso: '',
+          fechaIngreso: new Date().toISOString().split('T')[0],
           repiteGrado: false,
           condicionado: false,
           viveCon: '',
@@ -2364,14 +3145,21 @@ export function AlumnosModule() {
   return (
     <div className="p-6 space-y-6">
       <Tabs defaultValue="gestion" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 mb-6">
+        <TabsList className="grid w-full grid-cols-3 mb-6">
           <TabsTrigger value="gestion" className="flex items-center gap-2">
             <User className="w-4 h-4" />
             Gestión de Alumnos
           </TabsTrigger>
+          <TabsTrigger
+            value="inscripciones"
+            className="flex items-center gap-2"
+          >
+            <FileText className="w-4 h-4" />
+            Inscripciones a Cursos
+          </TabsTrigger>
           <TabsTrigger value="promociones" className="flex items-center gap-2">
             <GraduationCap className="w-4 h-4" />
-            Promociones y Traslados
+            Promociones
           </TabsTrigger>
         </TabsList>
 
@@ -2415,9 +3203,9 @@ export function AlumnosModule() {
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-600">Parvularia</p>
+                    <p className="text-sm text-gray-600">Alumnos Activos</p>
                     <p className="text-2xl font-bold text-green-600">
-                      {alumnos.filter((a) => a.nivel === 'parvularia').length}
+                      {alumnos.filter((a) => a.activo).length}
                     </p>
                   </div>
                   <User className="w-8 h-8 text-green-600" />
@@ -2429,9 +3217,15 @@ export function AlumnosModule() {
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-600">Básica</p>
+                    <p className="text-sm text-gray-600">Con Inscripción</p>
                     <p className="text-2xl font-bold text-purple-600">
-                      {alumnos.filter((a) => a.nivel === 'basica').length}
+                      {
+                        alumnos.filter(
+                          (a) =>
+                            a.inscripcionActiva &&
+                            a.inscripcionActiva.estado === 'ACTIVO'
+                        ).length
+                      }
                     </p>
                   </div>
                   <GraduationCap className="w-8 h-8 text-purple-600" />
@@ -2439,16 +3233,16 @@ export function AlumnosModule() {
               </CardContent>
             </Card>
 
-            <Card className="border-l-4 border-l-orange-600">
+            <Card className="border-l-4 border-l-red-600">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-600">Media</p>
-                    <p className="text-2xl font-bold text-orange-600">
-                      {alumnos.filter((a) => a.nivel === 'media').length}
+                    <p className="text-sm text-gray-600">Alumnos Inactivos</p>
+                    <p className="text-2xl font-bold text-red-600">
+                      {alumnos.filter((a) => !a.activo).length}
                     </p>
                   </div>
-                  <User className="w-8 h-8 text-orange-600" />
+                  <User className="w-8 h-8 text-red-600" />
                 </div>
               </CardContent>
             </Card>
@@ -2523,7 +3317,7 @@ export function AlumnosModule() {
                   <TableRow>
                     <TableHead>Nombre Completo</TableHead>
                     <TableHead>Edad</TableHead>
-                    <TableHead>Nivel/Grado</TableHead>
+                    <TableHead>Curso / Grado Académico</TableHead>
                     <TableHead>Responsable Principal</TableHead>
                     <TableHead>Estado</TableHead>
                     <TableHead>Acciones</TableHead>
@@ -2624,9 +3418,6 @@ export function AlumnosModule() {
                               <p className="font-medium">
                                 {alumno.nombre} {alumno.apellido}
                               </p>
-                              <p className="text-sm text-gray-500">
-                                {alumno.grado}° {alumno.seccion}
-                              </p>
                             </div>
                           </TableCell>
                           <TableCell>
@@ -2635,9 +3426,23 @@ export function AlumnosModule() {
                               : 'No registrado'}
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline" className="capitalize">
-                              {alumno.nivel} - {alumno.grado}°
-                            </Badge>
+                            {alumno.inscripcionActiva?.curso ? (
+                              <div className="space-y-1">
+                                <p className="font-medium text-sm">
+                                  {alumno.inscripcionActiva.curso.nombre}
+                                  {alumno.inscripcionActiva.curso.seccion &&
+                                    ` ${alumno.inscripcionActiva.curso.seccion}`}
+                                </p>
+                                <Badge variant="outline" className="text-xs">
+                                  {alumno.inscripcionActiva.curso.gradoAcademico
+                                    ?.nombre || 'Sin grado'}
+                                </Badge>
+                              </div>
+                            ) : (
+                              <span className="text-sm text-gray-500">
+                                Sin inscripción activa
+                              </span>
+                            )}
                           </TableCell>
                           <TableCell>
                             <div>
@@ -3353,55 +4158,37 @@ export function AlumnosModule() {
 
                   {/* Tab: Estado Académico */}
                   <TabsContent value="academico" className="space-y-4 mt-4">
+                    {/* Mensaje informativo */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                      <div className="flex items-start space-x-3">
+                        <div className="flex-shrink-0">
+                          <svg
+                            className="w-5 h-5 text-blue-600 mt-0.5"
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="text-sm font-medium text-blue-900 mb-1">
+                            Información Académica
+                          </h4>
+                          <p className="text-sm text-blue-700">
+                            La asignación de curso, grado y sección se realiza
+                            desde la pestaña{' '}
+                            <span className="font-semibold">Inscripciones</span>{' '}
+                            después de registrar al alumno.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="nivel">Nivel Educativo</Label>
-                        <Select
-                          value={formData.nivel}
-                          onValueChange={(
-                            value: 'parvularia' | 'basica' | 'media'
-                          ) => setFormData({ ...formData, nivel: value })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Seleccionar nivel" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="parvularia">
-                              Parvularia
-                            </SelectItem>
-                            <SelectItem value="basica">Básica</SelectItem>
-                            <SelectItem value="media">Media</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div>
-                        <Label htmlFor="grado">Grado</Label>
-                        <Input
-                          id="grado"
-                          value={formData.grado}
-                          onChange={(e) =>
-                            setFormData({ ...formData, grado: e.target.value })
-                          }
-                          placeholder="8"
-                        />
-                      </div>
-
-                      <div>
-                        <Label htmlFor="seccion">Sección</Label>
-                        <Input
-                          id="seccion"
-                          value={formData.seccion}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              seccion: e.target.value,
-                            })
-                          }
-                          placeholder="A"
-                        />
-                      </div>
-
                       <div>
                         <Label htmlFor="fechaIngreso">Fecha de Ingreso</Label>
                         <Input
@@ -3417,29 +4204,34 @@ export function AlumnosModule() {
                         />
                       </div>
 
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="repiteGrado"
-                          checked={formData.repiteGrado}
-                          onCheckedChange={(checked) =>
-                            setFormData({ ...formData, repiteGrado: !!checked })
-                          }
-                        />
-                        <Label htmlFor="repiteGrado">Repite Grado</Label>
-                      </div>
+                      <div className="flex items-center gap-6">
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id="repiteGrado"
+                            checked={formData.repiteGrado}
+                            onCheckedChange={(checked) =>
+                              setFormData({
+                                ...formData,
+                                repiteGrado: !!checked,
+                              })
+                            }
+                          />
+                          <Label htmlFor="repiteGrado">Repite Grado</Label>
+                        </div>
 
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="condicionado"
-                          checked={formData.condicionado}
-                          onCheckedChange={(checked) =>
-                            setFormData({
-                              ...formData,
-                              condicionado: !!checked,
-                            })
-                          }
-                        />
-                        <Label htmlFor="condicionado">Condicionado</Label>
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id="condicionado"
+                            checked={formData.condicionado}
+                            onCheckedChange={(checked) =>
+                              setFormData({
+                                ...formData,
+                                condicionado: !!checked,
+                              })
+                            }
+                          />
+                          <Label htmlFor="condicionado">Condicionado</Label>
+                        </div>
                       </div>
                     </div>
                   </TabsContent>
@@ -3604,6 +4396,40 @@ export function AlumnosModule() {
 
                   {/* Tab: Responsables */}
                   <TabsContent value="responsables" className="space-y-4 mt-4">
+                    {/* Mensaje informativo */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <div className="flex items-start space-x-3">
+                        <div className="flex-shrink-0">
+                          <svg
+                            className="w-5 h-5 text-blue-600 mt-0.5"
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="text-sm font-medium text-blue-900 mb-1">
+                            Cómo agregar responsables
+                          </h4>
+                          <p className="text-sm text-blue-700">
+                            Complete los datos del responsable y presione{' '}
+                            <span className="font-semibold">
+                              "Guardar Responsable"
+                            </span>{' '}
+                            para agregarlo a la lista. Puede agregar múltiples
+                            responsables. Al finalizar, presione{' '}
+                            <span className="font-semibold">"Registrar"</span>{' '}
+                            para guardar el alumno con todos sus responsables.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
                     <div className="flex justify-between items-center">
                       <h3 className="text-lg font-medium">
                         Responsables del Alumno
@@ -4614,26 +5440,31 @@ export function AlumnosModule() {
                         <CardContent className="space-y-3">
                           <div>
                             <p className="text-sm text-gray-500">
-                              Nivel Educativo
+                              Grado Académico
                             </p>
                             <p className="font-medium capitalize">
-                              {selectedAlumno.nivel}
+                              {selectedAlumno.inscripcionActiva?.curso
+                                ?.gradoAcademico?.nombre ||
+                                'Sin inscripción activa'}
                             </p>
                           </div>
                           <div>
                             <p className="text-sm text-gray-500">
-                              Grado y Sección
+                              Curso / Sección
                             </p>
                             <p className="font-medium">
-                              {selectedAlumno.grado}° {selectedAlumno.seccion}
+                              {selectedAlumno.inscripcionActiva?.curso?.nombre
+                                ? `${selectedAlumno.inscripcionActiva.curso.nombre} ${selectedAlumno.inscripcionActiva.curso.seccion || ''}`.trim()
+                                : 'Sin inscripción activa'}
                             </p>
                           </div>
                           <div>
                             <p className="text-sm text-gray-500">
-                              Fecha de Ingreso
+                              Año Académico
                             </p>
                             <p className="font-medium">
-                              {selectedAlumno.fechaIngreso}
+                              {selectedAlumno.inscripcionActiva
+                                ?.anioAcademico || 'No disponible'}
                             </p>
                           </div>
                           <div className="flex space-x-4">
@@ -4991,6 +5822,10 @@ export function AlumnosModule() {
               </div>
             </DialogContent>
           </Dialog>
+        </TabsContent>
+
+        <TabsContent value="inscripciones">
+          <InscripcionesTab />
         </TabsContent>
 
         <TabsContent value="promociones">

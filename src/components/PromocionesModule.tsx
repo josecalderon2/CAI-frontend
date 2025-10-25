@@ -28,12 +28,12 @@ import {
   Users,
   UserCheck,
   Loader2,
+  Trash2,
 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from './ui/dialog';
@@ -85,6 +85,21 @@ const formatDate = (date: string | Date): string => {
     month: '2-digit',
     day: '2-digit',
   });
+};
+
+// Función helper para normalizar estados
+const normalizeEstado = (estado: string | null): string => {
+  if (!estado) return 'En curso';
+
+  const estadosMap: { [key: string]: string } = {
+    APROBADO: 'Aprobado',
+    REPROBADO: 'Reprobado',
+    FINALIZADO: 'Graduado',
+    'NO REINSCRITO': 'Retirado',
+    NO_REINSCRITO: 'Retirado',
+  };
+
+  return estadosMap[estado.toUpperCase()] || estado;
 };
 
 export function PromocionesModule() {
@@ -405,20 +420,7 @@ function AlumnosPorCursoTab({ defaultYear }: { defaultYear: string }) {
                   </label>
                 </div>
 
-                <div className="space-x-2">
-                  <Button
-                    variant="outline"
-                    disabled={alumnosSeleccionados.length === 0}
-                    onClick={() =>
-                      toast.info(
-                        "Promoción masiva disponible en la pestaña 'Promoción Masiva'"
-                      )
-                    }
-                  >
-                    <ArrowUpRight className="h-4 w-4 mr-2" />
-                    Acciones Masivas
-                  </Button>
-                </div>
+                <div className="space-x-2"></div>
               </div>
 
               <div className="rounded-md border">
@@ -490,12 +492,11 @@ function AlumnosPorCursoTab({ defaultYear }: { defaultYear: string }) {
                             </Button>
                             <Button
                               size="sm"
-                              variant="outline"
+                              variant="destructive"
                               onClick={() => abrirDialogoTraslado(alumno)}
-                              className="bg-yellow-50 hover:bg-yellow-100 border-yellow-200"
                             >
-                              <ArrowRight className="h-4 w-4 mr-1" />
-                              No Reinscrito
+                              <Trash2 className="h-4 w-4 mr-1" />
+                              Retirar
                             </Button>
                             <Button
                               size="sm"
@@ -628,11 +629,6 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Estados para paginación
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const itemsPerPage = 10;
-
   // Estado para almacenar notas y observaciones por alumno
   const [alumnosData, setAlumnosData] = useState<{
     [id_alumno: number]: {
@@ -685,8 +681,6 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
 
       setAlumnos(response.items);
       setAlumnosSeleccionados([]);
-      setTotalPages(Math.ceil(response.items.length / itemsPerPage));
-      setPage(1);
 
       // Inicializa el estado para cada alumno
       const initialData: { [id: number]: any } = {};
@@ -717,10 +711,10 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
   };
 
   const handleSelectAllChange = () => {
-    if (alumnosSeleccionados.length === paginatedAlumnos.length) {
+    if (alumnosSeleccionados.length === alumnos.length) {
       setAlumnosSeleccionados([]);
     } else {
-      setAlumnosSeleccionados(paginatedAlumnos.map((a) => a.id_alumno));
+      setAlumnosSeleccionados(alumnos.map((a) => a.id_alumno));
     }
   };
 
@@ -837,12 +831,6 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
     }
   };
 
-  // Obtener alumnos paginados
-  const paginatedAlumnos = alumnos.slice(
-    (page - 1) * itemsPerPage,
-    page * itemsPerPage
-  );
-
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
@@ -943,8 +931,8 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
                 <div className="flex items-center space-x-2">
                   <Checkbox
                     checked={
-                      alumnosSeleccionados.length === paginatedAlumnos.length &&
-                      paginatedAlumnos.length > 0
+                      alumnosSeleccionados.length === alumnos.length &&
+                      alumnos.length > 0
                     }
                     onCheckedChange={handleSelectAllChange}
                     id="select-all-masiva"
@@ -953,7 +941,7 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
                     htmlFor="select-all-masiva"
                     className="text-sm font-medium"
                   >
-                    Seleccionar todos en esta página ({paginatedAlumnos.length})
+                    Seleccionar todos ({alumnos.length})
                   </label>
                 </div>
 
@@ -987,7 +975,7 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {paginatedAlumnos.map((alumno) => (
+                    {alumnos.map((alumno) => (
                       <TableRow key={alumno.id_alumno}>
                         <TableCell>
                           <Checkbox
@@ -1072,40 +1060,6 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
                 </Table>
               </div>
 
-              {/* Controles de paginación */}
-              {alumnos.length > 0 && (
-                <div className="flex items-center justify-between mt-4">
-                  <p className="text-sm text-gray-600">
-                    Mostrando {(page - 1) * itemsPerPage + 1} -{' '}
-                    {Math.min(page * itemsPerPage, alumnos.length)} de{' '}
-                    {alumnos.length} alumnos
-                  </p>
-                  <div className="flex items-center space-x-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
-                      disabled={page === 1}
-                    >
-                      Anterior
-                    </Button>
-                    <span className="text-sm text-gray-600">
-                      Página {page} de {totalPages}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        setPage((prev) => (prev < totalPages ? prev + 1 : prev))
-                      }
-                      disabled={page >= totalPages}
-                    >
-                      Siguiente
-                    </Button>
-                  </div>
-                </div>
-              )}
-
               <div className="mt-6 flex justify-end">
                 <Button
                   onClick={handleSubmit}
@@ -1147,6 +1101,7 @@ function HistorialAcademicoTab({ defaultYear }: { defaultYear: string }) {
   const [alumnos, setAlumnos] = useState<
     Array<{ id_alumno: number; nombre: string; apellido: string }>
   >([]);
+  const [busquedaNombre, setBusquedaNombre] = useState<string>('');
 
   // Estados para paginación
   const [page, setPage] = useState(1);
@@ -1268,12 +1223,45 @@ function HistorialAcademicoTab({ defaultYear }: { defaultYear: string }) {
     toast.info('Funcionalidad de generación de informes en desarrollo');
   };
 
-  // Filtrar historial por año académico si no es "todos"
-  const historialFiltrado = historialAcademico
-    ? anioAcademico === 'todos'
-      ? historialAcademico
-      : historialAcademico.filter((h) => h.anioAcademico === anioAcademico)
-    : [];
+  // Filtrar alumnos por búsqueda de nombre
+  const alumnosFiltrados = alumnos.filter((alumno) => {
+    if (!busquedaNombre.trim()) return true;
+
+    const normalized = busquedaNombre
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+    const fullName = `${alumno.nombre} ${alumno.apellido}`
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+
+    return fullName.includes(normalized);
+  });
+
+  // Filtrar historial por año académico y por nombre de alumno
+  const historialFiltrado = historialAcademico.filter((h) => {
+    // Filtrar por año académico
+    if (anioAcademico !== 'todos' && h.anioAcademico !== anioAcademico) {
+      return false;
+    }
+
+    // Filtrar por búsqueda de nombre (solo si hay búsqueda)
+    if (busquedaNombre.trim()) {
+      const normalized = busquedaNombre
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+      const alumnoNombre = (h.alumnoNombre || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+
+      return alumnoNombre.includes(normalized);
+    }
+
+    return true;
+  });
 
   // Actualizar paginación cuando cambia el historial filtrado
   useEffect(() => {
@@ -1289,9 +1277,23 @@ function HistorialAcademicoTab({ defaultYear }: { defaultYear: string }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
-          <Label htmlFor="alumno">Buscar Alumno</Label>
+          <Label htmlFor="busqueda-nombre-historial" className="text-xs">
+            Buscar por nombre
+          </Label>
+          <Input
+            id="busqueda-nombre-historial"
+            type="text"
+            placeholder="Nombre del alumno..."
+            value={busquedaNombre}
+            onChange={(e) => setBusquedaNombre(e.target.value)}
+            className="h-9"
+          />
+        </div>
+
+        <div>
+          <Label htmlFor="alumno">Seleccionar Alumno</Label>
           <Select
             value={alumnoSeleccionado}
             onValueChange={setAlumnoSeleccionado}
@@ -1301,8 +1303,8 @@ function HistorialAcademicoTab({ defaultYear }: { defaultYear: string }) {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Todos los alumnos</SelectItem>
-              {alumnos.length > 0 ? (
-                alumnos.map((alumno) => (
+              {alumnosFiltrados.length > 0 ? (
+                alumnosFiltrados.map((alumno) => (
                   <SelectItem
                     key={alumno.id_alumno}
                     value={alumno.id_alumno.toString()}
@@ -1312,7 +1314,9 @@ function HistorialAcademicoTab({ defaultYear }: { defaultYear: string }) {
                 ))
               ) : (
                 <SelectItem value="0" disabled>
-                  No hay alumnos disponibles
+                  {busquedaNombre
+                    ? 'No se encontraron alumnos'
+                    : 'No hay alumnos disponibles'}
                 </SelectItem>
               )}
             </SelectContent>
@@ -1340,6 +1344,19 @@ function HistorialAcademicoTab({ defaultYear }: { defaultYear: string }) {
           </Select>
         </div>
       </div>
+
+      {/* Información de resultados de búsqueda */}
+      {busquedaNombre && (
+        <div className="text-sm text-gray-600">
+          {alumnosFiltrados.length === 0 ? (
+            <span className="text-red-500">
+              No se encontraron alumnos con ese nombre
+            </span>
+          ) : (
+            <span>{alumnosFiltrados.length} alumno(s) encontrado(s)</span>
+          )}
+        </div>
+      )}
 
       {isLoading ? (
         <div className="flex justify-center py-8">
@@ -1408,13 +1425,16 @@ function HistorialAcademicoTab({ defaultYear }: { defaultYear: string }) {
                                   : registro.estadoFinal === 'REPROBADO'
                                     ? 'destructive'
                                     : registro.estadoFinal === 'FINALIZADO'
-                                      ? 'default'
-                                      : registro.estadoFinal === 'TRASLADADO'
-                                        ? 'warning'
+                                      ? 'success'
+                                      : registro.estadoFinal ===
+                                            'NO REINSCRITO' ||
+                                          registro.estadoFinal ===
+                                            'NO_REINSCRITO'
+                                        ? 'destructive'
                                         : 'outline'
                               }
                             >
-                              {registro.estadoFinal}
+                              {normalizeEstado(registro.estadoFinal)}
                             </Badge>
                           ) : (
                             <Badge variant="outline">En curso</Badge>
@@ -1581,47 +1601,59 @@ function PromocionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Promover Alumno al Siguiente Grado</DialogTitle>
+          <DialogTitle className="flex items-center gap-2 text-blue-600">
+            <ArrowUpRight className="h-5 w-5" />
+            Promover Alumno
+          </DialogTitle>
           <DialogDescription>
-            El alumno pasó de grado y se reinscribió. Complete los detalles de
-            su promoción.
+            El alumno pasó de grado y se reinscribió. Complete los detalles.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4 py-4">
+        <div className="space-y-4">
           {/* Datos del alumno */}
-          <div className="grid grid-cols-1 gap-4">
-            <div>
-              <Label className="text-gray-500">Alumno</Label>
-              <div className="font-medium mt-1">
-                {alumno.nombre} {alumno.apellido}
+          <div className="rounded-lg border bg-gray-50 p-3">
+            <div className="space-y-2">
+              <div>
+                <Label className="text-xs text-gray-500">Alumno</Label>
+                <p className="font-medium text-sm">
+                  {alumno.nombre} {alumno.apellido}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs text-gray-500">Curso Actual</Label>
+                  <p className="text-sm font-medium">
+                    {cursoOrigen?.nombre} {cursoOrigen?.seccion || ''}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-xs text-gray-500">Año Actual</Label>
+                  <p className="text-sm font-medium">{anioOrigen}</p>
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label className="text-gray-500">Curso Actual</Label>
-              <div className="font-medium mt-1">
-                {cursoOrigen?.nombre} {cursoOrigen?.seccion || ''}
-              </div>
-            </div>
-            <div>
-              <Label className="text-gray-500">Año Académico Actual</Label>
-              <div className="font-medium mt-1">{anioOrigen}</div>
-            </div>
+          {/* Mensaje informativo */}
+          <div className="flex gap-2 rounded-lg border border-blue-200 bg-blue-50 p-2.5">
+            <span className="text-lg"></span>
+            <p className="flex-1 text-xs text-blue-800">
+              El alumno será promovido al siguiente curso. Complete los datos de
+              promoción.
+            </p>
           </div>
 
-          <div className="border-t my-2"></div>
-
-          {/* Datos de promoción/traslado */}
-          <div className="grid grid-cols-2 gap-4">
+          {/* Datos de promoción */}
+          <div className="space-y-3">
             <div>
-              <Label htmlFor="curso-destino">Curso Destino</Label>
+              <Label htmlFor="curso-destino" className="text-sm">
+                Curso Destino
+              </Label>
               <Select value={cursoDestino} onValueChange={setCursoDestino}>
-                <SelectTrigger>
+                <SelectTrigger className="mt-1">
                   <SelectValue placeholder="Seleccione un curso" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1636,83 +1668,95 @@ function PromocionDialog({
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <Label htmlFor="anio-destino">Año Académico Nuevo</Label>
-              <Select value={anioDestino} onValueChange={setAnioDestino}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccione un año" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={anioOrigen}>
-                    {anioOrigen} (Repite el mismo año)
-                  </SelectItem>
-                  <SelectItem value={(parseInt(anioOrigen) + 1).toString()}>
-                    {parseInt(anioOrigen) + 1} (Promoción normal)
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="anio-destino" className="text-sm">
+                  Año Nuevo
+                </Label>
+                <Select value={anioDestino} onValueChange={setAnioDestino}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Año" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={anioOrigen}>
+                      {anioOrigen} (Repite)
+                    </SelectItem>
+                    <SelectItem value={(parseInt(anioOrigen) + 1).toString()}>
+                      {parseInt(anioOrigen) + 1} (Normal)
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="estado" className="text-sm">
+                  Estado
+                </Label>
+                <Select
+                  value={estado}
+                  onValueChange={(
+                    value: 'APROBADO' | 'REPROBADO' | 'TRASLADADO'
+                  ) => setEstado(value)}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Estado" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="APROBADO">Aprobado</SelectItem>
+                    <SelectItem value="REPROBADO">Reprobado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-          </div>
 
-          <div>
-            <Label htmlFor="estado">Estado de Promoción</Label>
-            <Select
-              value={estado}
-              onValueChange={(value: 'APROBADO' | 'REPROBADO' | 'TRASLADADO') =>
-                setEstado(value)
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Seleccione un estado" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="APROBADO">APROBADO</SelectItem>
-                <SelectItem value="REPROBADO">
-                  REPROBADO (Repite grado)
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+            <div>
+              <Label htmlFor="nota" className="text-sm">
+                Nota Promedio
+              </Label>
+              <Input
+                id="nota"
+                type="number"
+                min="0"
+                max="10"
+                step="0.1"
+                value={notaPromedio}
+                onChange={(e) => setNotaPromedio(e.target.value)}
+                placeholder="Ej: 8.5"
+                className="mt-1"
+              />
+            </div>
 
-          <div>
-            <Label htmlFor="nota">Nota Promedio</Label>
-            <Input
-              id="nota"
-              type="number"
-              min="0"
-              max="10"
-              step="0.1"
-              value={notaPromedio}
-              onChange={(e) => setNotaPromedio(e.target.value)}
-              placeholder="Nota promedio"
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="observaciones">Observaciones</Label>
-            <Textarea
-              id="observaciones"
-              value={observaciones}
-              onChange={(e) => setObservaciones(e.target.value)}
-              placeholder="Escriba las observaciones aquí"
-              rows={3}
-            />
+            <div>
+              <Label htmlFor="observaciones" className="text-sm">
+                Observaciones
+              </Label>
+              <Textarea
+                id="observaciones"
+                value={observaciones}
+                onChange={(e) => setObservaciones(e.target.value)}
+                placeholder="Observaciones adicionales..."
+                rows={3}
+                className="mt-1 resize-none"
+              />
+            </div>
           </div>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+        <div className="flex justify-end gap-2 pt-4">
+          <Button variant="outline" onClick={onClose} type="button">
             Cancelar
           </Button>
           <Button
             onClick={handleSubmit}
             disabled={isSubmitting || !cursoDestino}
             className="bg-blue-600 hover:bg-blue-700"
+            type="button"
           >
             {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Confirmar Promoción
           </Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -1778,7 +1822,7 @@ function NoReinscritoDialog({
       console.log('✅ Respuesta exitosa del backend:', response);
 
       toast.success(
-        `${alumno.nombre} ${alumno.apellido} marcado como No Reinscrito (Inactivo)`
+        `${alumno.nombre} ${alumno.apellido} retirado del curso (Inactivo)`
       );
       onSuccess();
       onClose();
@@ -1805,10 +1849,10 @@ function NoReinscritoDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-yellow-600">
             <ArrowRight className="h-5 w-5" />
-            Marcar como No Reinscrito
+            Retirar Alumno
           </DialogTitle>
           <DialogDescription>
-            El alumno no se reinscribió para el siguiente año académico.
+            El alumno será retirado del curso actual.
           </DialogDescription>
         </DialogHeader>
 
@@ -1868,7 +1912,7 @@ function NoReinscritoDialog({
           </Button>
           <Button onClick={handleConfirm} disabled={isSubmitting} type="button">
             {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Marcar como No Reinscrito
+            Retirar Alumno
           </Button>
         </div>
       </DialogContent>
@@ -1882,17 +1926,17 @@ function NoReinscritoDialog({
               Confirmar Acción
             </DialogTitle>
             <DialogDescription>
-              Confirme que desea marcar al alumno como no reinscrito.
+              Confirme que desea retirar al alumno del curso.
             </DialogDescription>
           </DialogHeader>
 
           <div className="py-3">
             <p className="text-sm">
-              ¿Está seguro de marcar a{' '}
+              ¿Está seguro de retirar a{' '}
               <span className="font-semibold">
                 {alumno.nombre} {alumno.apellido}
               </span>{' '}
-              como No Reinscrito?
+              del curso actual?
             </p>
             <p className="mt-2 text-xs text-gray-600">
               El alumno será marcado como INACTIVO.
