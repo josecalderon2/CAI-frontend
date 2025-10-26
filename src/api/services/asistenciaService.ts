@@ -24,7 +24,7 @@ interface CreateAsistenciaDto {
   fecha: string;
   estado: 'P' | 'E' | 'SP' | 'A';
   observacion?: string;
-  anio_academico?: number;
+  anio_academico?: string; // String según schema de BD
   trimestre?: number;
 }
 
@@ -42,7 +42,7 @@ interface AsistenciaResponse {
   fecha: string;
   estado: string;
   observacion: string | null;
-  anio_academico: number;
+  anio_academico: string; // String según schema de BD
   trimestre: number;
   created_at: string;
   updated_at: string;

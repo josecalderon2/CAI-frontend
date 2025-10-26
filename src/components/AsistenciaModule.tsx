@@ -1,11 +1,10 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import {
   Table,
   TableBody,
-  TableCaption,
   TableCell,
   TableHead,
   TableHeader,
@@ -16,7 +15,6 @@ import {
   User,
   BookOpen,
   Activity,
-  ArrowLeftRight,
   ArrowRight,
   ChevronLeft,
   ChevronRight,
@@ -46,7 +44,6 @@ import { Alert, AlertDescription } from './ui/alert';
 import { asistenciaService } from '../api/services/asistenciaService';
 import { cursosService } from '../api/services/cursosService';
 import { historialAsistenciasService } from '../api/services/historialAsistenciasService';
-import type { Curso } from '../api/services/cursosService';
 import type {
   HistorialAsistenciaResponse,
   AccionHistorial,
@@ -114,22 +111,8 @@ interface AsistenciaData {
   fecha: string;
   estado: 'P' | 'E' | 'SP' | 'A';
   observacion?: string;
-  anio_academico?: number;
+  anio_academico?: string; // String, no number (según schema de BD)
   trimestre?: number;
-}
-
-interface AsistenciaDiaria {
-  id: string;
-  fecha: string;
-  registros: HistorialAsistenciaResponse[];
-  acciones: {
-    CREATE: number;
-    UPDATE: number;
-    DELETE: number;
-    BULK_IMPORT: number;
-    RECTIFY: number;
-    ROLLBACK: number;
-  };
 }
 
 // Helpers de fechas (ISO local) y normalización de filtros
@@ -203,6 +186,16 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
   const [detalleModal, setDetalleModal] =
     useState<HistorialAsistenciaResponse | null>(null);
 
+  // Estado para historial agrupado y registro seleccionado
+  const [historialAgrupado, setHistorialAgrupado] = useState<
+    Record<number, HistorialAsistenciaResponse[]>
+  >({});
+  const [registroSeleccionado, setRegistroSeleccionado] = useState<number | null>(null);
+  
+  // Paginación para el historial expandido
+  const [paginaHistorialExpandido, setPaginaHistorialExpandido] = useState<Record<number, number>>({});
+  const itemsPorPaginaHistorial = 10; // Mostrar 10 registros por página (5 filas de 2 columnas)
+
   // Debounce helper
   const useDebounce = <T,>(value: T, delay = 400) => {
     const [debounced, setDebounced] = useState(value);
@@ -232,52 +225,71 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
         const cursos = await cursosService.findCursosAsignadosDocente(
           parseInt(user.id)
         );
+        
+        console.log(`${LOG_PREFIX} Cursos recibidos del backend:`, cursos);
+        
+        // Mapear cursos según la estructura que devuelve el backend
+        // Backend devuelve: { id, nombre, nivel, asignatura, alumnos }
         const cursosResponse: CursoResponse[] = (cursos as any[])
-          .filter(
-            (curso: any): curso is { id: string | number } & Curso =>
-              curso?.id != null
-          )
-          .map((curso: any) => ({
-            id_curso: parseInt(curso.id, 10),
-            nombre: curso.nombre,
-            seccion: curso.nivel?.toString() ?? '',
-            cupo: curso.alumnos ?? 0,
-            descripcion: curso.descripcion?.toString() ?? '',
-            id_grado_academico: curso.id_grado_academico ?? undefined,
-            id_orientador: curso.id_orientador ?? undefined,
-            aula: curso.aula?.toString() ?? '',
-            activo: curso.activo ?? true,
-            gradoAcademico: curso.gradoAcademico ?? undefined,
-            asignatura: curso.asignatura
-              ? {
-                  id_asignatura: curso.asignatura.id_asignatura,
-                  nombre: curso.asignatura.nombre,
-                }
-              : { id_asignatura: 0, nombre: 'Sin asignatura' },
-          }));
+          .filter((curso: any) => curso?.id != null)
+          .map((curso: any) => {
+            console.log(`${LOG_PREFIX} Procesando curso:`, curso);
+            return {
+              id_curso: parseInt(curso.id, 10), // Backend envía id como string
+              nombre: curso.nombre,
+              seccion: curso.nivel ?? '', // Backend usa "nivel" en lugar de "seccion"
+              cupo: curso.alumnos ?? 0, // Backend usa "alumnos" en lugar de "cupo"
+              descripcion: '',
+              id_grado_academico: undefined,
+              id_orientador: undefined,
+              aula: '',
+              activo: true,
+              gradoAcademico: undefined,
+              asignatura: curso.asignatura
+                ? {
+                    id_asignatura: curso.asignatura.id_asignatura,
+                    nombre: curso.asignatura.nombre,
+                  }
+                : undefined,
+            };
+          })
+          .filter((curso) => curso.asignatura != null); // Solo cursos con asignatura válida
 
+        console.log(`${LOG_PREFIX} Cursos procesados:`, cursosResponse);
         setCursosAsignados(cursosResponse);
 
+        // Cargar alumnos para cada curso
         const alumnosPorCursoTemp: Record<string, AlumnoResponse[]> = {};
         for (const curso of cursosResponse) {
           if (curso.id_curso) {
-            const alumnosData = await cursosService.getAlumnosPorCurso(
-              curso.id_curso
-            );
-            alumnosPorCursoTemp[curso.id_curso.toString()] = (
-              alumnosData as any[]
-            ).map((a: any) => ({
-              id_alumno: parseInt(a.id, 10),
-              nombre: a.nombre,
-              apellido: a.apellido,
-              rut: a.rut ?? 'N/A',
-            }));
+            try {
+              const alumnosData = await cursosService.getAlumnosPorCurso(
+                curso.id_curso
+              );
+              
+              console.log(`${LOG_PREFIX} Alumnos para curso ${curso.id_curso}:`, alumnosData);
+              
+              // Backend devuelve: { id, nombre, apellido, cursoId }
+              alumnosPorCursoTemp[curso.id_curso.toString()] = (
+                alumnosData as any[]
+              ).map((a: any) => ({
+                id_alumno: parseInt(a.id, 10), // Backend envía "id" como string
+                nombre: a.nombre,
+                apellido: a.apellido,
+                rut: 'N/A', // Backend no devuelve rut en este endpoint
+              }));
+            } catch (e) {
+              console.error(`${LOG_PREFIX} Error cargando alumnos para curso ${curso.id_curso}:`, e);
+              alumnosPorCursoTemp[curso.id_curso.toString()] = [];
+            }
           }
         }
         setAlumnosPorCurso(alumnosPorCursoTemp);
+        
+        console.log(`${LOG_PREFIX} Alumnos por curso:`, alumnosPorCursoTemp);
       } catch (e) {
+        console.error(`${LOG_PREFIX} Error al cargar datos iniciales:`, e);
         toast.error('Error al cargar los datos iniciales');
-        console.error(e);
       } finally {
         setIsLoading(false);
       }
@@ -321,7 +333,33 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
         limit: toLimit,
       });
 
-      setHistorialAsistencias(resultado.items);
+      // Agrupar por id_asistencia
+      const agrupado: Record<number, HistorialAsistenciaResponse[]> = {};
+      resultado.items.forEach((item) => {
+        if (item.id_asistencia) {
+          if (!agrupado[item.id_asistencia]) {
+            agrupado[item.id_asistencia] = [];
+          }
+          agrupado[item.id_asistencia].push(item);
+        }
+      });
+
+      // Ordenar cada grupo por fecha de creación (más antiguo primero)
+      Object.keys(agrupado).forEach((key) => {
+        agrupado[parseInt(key)].sort(
+          (a, b) =>
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        );
+      });
+
+      setHistorialAgrupado(agrupado);
+      
+      // Mostrar el ÚLTIMO registro de cada grupo (el más reciente)
+      const ultimosRegistros = Object.values(agrupado)
+        .map((grupo) => grupo[grupo.length - 1]) // Último elemento del array
+        .filter((item) => item != null);
+      
+      setHistorialAsistencias(ultimosRegistros);
       setMeta(resultado.meta);
       setPage(resultado.meta.currentPage);
       setLimit(resultado.meta.itemsPerPage);
@@ -339,20 +377,30 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
   useEffect(() => {
     const cargarAsistenciasDiarias = async () => {
       if (!(cursoSeleccionado && fechaSeleccionada)) return;
+      
       setIsLoading(true);
+      setAsistenciaGuardada(false); // Reset del mensaje de guardado al cambiar curso/fecha
+      
       try {
         const curso = cursosAsignados.find(
           (c) => c.id_curso === parseInt(cursoSeleccionado)
         );
         if (!curso?.asignatura?.id_asignatura) {
+          console.warn(`${LOG_PREFIX} Curso sin asignatura asignada`);
           setAsistenciaActual({});
           return;
         }
         const idAsignatura = curso.asignatura.id_asignatura;
+        
+        console.log(`${LOG_PREFIX} Cargando asistencias para asignatura ${idAsignatura}, fecha ${fechaSeleccionada}`);
+        
         const asistencias = await asistenciaService.findByAsignaturaAndFecha(
           idAsignatura,
           fechaSeleccionada
         );
+        
+        console.log(`${LOG_PREFIX} Asistencias cargadas:`, asistencias);
+        
         const nuevaAsistencia: Record<
           string,
           { estado: 'P' | 'E' | 'SP' | 'A'; observacion: string }
@@ -364,9 +412,19 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
           };
         });
         setAsistenciaActual(nuevaAsistencia);
-      } catch (e) {
-        toast.error('Error al cargar las asistencias del día');
-        console.error(e);
+        
+        if (asistencias.length > 0) {
+          console.log(`${LOG_PREFIX} ${asistencias.length} asistencias cargadas`);
+        }
+      } catch (e: any) {
+        // Si es un 404, no es un error real (simplemente no hay asistencias aún)
+        if (e?.response?.status === 404) {
+          console.log(`${LOG_PREFIX} No hay asistencias previas para esta fecha`);
+          setAsistenciaActual({});
+        } else {
+          console.error(`${LOG_PREFIX} Error al cargar asistencias:`, e);
+          toast.error('Error al cargar las asistencias del día');
+        }
       } finally {
         setIsLoading(false);
       }
@@ -419,6 +477,12 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
       return;
     }
 
+    // Verificar que haya al menos un alumno con asistencia marcada
+    if (Object.keys(asistenciaActual).length === 0) {
+      toast.error('Debe marcar la asistencia de al menos un alumno');
+      return;
+    }
+
     setIsLoading(true);
     try {
       const asistenciasAGuardar: AsistenciaData[] = Object.entries(
@@ -429,15 +493,24 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
         id_orientador: parseInt(user.id),
         fecha: fechaSeleccionada,
         estado: datos.estado,
-        observacion: datos.observacion,
-        anio_academico: new Date().getFullYear(),
+        observacion: datos.observacion || '',
+        anio_academico: new Date().getFullYear().toString(), // String, no number
         trimestre: Math.floor(new Date().getMonth() / 3) + 1,
       }));
 
-      await asistenciaService.create(asistenciasAGuardar);
+      console.log(`${LOG_PREFIX} Guardando ${asistenciasAGuardar.length} asistencias`, asistenciasAGuardar);
+      
+      const response = await asistenciaService.create(asistenciasAGuardar);
+      console.log(`${LOG_PREFIX} Respuesta del backend:`, response);
+      
       setAsistenciaGuardada(true);
-      toast.success('Asistencia guardada correctamente');
+      
+      // Auto-ocultar el mensaje de éxito después de 5 segundos
+      setTimeout(() => setAsistenciaGuardada(false), 5000);
+      
+      toast.success(`Asistencia guardada correctamente (${asistenciasAGuardar.length} alumnos)`);
 
+      // Recargar las asistencias para sincronizar con el backend
       const asistenciasActualizadas =
         await asistenciaService.findByAsignaturaAndFecha(
           cursoActual.asignatura.id_asignatura,
@@ -455,9 +528,39 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
         };
       });
       setAsistenciaActual(nuevaAsistencia);
-    } catch (e) {
-      console.error('Error al guardar asistencias:', e);
-      toast.error('Error al guardar las asistencias');
+    } catch (e: any) {
+      console.error(`${LOG_PREFIX} Error al guardar asistencias:`, e);
+      
+      // Extraer información detallada del error
+      let errorMsg = 'Error desconocido';
+      let errorDetails = '';
+      
+      if (e?.response) {
+        // El servidor respondió con un código de error
+        console.error(`${LOG_PREFIX} Error del servidor:`, {
+          status: e.response.status,
+          statusText: e.response.statusText,
+          data: e.response.data,
+        });
+        
+        errorMsg = e.response.data?.message || e.response.statusText || `Error ${e.response.status}`;
+        
+        // Si hay errores de validación, mostrarlos
+        if (e.response.data?.errors) {
+          errorDetails = '\n' + JSON.stringify(e.response.data.errors, null, 2);
+        }
+      } else if (e?.request) {
+        // La petición se hizo pero no hubo respuesta
+        errorMsg = 'No se recibió respuesta del servidor';
+        console.error(`${LOG_PREFIX} Sin respuesta del servidor:`, e.request);
+      } else {
+        // Error al configurar la petición
+        errorMsg = e?.message || 'Error al configurar la petición';
+      }
+      
+      toast.error(`Error al guardar las asistencias: ${errorMsg}${errorDetails}`, {
+        duration: 8000, // Más tiempo para leer el error
+      });
     } finally {
       setIsLoading(false);
     }
@@ -493,6 +596,15 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
   // UI: Tomar asistencia (sin cambios sustantivos)
   const renderTomarAsistencia = () => (
     <div className="space-y-6">
+      {isLoading && (
+        <Alert className="border-blue-200 bg-blue-50">
+          <AlertCircle className="h-4 w-4 text-blue-600 animate-pulse" />
+          <AlertDescription className="text-blue-800">
+            Cargando datos...
+          </AlertDescription>
+        </Alert>
+      )}
+      
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
@@ -501,15 +613,29 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {cursosAsignados.length === 0 && !isLoading && (
+            <Alert className="border-yellow-200 bg-yellow-50">
+              <AlertCircle className="h-4 w-4 text-yellow-600" />
+              <AlertDescription className="text-yellow-800">
+                No tienes cursos asignados. Contacta al administrador para que te asigne cursos y asignaturas.
+              </AlertDescription>
+            </Alert>
+          )}
+          
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="curso">Curso</Label>
               <Select
                 value={cursoSeleccionado}
                 onValueChange={setCursoSeleccionado}
+                disabled={isLoading || cursosAsignados.length === 0}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar curso" />
+                  <SelectValue placeholder={
+                    cursosAsignados.length === 0 
+                      ? "No hay cursos disponibles" 
+                      : "Seleccionar curso"
+                  } />
                 </SelectTrigger>
                 <SelectContent>
                   {cursosAsignados.map((curso) => (
@@ -517,8 +643,7 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
                       key={curso.id_curso}
                       value={curso.id_curso.toString()}
                     >
-                      {curso.nombre} -{' '}
-                      {curso.asignatura?.nombre || 'Sin asignatura'}
+                      {curso.nombre} - {curso.asignatura?.nombre}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -530,17 +655,30 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
                 type="date"
                 value={fechaSeleccionada}
                 onChange={(e) => setFechaSeleccionada(e.target.value)}
+                disabled={isLoading}
               />
             </div>
           </div>
 
-          {!!cursoSeleccionado && (
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                Curso: <strong>{cursoActual?.nombre}</strong> —{' '}
-                {cursoActual?.asignatura?.nombre || 'Sin asignatura'} (
-                {alumnosDelCurso.length} alumnos)
+          {!!cursoSeleccionado && cursoActual && (
+            <Alert className={alumnosDelCurso.length === 0 ? "border-red-200 bg-red-50" : ""}>
+              <AlertCircle className={`h-4 w-4 ${alumnosDelCurso.length === 0 ? "text-red-600" : ""}`} />
+              <AlertDescription className={alumnosDelCurso.length === 0 ? "text-red-800" : ""}>
+                <div className="space-y-1">
+                  <div>
+                    Curso: <strong>{cursoActual.nombre}</strong> — {cursoActual.asignatura?.nombre}
+                  </div>
+                  <div className="text-sm">
+                    Asignatura ID: {cursoActual.asignatura?.id_asignatura} | 
+                    Alumnos: {alumnosDelCurso.length} |
+                    Fecha: {fechaSeleccionada}
+                  </div>
+                  {alumnosDelCurso.length === 0 && (
+                    <div className="text-sm font-medium mt-1">
+                      ⚠️ Este curso no tiene alumnos inscritos
+                    </div>
+                  )}
+                </div>
               </AlertDescription>
             </Alert>
           )}
@@ -634,6 +772,7 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
                   onClick={marcarTodosPresentes}
                   variant="outline"
                   size="sm"
+                  disabled={isLoading}
                 >
                   <CheckCircle className="w-4 h-4 mr-2" />
                   Marcar Todos Presentes
@@ -641,15 +780,20 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
                 <Button
                   onClick={handleGuardarAsistencia}
                   className="bg-green-600 hover:bg-green-700"
-                  disabled={estadosCount.sinMarcar > 0}
+                  disabled={isLoading || Object.keys(asistenciaActual).length === 0}
                 >
                   <Save className="w-4 h-4 mr-2" />
-                  Guardar Asistencia
+                  {isLoading ? 'Guardando...' : 'Guardar Asistencia'}
                 </Button>
               </div>
               {estadosCount.sinMarcar > 0 && (
                 <p className="text-sm text-orange-600 mt-2">
-                  Quedan {estadosCount.sinMarcar} alumnos sin marcar asistencia
+                  ⚠️ Quedan {estadosCount.sinMarcar} alumnos sin marcar asistencia
+                </p>
+              )}
+              {Object.keys(asistenciaActual).length === 0 && (
+                <p className="text-sm text-gray-600 mt-2">
+                  📝 Marca la asistencia de al menos un alumno para poder guardar
                 </p>
               )}
             </CardContent>
@@ -941,6 +1085,38 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
       return full.includes(q);
     });
 
+    // Determinar colores según el estado
+    const getEstadoColor = (estado: string) => {
+      switch (estado?.toUpperCase()) {
+        case 'P':
+        case 'PRESENTE':
+          return 'bg-green-100 text-green-800 border-green-200';
+        case 'A':
+        case 'AUSENTE':
+          return 'bg-red-100 text-red-800 border-red-200';
+        case 'SP':
+        case 'SIN PERMISO':
+        case 'TARDANZA':
+          return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+        case 'E':
+        case 'EXIMIDO':
+        case 'JUSTIFICADO':
+          return 'bg-blue-100 text-blue-800 border-blue-200';
+        default:
+          return 'bg-gray-100 text-gray-800 border-gray-200';
+      }
+    };
+
+    const getEstadoLabel = (estado: string) => {
+      const estadoMap: Record<string, string> = {
+        P: 'Presente',
+        A: 'Ausente',
+        SP: 'Sin Permiso',
+        E: 'Eximido',
+      };
+      return estadoMap[estado?.toUpperCase()] || estado;
+    };
+
     return (
       <div className="space-y-6">
         <Card>
@@ -1148,16 +1324,13 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
                       <span className="text-sm font-medium text-gray-700">
-                        {meta.totalItems} registros encontrados
+                        {listaFiltradaPorNombre.length} asistencias (estado actual)
                       </span>
                     </div>
                     <div className="h-4 w-px bg-gray-300"></div>
                     <span className="text-xs text-gray-600">
-                      Mostrando {meta.itemCount} en esta página
+                      Haz clic en un registro para ver todo su historial de cambios
                     </span>
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    Página {meta.currentPage} de {meta.totalPages}
                   </div>
                 </div>
               )}
@@ -1169,13 +1342,7 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
                       <TableHead className="font-semibold text-gray-700">
                         <div className="flex items-center gap-2">
                           <Calendar className="w-4 h-4" />
-                          Fecha/Hora
-                        </div>
-                      </TableHead>
-                      <TableHead className="font-semibold text-gray-700">
-                        <div className="flex items-center gap-2">
-                          <Activity className="w-4 h-4" />
-                          Acción
+                          Última Actualización
                         </div>
                       </TableHead>
                       <TableHead className="font-semibold text-gray-700">
@@ -1192,8 +1359,8 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
                       </TableHead>
                       <TableHead className="font-semibold text-gray-700">
                         <div className="flex items-center gap-2">
-                          <ArrowLeftRight className="w-4 h-4" />
-                          Cambio de Estado
+                          <Activity className="w-4 h-4" />
+                          Estado Actual
                         </div>
                       </TableHead>
                       <TableHead className="font-semibold text-gray-700">
@@ -1206,6 +1373,12 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
                         <div className="flex items-center gap-2">
                           <UserCheck className="w-4 h-4" />
                           Docente
+                        </div>
+                      </TableHead>
+                      <TableHead className="font-semibold text-gray-700">
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4" />
+                          Historial
                         </div>
                       </TableHead>
                       <TableHead className="text-right font-semibold text-gray-700">
@@ -1256,26 +1429,28 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
                         ? `${h.orientador.nombre} ${h.orientador.apellido}`
                         : `ID ${h.id_orientador_registro}`;
 
-                      // Determinar colores según el estado
-                      const getEstadoColor = (estado: string) => {
-                        switch (estado?.toLowerCase()) {
-                          case 'presente':
-                            return 'bg-green-100 text-green-800 border-green-200';
-                          case 'ausente':
-                            return 'bg-red-100 text-red-800 border-red-200';
-                          case 'tardanza':
-                            return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-                          case 'justificado':
-                            return 'bg-blue-100 text-blue-800 border-blue-200';
-                          default:
-                            return 'bg-gray-100 text-gray-800 border-gray-200';
-                        }
-                      };
+                      // Obtener el historial completo de este registro
+                      const historialCompleto = h.id_asistencia
+                        ? historialAgrupado[h.id_asistencia] || []
+                        : [];
+                      const totalCambios = historialCompleto.length; // Total de cambios incluyendo el CREATE
+                      const estaExpandido = registroSeleccionado === h.id_asistencia;
 
                       return (
+                        <React.Fragment key={h.id}>
                         <TableRow
-                          key={h.id}
-                          className="hover:bg-blue-50/30 transition-colors group"
+                          className="hover:bg-blue-50/30 transition-colors group cursor-pointer"
+                          onClick={() => {
+                            const nuevoEstado = estaExpandido ? null : h.id_asistencia || null;
+                            setRegistroSeleccionado(nuevoEstado);
+                            // Resetear la página del historial al cerrar
+                            if (estaExpandido && h.id_asistencia) {
+                              setPaginaHistorialExpandido(prev => ({
+                                ...prev,
+                                [h.id_asistencia!]: 1
+                              }));
+                            }
+                          }}
                         >
                           {/* Fecha/Hora */}
                           <TableCell className="font-medium">
@@ -1289,13 +1464,6 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
                                 <Clock className="w-3 h-3" />
                                 {horaFormato}
                               </div>
-                            </div>
-                          </TableCell>
-
-                          {/* Acción */}
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              {badgeForAccion(h.accion)}
                             </div>
                           </TableCell>
 
@@ -1326,60 +1494,27 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
                             </div>
                           </TableCell>
 
-                          {/* Cambio de Estado */}
+                          {/* Estado Actual */}
                           <TableCell>
-                            <div className="flex items-center gap-2">
-                              {h.estado_anterior && (
-                                <Badge
-                                  variant="outline"
-                                  className={`text-xs px-2 py-0.5 ${getEstadoColor(
-                                    h.estado_anterior
-                                  )}`}
-                                >
-                                  {h.estado_anterior}
-                                </Badge>
-                              )}
-                              {h.estado_anterior && h.estado_nuevo && (
-                                <ArrowRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                              )}
-                              {h.estado_nuevo && (
-                                <Badge
-                                  variant="outline"
-                                  className={`text-xs px-2 py-0.5 ${getEstadoColor(
-                                    h.estado_nuevo
-                                  )}`}
-                                >
-                                  {h.estado_nuevo}
-                                </Badge>
-                              )}
-                              {!h.estado_anterior && !h.estado_nuevo && (
-                                <span className="text-xs text-gray-400">
-                                  Sin cambios
-                                </span>
-                              )}
-                            </div>
+                            <Badge
+                              variant="outline"
+                              className={`text-xs px-2 py-0.5 ${getEstadoColor(
+                                h.estado_nuevo || h.estado_anterior || ''
+                              )}`}
+                            >
+                              {getEstadoLabel(h.estado_nuevo || h.estado_anterior || '')}
+                            </Badge>
                           </TableCell>
 
                           {/* Observación */}
                           <TableCell className="max-w-[250px]">
                             <div className="group/obs relative">
                               {h.observacion_nueva || h.observacion_anterior ? (
-                                <>
-                                  <p className="text-sm text-gray-600 line-clamp-2 leading-relaxed">
-                                    {short(
-                                      h.observacion_nueva ??
-                                        h.observacion_anterior
-                                    )}
-                                  </p>
-                                  {((h.observacion_nueva?.length ?? 0) > 50 ||
-                                    (h.observacion_anterior?.length ?? 0) >
-                                      50) && (
-                                    <span className="text-xs text-blue-600 mt-1 inline-flex items-center gap-1">
-                                      <Eye className="w-3 h-3" />
-                                      Ver completa
-                                    </span>
+                                <p className="text-sm text-gray-600 line-clamp-2 leading-relaxed">
+                                  {short(
+                                    h.observacion_nueva ?? h.observacion_anterior
                                   )}
-                                </>
+                                </p>
                               ) : (
                                 <span className="text-xs text-gray-400 italic">
                                   Sin observación
@@ -1405,19 +1540,235 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
                             </div>
                           </TableCell>
 
+                          {/* Cambios */}
+                          <TableCell>
+                            {totalCambios > 1 ? (
+                              <Badge
+                                variant="outline"
+                                className="bg-orange-50 text-orange-700 border-orange-200"
+                              >
+                                {totalCambios} registro{totalCambios > 1 ? 's' : ''}
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-gray-400">
+                                Registro inicial
+                              </span>
+                            )}
+                          </TableCell>
+
                           {/* Acciones */}
                           <TableCell className="text-right">
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => setDetalleModal(h)}
                               className="opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const nuevoEstado = estaExpandido ? null : h.id_asistencia || null;
+                                setRegistroSeleccionado(nuevoEstado);
+                                // Resetear la página del historial al abrir/cerrar
+                                if (h.id_asistencia) {
+                                  setPaginaHistorialExpandido(prev => ({
+                                    ...prev,
+                                    [h.id_asistencia!]: 1
+                                  }));
+                                }
+                              }}
                             >
-                              <Eye className="w-4 h-4 mr-2" />
-                              Detalle
+                              {estaExpandido ? (
+                                <>
+                                  <ChevronLeft className="w-4 h-4 mr-2" />
+                                  Ocultar
+                                </>
+                              ) : (
+                                <>
+                                  <Eye className="w-4 h-4 mr-2" />
+                                  Ver historial
+                                </>
+                              )}
                             </Button>
                           </TableCell>
                         </TableRow>
+{/* Fila expandible con el historial de cambios */}
+                        {estaExpandido && totalCambios > 0 && (
+                          <TableRow>
+                            <TableCell colSpan={8} className="bg-gray-50 p-0">
+                              <div className="p-4 space-y-3">
+                                <div className="flex items-center justify-between mb-3">
+                                  <div className="flex items-center gap-2">
+                                    <Clock className="w-4 h-4 text-blue-600" />
+                                    <h4 className="font-semibold text-gray-900">
+                                      Historial Completo ({totalCambios} registro{totalCambios > 1 ? 's' : ''})
+                                    </h4>
+                                  </div>
+                                  {totalCambios > itemsPorPaginaHistorial && (
+                                    <div className="text-xs text-gray-500">
+                                      Página {(paginaHistorialExpandido[h.id_asistencia!] || 1)} de {Math.ceil(totalCambios / itemsPorPaginaHistorial)}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex gap-3 overflow-x-auto pb-2">
+                                  {(() => {
+                                    const paginaActual = paginaHistorialExpandido[h.id_asistencia!] || 1;
+                                    const inicio = (paginaActual - 1) * itemsPorPaginaHistorial;
+                                    const fin = inicio + itemsPorPaginaHistorial;
+                                    const registrosPaginados = historialCompleto.slice(inicio, fin);
+                                    
+                                    return registrosPaginados.map((cambio) => {
+                                      const fechaCambio = new Date(cambio.created_at);
+                                      return (
+                                        <div
+                                          key={cambio.id}
+                                          style={{ width: '320px', height: '208px' }}
+                                          className="flex-shrink-0 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all p-4 flex flex-col overflow-hidden"
+                                        >
+                                          {/* Header con badge y fecha */}
+                                          <div className="flex items-center justify-between mb-3 gap-2 min-w-0">
+                                            <div className="flex-shrink-0">
+                                              {badgeForAccion(cambio.accion)}
+                                            </div>
+                                            <div className="text-xs text-gray-500 flex-shrink-0 text-right whitespace-nowrap">
+                                              {fechaCambio.toLocaleDateString('es-ES', { 
+                                                day: '2-digit', 
+                                                month: 'short'
+                                              })}, {fechaCambio.toLocaleTimeString('es-ES', { 
+                                                hour: '2-digit',
+                                                minute: '2-digit'
+                                              })}
+                                            </div>
+                                          </div>
+                                          
+                                          {/* Estados */}
+                                          <div className="flex items-center gap-2 mb-3 min-h-[28px] overflow-hidden">
+                                            {cambio.estado_anterior && (
+                                              <Badge
+                                                variant="outline"
+                                                className={`text-xs flex-shrink-0 ${getEstadoColor(
+                                                  cambio.estado_anterior
+                                                )}`}
+                                              >
+                                                {getEstadoLabel(cambio.estado_anterior)}
+                                              </Badge>
+                                            )}
+                                            {cambio.estado_anterior && cambio.estado_nuevo && (
+                                              <ArrowRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                                            )}
+                                            {cambio.estado_nuevo && (
+                                              <Badge
+                                                variant="outline"
+                                                className={`text-xs flex-shrink-0 ${getEstadoColor(
+                                                  cambio.estado_nuevo
+                                                )}`}
+                                              >
+                                                {getEstadoLabel(cambio.estado_nuevo)}
+                                              </Badge>
+                                            )}
+                                          </div>
+                                          
+                                          {/* Observación */}
+                                          <div className="text-sm text-gray-600 mb-3 flex-1 overflow-hidden min-w-0">
+                                            {cambio.observacion_anterior && cambio.observacion_nueva ? (
+                                              <div className="space-y-1 h-full overflow-hidden">
+                                                <div className="line-through text-gray-400 text-xs truncate">
+                                                  {cambio.observacion_anterior}
+                                                </div>
+                                                <div 
+                                                  className="font-medium overflow-hidden text-ellipsis"
+                                                  style={{
+                                                    display: '-webkit-box',
+                                                    WebkitLineClamp: 3,
+                                                    WebkitBoxOrient: 'vertical',
+                                                    wordBreak: 'break-all',
+                                                    overflowWrap: 'anywhere'
+                                                  }}
+                                                >
+                                                  {cambio.observacion_nueva}
+                                                </div>
+                                              </div>
+                                            ) : (cambio.observacion_nueva || cambio.observacion_anterior) ? (
+                                              <div 
+                                                className="overflow-hidden h-full text-ellipsis"
+                                                style={{
+                                                  display: '-webkit-box',
+                                                  WebkitLineClamp: 4,
+                                                  WebkitBoxOrient: 'vertical',
+                                                  wordBreak: 'break-all',
+                                                  overflowWrap: 'anywhere'
+                                                }}
+                                              >
+                                                {cambio.observacion_nueva || cambio.observacion_anterior}
+                                              </div>
+                                            ) : (
+                                              <span className="text-gray-400 italic">Sin observación</span>
+                                            )}
+                                          </div>
+                                          
+                                          {/* Docente */}
+                                          <div className="flex items-center gap-2 text-sm text-gray-500 pt-3 border-t border-gray-100 mt-auto min-h-[44px] min-w-0">
+                                            <UserCheck className="w-4 h-4 flex-shrink-0" />
+                                            <span className="truncate">
+                                              {cambio.orientador
+                                                ? `${cambio.orientador.nombre.split(' ')[0]} ${cambio.orientador.apellido.split(' ')[0]}`
+                                                : `ID ${cambio.id_orientador_registro}`}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      );
+                                    });
+                                  })()}
+                                </div>
+                                {/* Paginación del historial expandido */}
+                                {totalCambios > itemsPorPaginaHistorial && (
+                                  <div className="flex items-center justify-center gap-2 mt-4 pt-3 border-t border-gray-200">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        const paginaActual = paginaHistorialExpandido[h.id_asistencia!] || 1;
+                                        if (paginaActual > 1) {
+                                          setPaginaHistorialExpandido(prev => ({
+                                            ...prev,
+                                            [h.id_asistencia!]: paginaActual - 1
+                                          }));
+                                        }
+                                      }}
+                                      disabled={(paginaHistorialExpandido[h.id_asistencia!] || 1) <= 1}
+                                      className="h-8 w-8 p-0"
+                                    >
+                                      <ChevronLeft className="w-4 h-4" />
+                                    </Button>
+                                    
+                                    <span className="text-sm text-gray-600 px-2">
+                                      {paginaHistorialExpandido[h.id_asistencia!] || 1} / {Math.ceil(totalCambios / itemsPorPaginaHistorial)}
+                                    </span>
+                                    
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        const paginaActual = paginaHistorialExpandido[h.id_asistencia!] || 1;
+                                        const totalPaginas = Math.ceil(totalCambios / itemsPorPaginaHistorial);
+                                        if (paginaActual < totalPaginas) {
+                                          setPaginaHistorialExpandido(prev => ({
+                                            ...prev,
+                                            [h.id_asistencia!]: paginaActual + 1
+                                          }));
+                                        }
+                                      }}
+                                      disabled={(paginaHistorialExpandido[h.id_asistencia!] || 1) >= Math.ceil(totalCambios / itemsPorPaginaHistorial)}
+                                      className="h-8 w-8 p-0"
+                                    >
+                                      <ChevronRight className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                        </React.Fragment>
                       );
                     })}
                   </TableBody>
