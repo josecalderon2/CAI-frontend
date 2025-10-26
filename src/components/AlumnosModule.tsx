@@ -3143,22 +3143,24 @@ export function AlumnosModule() {
                 Administra la información completa de los estudiantes
               </p>
             </div>
-            <Button
-              onClick={handleCreateAlumno}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              <UserPlus className="w-4 h-4 mr-2" />
-              Nuevo Alumno
-            </Button>
-            <ImportButton
-              triggerLabel="Importar"
-              onImport={async (file) => {
-                const res = await importMatricula(file);
-                // refrescar lista
-                await cargarAlumnos();
-                return res;
-              }}
-            />
+            <div className="flex gap-2">
+              <ImportButton
+                triggerLabel="Importar"
+                onImport={async (file) => {
+                  const res = await importMatricula(file);
+                  // refrescar lista
+                  await cargarAlumnos();
+                  return res;
+                }}
+              />
+              <Button
+                onClick={handleCreateAlumno}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                <UserPlus className="w-4 h-4 mr-2" />
+                Nuevo Alumno
+              </Button>
+            </div>
           </div>
 
           {/* Estadísticas */}
