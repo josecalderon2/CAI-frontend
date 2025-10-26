@@ -223,7 +223,6 @@ function AlumnosPorCursoTab({ defaultYear }: { defaultYear: string }) {
       const response = await cursosService.list({ activo: true });
       setCursos(response.items);
     } catch (error) {
-      console.error('Error al cargar cursos:', error);
       toast.error('No se pudieron cargar los cursos');
     } finally {
       setIsLoading(false);
@@ -262,7 +261,7 @@ function AlumnosPorCursoTab({ defaultYear }: { defaultYear: string }) {
               allAlumnos.push(...response.items);
             }
           } catch (error) {
-            console.log(`No hay alumnos en ${year}`);
+            // No hay alumnos en este año
           }
         }
 
@@ -288,7 +287,6 @@ function AlumnosPorCursoTab({ defaultYear }: { defaultYear: string }) {
         }
       }
     } catch (error) {
-      console.error('Error al cargar alumnos:', error);
       toast.error('No se pudieron cargar los alumnos del curso');
       setAlumnos([]);
     } finally {
@@ -320,15 +318,11 @@ function AlumnosPorCursoTab({ defaultYear }: { defaultYear: string }) {
   };
 
   const abrirDialogoTraslado = (alumno: AlumnoCurso) => {
-    console.log('📋 Abriendo diálogo No Reinscrito para:', alumno);
-    console.log('📋 Curso seleccionado actual:', cursoSeleccionado);
     setAlumnoSeleccionado(alumno);
     setShowTrasladadoDialog(true);
   };
 
   const abrirDialogoFinalizar = (alumno: AlumnoCurso) => {
-    console.log('📋 Abriendo diálogo Finalizar para:', alumno);
-    console.log('📋 Curso seleccionado actual:', cursoSeleccionado);
     setAlumnoSeleccionado(alumno);
     setShowFinalizarDialog(true);
   };
@@ -565,9 +559,13 @@ function AlumnosPorCursoTab({ defaultYear }: { defaultYear: string }) {
           alumno={alumnoSeleccionado}
           open={showPromocionDialog}
           onClose={() => setShowPromocionDialog(false)}
-          cursoOrigen={cursos.find(
-            (c) => c.id_curso === parseInt(cursoSeleccionado)
-          )}
+          cursoOrigen={
+            cursoSeleccionado === 'todos'
+              ? // Cuando es "Todos", buscar el curso desde el id_curso del alumno
+                cursos.find((c) => c.id_curso === alumnoSeleccionado.id_curso)
+              : // Cuando es un curso específico, usar el curso seleccionado
+                cursos.find((c) => c.id_curso === parseInt(cursoSeleccionado))
+          }
           anioOrigen={anioAcademico}
           tipo="promocion"
           onSuccess={loadAlumnos}
@@ -662,7 +660,6 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
       const response = await cursosService.list({ activo: true });
       setCursos(response.items);
     } catch (error) {
-      console.error('Error al cargar cursos:', error);
       toast.error('No se pudieron cargar los cursos');
     } finally {
       setIsLoading(false);
@@ -693,7 +690,6 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
       });
       setAlumnosData(initialData);
     } catch (error) {
-      console.error('Error al cargar alumnos:', error);
       toast.error('No se pudieron cargar los alumnos');
     } finally {
       setIsLoading(false);
@@ -798,14 +794,10 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
         ],
       };
 
-      console.log('📤 Datos de promoción masiva:', promocionMasivaDto);
-
       // Llamar al endpoint de promoción masiva
       const response = (await promocionesService.promocionMasiva(
         promocionMasivaDto
       )) as any;
-
-      console.log('✅ Respuesta del backend:', response);
 
       // Contar alumnos promovidos exitosamente
       const totalPromovidos = response.reduce(
@@ -821,7 +813,6 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
       // Recargar la lista de alumnos
       loadAlumnos();
     } catch (error: any) {
-      console.error('Error al realizar promoción masiva:', error);
       const mensaje =
         error.response?.data?.message ||
         'No se pudo completar la promoción masiva';
@@ -1137,7 +1128,6 @@ function HistorialAcademicoTab({ defaultYear }: { defaultYear: string }) {
         setAlumnoSeleccionado('todos');
       }
     } catch (error) {
-      console.error('Error al cargar lista de alumnos:', error);
       toast.error('No se pudo cargar la lista de alumnos');
     }
   };
@@ -1169,10 +1159,7 @@ function HistorialAcademicoTab({ defaultYear }: { defaultYear: string }) {
               todosHistoriales.push(...historialConAlumno);
             }
           } catch (error) {
-            console.error(
-              `Error al cargar historial de ${alumno.nombre}:`,
-              error
-            );
+            // Error al cargar historial de un alumno
           }
         }
 
@@ -1204,7 +1191,6 @@ function HistorialAcademicoTab({ defaultYear }: { defaultYear: string }) {
         }
       }
     } catch (error) {
-      console.error('Error al cargar historial académico:', error);
       toast.error('No se pudo cargar el historial académico');
       setHistorialAcademico([]);
       setAlumnoInfo(null);
@@ -1552,7 +1538,6 @@ function PromocionDialog({
       const response = await cursosService.list({ activo: true });
       setCursos(response.items);
     } catch (error) {
-      console.error('Error al cargar cursos:', error);
       toast.error('No se pudieron cargar los cursos disponibles');
     }
   };
@@ -1577,8 +1562,6 @@ function PromocionDialog({
         notaPromedio: notaPromedio ? parseFloat(notaPromedio) : undefined,
       };
 
-      console.log('📤 Datos enviados al backend:', promoverDto);
-
       // Llamar al endpoint de promoción
       const response = (await promocionesService.promoverAlumno(
         promoverDto
@@ -1590,7 +1573,6 @@ function PromocionDialog({
       onSuccess();
       onClose();
     } catch (error: any) {
-      console.error('Error al promover alumno:', error);
       const mensaje =
         error.response?.data?.message || 'No se pudo completar la promoción';
       toast.error(mensaje);
@@ -1789,20 +1771,13 @@ function NoReinscritoDialog({
   };
 
   const handleSubmit = async () => {
-    console.log('🚀 Iniciando handleSubmit de No Reinscrito');
-    console.log('📋 Datos del alumno:', alumno);
-    console.log('📋 Curso actual:', cursoActual);
-    console.log('📋 Año actual:', anioActual);
-
     if (!cursoActual?.id_curso) {
-      console.error('❌ Curso actual no disponible');
       toast.error('Información del curso no disponible');
       return;
     }
 
     try {
       setIsSubmitting(true);
-      console.log('⏳ isSubmitting = true');
 
       // Preparar datos para el DTO FinalizarAlumnoDto
       const finalizarDto = {
@@ -1814,12 +1789,8 @@ function NoReinscritoDialog({
         marcarInactivo: true, // IMPORTANTE: Marca al alumno como inactivo
       };
 
-      console.log('📤 Enviando datos al backend:', finalizarDto);
-
       // Llamar al endpoint real de finalización
-      const response = await promocionesService.finalizarAlumno(finalizarDto);
-
-      console.log('✅ Respuesta exitosa del backend:', response);
+      await promocionesService.finalizarAlumno(finalizarDto);
 
       toast.success(
         `${alumno.nombre} ${alumno.apellido} retirado del curso (Inactivo)`
@@ -1827,18 +1798,12 @@ function NoReinscritoDialog({
       onSuccess();
       onClose();
     } catch (error: any) {
-      console.error('❌ Error completo:', error);
-      console.error('❌ Error response:', error.response);
-      console.error('❌ Error response data:', error.response?.data);
-      console.error('❌ Error message:', error.message);
-
       const mensaje =
         error.response?.data?.message ||
         error.message ||
         'No se pudo completar la operación';
       toast.error(`Error: ${mensaje}`);
     } finally {
-      console.log('✅ Finalizando - isSubmitting = false');
       setIsSubmitting(false);
     }
   };
@@ -2021,12 +1986,8 @@ function FinalizarDialog({
         marcarInactivo: true, // IMPORTANTE: Marca al alumno como inactivo (ya no está en el sistema)
       };
 
-      console.log('📤 Datos de Graduación:', finalizarDto);
-
       // Llamar al endpoint real de finalización
-      const response = await promocionesService.finalizarAlumno(finalizarDto);
-
-      console.log('✅ Respuesta del backend:', response);
+      await promocionesService.finalizarAlumno(finalizarDto);
 
       toast.success(
         `🎓 ${alumno.nombre} ${alumno.apellido} ha finalizado sus estudios exitosamente`
@@ -2034,7 +1995,6 @@ function FinalizarDialog({
       onSuccess();
       onClose();
     } catch (error: any) {
-      console.error('Error al finalizar estudios:', error);
       const mensaje =
         error.response?.data?.message ||
         'No se pudo completar la finalización de estudios';
