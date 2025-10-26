@@ -13,6 +13,8 @@ import {
   eliminarResponsable,
   actualizarAlumnoCompleto,
 } from '../api/services/alumnosService';
+import { importMatricula } from '../api/services/alumnosService';
+import ImportButton from './ui/importButton';
 
 import {
   actualizarSoloResponsable,
@@ -3148,6 +3150,15 @@ export function AlumnosModule() {
               <UserPlus className="w-4 h-4 mr-2" />
               Nuevo Alumno
             </Button>
+            <ImportButton
+              triggerLabel="Importar"
+              onImport={async (file) => {
+                const res = await importMatricula(file);
+                // refrescar lista
+                await cargarAlumnos();
+                return res;
+              }}
+            />
           </div>
 
           {/* Estadísticas */}

@@ -20,6 +20,10 @@ export interface Curso {
     nombre: string;
     apellido: string;
   } | null;
+  asignatura?: {
+    id_asignatura: number;
+    nombre: string;
+  } | null;
   // Campo para el conteo de alumnos (puede ser proporcionado por el backend)
   alumnosCount?: number;
 }
@@ -156,5 +160,29 @@ export const cursosService = {
   // Toggle active status (wraps update method)
   async toggleStatus(id: number, active: boolean): Promise<Curso> {
     return this.update(id, { activo: active });
+  },
+
+  // Obtener cursos asignados a un docente
+  async findCursosAsignadosDocente(docenteId: number): Promise<Curso[]> {
+    const res = await api.get(`${base}/asignados/${docenteId}`);
+    return res.data as Curso[];
+  },
+
+  // Obtener alumnos por curso
+  async getAlumnosPorCurso(cursoId: number): Promise<
+    Array<{
+      id_alumno: number;
+      nombre: string;
+      apellido: string;
+      rut: string;
+    }>
+  > {
+    const res = await api.get(`${base}/${cursoId}/alumnos`);
+    return res.data as Array<{
+      id_alumno: number;
+      nombre: string;
+      apellido: string;
+      rut: string;
+    }>;
   },
 };
