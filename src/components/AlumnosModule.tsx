@@ -330,7 +330,7 @@ function InscripcionesTab() {
         )
       );
     } catch (error) {
-      console.error('Error al actualizar inscripción activa:', error);
+      // Error al actualizar inscripción activa
     }
   };
 
@@ -362,7 +362,6 @@ function InscripcionesTab() {
 
       setAlumnos(alumnosConInscripciones);
     } catch (error) {
-      console.error('Error al cargar alumnos:', error);
       toast.error('No se pudieron cargar los alumnos');
     }
   };
@@ -372,7 +371,6 @@ function InscripcionesTab() {
       const response = await cursosService.list({ activo: true });
       setCursos(response.items);
     } catch (error) {
-      console.error('Error al cargar cursos:', error);
       toast.error('No se pudieron cargar los cursos');
     }
   };
@@ -400,10 +398,7 @@ function InscripcionesTab() {
             }));
             todasInscripciones.push(...inscripcionesConAlumno);
           } catch (error) {
-            console.error(
-              `Error al cargar inscripciones de ${alumno.nombre}:`,
-              error
-            );
+            // Error al cargar inscripciones de un alumno
           }
         }
 
@@ -416,7 +411,6 @@ function InscripcionesTab() {
         setInscripciones(data);
       }
     } catch (error) {
-      console.error('Error al cargar inscripciones:', error);
       toast.error('No se pudieron cargar las inscripciones');
       setInscripciones([]);
     } finally {
@@ -448,7 +442,6 @@ function InscripcionesTab() {
       await loadAlumnos(); // Recargar alumnos para actualizar inscripción activa
       loadInscripciones();
     } catch (error: any) {
-      console.error('Error al inscribir alumno:', error);
       const mensaje =
         error.response?.data?.message || 'No se pudo inscribir al alumno';
       toast.error(mensaje);
@@ -488,7 +481,6 @@ function InscripcionesTab() {
       await loadAlumnos(); // Recargar alumnos para actualizar inscripción activa
       loadInscripciones();
     } catch (error: any) {
-      console.error('Error al retirar alumno:', error);
       const mensaje =
         error.response?.data?.message || 'No se pudo retirar al alumno';
       toast.error(mensaje);
@@ -507,7 +499,6 @@ function InscripcionesTab() {
       await loadAlumnos(); // Recargar alumnos
       loadInscripciones(); // Recargar inscripciones
     } catch (error: any) {
-      console.error('Error al reactivar alumno:', error);
       const mensaje =
         error.response?.data?.message || 'No se pudo reactivar al alumno';
       toast.error(mensaje);
@@ -1006,7 +997,6 @@ export function AlumnosModule() {
       });
 
       const currentYear = new Date().getFullYear().toString();
-      console.log(' Año actual:', currentYear);
 
       // Aseguramos que cada alumno tenga la propiedad responsables definida
       // Y cargamos su inscripción activa
@@ -1020,33 +1010,13 @@ export function AlumnosModule() {
                 alumno.id_alumno
               );
 
-            console.log(
-              ` Inscripciones de ${alumno.nombre}:`,
-              inscripcionesResponse
-            );
-
             // Buscar la inscripción activa del año actual
             inscripcionActiva = inscripcionesResponse.find(
               (insc) =>
                 insc.estado === 'ACTIVO' && insc.anioAcademico === currentYear
             );
-
-            if (inscripcionActiva) {
-              console.log(
-                ` Inscripción activa encontrada para ${alumno.nombre}:`,
-                inscripcionActiva
-              );
-            } else {
-              console.log(
-                ` No se encontró inscripción activa para ${alumno.nombre} en ${currentYear}`
-              );
-            }
           } catch (error) {
             // Si hay error al cargar inscripciones, continuamos sin ellas
-            console.log(
-              ` Error al cargar inscripciones del alumno ${alumno.id_alumno}:`,
-              error
-            );
           }
 
           return {
@@ -1063,8 +1033,6 @@ export function AlumnosModule() {
           };
         })
       );
-
-      console.log(' Alumnos con inscripciones:', alumnosConInscripciones);
 
       setAlumnos(alumnosConInscripciones);
       setTotalItems(alumnosConInscripciones.length);
@@ -2568,7 +2536,7 @@ export function AlumnosModule() {
     // --- VALIDACIÓN (global) ---
     const data = { ...formData, responsables };
 
-    const { valid, errors } = validateFields(data, schema, {
+    const { valid } = validateFields(data, schema, {
       toast,
       toastAll: true,
       stopOnFirstError: true,
@@ -2576,7 +2544,6 @@ export function AlumnosModule() {
     });
 
     if (!valid) {
-      console.log('Errores:', errors);
       return;
     }
 
@@ -4812,11 +4779,6 @@ export function AlumnosModule() {
                                     onChange={(e) => {
                                       // Asegurarnos de que se pase el valor exacto, incluso si es vacío
                                       const valor = e.target.value;
-                                      console.log(
-                                        'Valor de ocupación:',
-                                        valor,
-                                        typeof valor
-                                      );
                                       updateResponsable(
                                         index,
                                         'datosResponsable',
@@ -5039,10 +5001,6 @@ export function AlumnosModule() {
                                       false
                                     }
                                     onCheckedChange={(checked) => {
-                                      console.log(
-                                        'Checkbox esPrincipal cambiado a:',
-                                        checked
-                                      );
                                       updateResponsable(
                                         index,
                                         'relacion',
@@ -5094,10 +5052,6 @@ export function AlumnosModule() {
                                       false
                                     }
                                     onCheckedChange={(checked) => {
-                                      console.log(
-                                        'Checkbox permiteTraslado cambiado a:',
-                                        checked
-                                      );
                                       updateResponsable(
                                         index,
                                         'relacion',
@@ -5124,10 +5078,6 @@ export function AlumnosModule() {
                                       false
                                     }
                                     onCheckedChange={(checked) => {
-                                      console.log(
-                                        'Checkbox puedeRetirarAlumno cambiado a:',
-                                        checked
-                                      );
                                       updateResponsable(
                                         index,
                                         'relacion',
@@ -5154,10 +5104,6 @@ export function AlumnosModule() {
                                       false
                                     }
                                     onCheckedChange={(checked) => {
-                                      console.log(
-                                        'Checkbox contactoEmergencia cambiado a:',
-                                        checked
-                                      );
                                       updateResponsable(
                                         index,
                                         'relacion',
