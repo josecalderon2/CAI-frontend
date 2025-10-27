@@ -190,10 +190,14 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
   const [historialAgrupado, setHistorialAgrupado] = useState<
     Record<number, HistorialAsistenciaResponse[]>
   >({});
-  const [registroSeleccionado, setRegistroSeleccionado] = useState<number | null>(null);
-  
+  const [registroSeleccionado, setRegistroSeleccionado] = useState<
+    number | null
+  >(null);
+
   // Paginación para el historial expandido
-  const [paginaHistorialExpandido, setPaginaHistorialExpandido] = useState<Record<number, number>>({});
+  const [paginaHistorialExpandido, setPaginaHistorialExpandido] = useState<
+    Record<number, number>
+  >({});
   const itemsPorPaginaHistorial = 10; // Mostrar 10 registros por página (5 filas de 2 columnas)
 
   // Debounce helper
@@ -225,9 +229,9 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
         const cursos = await cursosService.findCursosAsignadosDocente(
           parseInt(user.id)
         );
-        
+
         console.log(`${LOG_PREFIX} Cursos recibidos del backend:`, cursos);
-        
+
         // Mapear cursos según la estructura que devuelve el backend
         // Backend devuelve: { id, nombre, nivel, asignatura, alumnos }
         const cursosResponse: CursoResponse[] = (cursos as any[])
@@ -266,9 +270,12 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
               const alumnosData = await cursosService.getAlumnosPorCurso(
                 curso.id_curso
               );
-              
-              console.log(`${LOG_PREFIX} Alumnos para curso ${curso.id_curso}:`, alumnosData);
-              
+
+              console.log(
+                `${LOG_PREFIX} Alumnos para curso ${curso.id_curso}:`,
+                alumnosData
+              );
+
               // Backend devuelve: { id, nombre, apellido, cursoId }
               alumnosPorCursoTemp[curso.id_curso.toString()] = (
                 alumnosData as any[]
@@ -279,13 +286,16 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
                 rut: 'N/A', // Backend no devuelve rut en este endpoint
               }));
             } catch (e) {
-              console.error(`${LOG_PREFIX} Error cargando alumnos para curso ${curso.id_curso}:`, e);
+              console.error(
+                `${LOG_PREFIX} Error cargando alumnos para curso ${curso.id_curso}:`,
+                e
+              );
               alumnosPorCursoTemp[curso.id_curso.toString()] = [];
             }
           }
         }
         setAlumnosPorCurso(alumnosPorCursoTemp);
-        
+
         console.log(`${LOG_PREFIX} Alumnos por curso:`, alumnosPorCursoTemp);
       } catch (e) {
         console.error(`${LOG_PREFIX} Error al cargar datos iniciales:`, e);
@@ -353,12 +363,12 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
       });
 
       setHistorialAgrupado(agrupado);
-      
+
       // Mostrar el ÚLTIMO registro de cada grupo (el más reciente)
       const ultimosRegistros = Object.values(agrupado)
         .map((grupo) => grupo[grupo.length - 1]) // Último elemento del array
         .filter((item) => item != null);
-      
+
       setHistorialAsistencias(ultimosRegistros);
       setMeta(resultado.meta);
       setPage(resultado.meta.currentPage);
@@ -377,10 +387,10 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
   useEffect(() => {
     const cargarAsistenciasDiarias = async () => {
       if (!(cursoSeleccionado && fechaSeleccionada)) return;
-      
+
       setIsLoading(true);
       setAsistenciaGuardada(false); // Reset del mensaje de guardado al cambiar curso/fecha
-      
+
       try {
         const curso = cursosAsignados.find(
           (c) => c.id_curso === parseInt(cursoSeleccionado)
@@ -391,16 +401,18 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
           return;
         }
         const idAsignatura = curso.asignatura.id_asignatura;
-        
-        console.log(`${LOG_PREFIX} Cargando asistencias para asignatura ${idAsignatura}, fecha ${fechaSeleccionada}`);
-        
+
+        console.log(
+          `${LOG_PREFIX} Cargando asistencias para asignatura ${idAsignatura}, fecha ${fechaSeleccionada}`
+        );
+
         const asistencias = await asistenciaService.findByAsignaturaAndFecha(
           idAsignatura,
           fechaSeleccionada
         );
-        
+
         console.log(`${LOG_PREFIX} Asistencias cargadas:`, asistencias);
-        
+
         const nuevaAsistencia: Record<
           string,
           { estado: 'P' | 'E' | 'SP' | 'A'; observacion: string }
@@ -412,14 +424,18 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
           };
         });
         setAsistenciaActual(nuevaAsistencia);
-        
+
         if (asistencias.length > 0) {
-          console.log(`${LOG_PREFIX} ${asistencias.length} asistencias cargadas`);
+          console.log(
+            `${LOG_PREFIX} ${asistencias.length} asistencias cargadas`
+          );
         }
       } catch (e: any) {
         // Si es un 404, no es un error real (simplemente no hay asistencias aún)
         if (e?.response?.status === 404) {
-          console.log(`${LOG_PREFIX} No hay asistencias previas para esta fecha`);
+          console.log(
+            `${LOG_PREFIX} No hay asistencias previas para esta fecha`
+          );
           setAsistenciaActual({});
         } else {
           console.error(`${LOG_PREFIX} Error al cargar asistencias:`, e);
@@ -498,17 +514,22 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
         trimestre: Math.floor(new Date().getMonth() / 3) + 1,
       }));
 
-      console.log(`${LOG_PREFIX} Guardando ${asistenciasAGuardar.length} asistencias`, asistenciasAGuardar);
-      
+      console.log(
+        `${LOG_PREFIX} Guardando ${asistenciasAGuardar.length} asistencias`,
+        asistenciasAGuardar
+      );
+
       const response = await asistenciaService.create(asistenciasAGuardar);
       console.log(`${LOG_PREFIX} Respuesta del backend:`, response);
-      
+
       setAsistenciaGuardada(true);
-      
+
       // Auto-ocultar el mensaje de éxito después de 5 segundos
       setTimeout(() => setAsistenciaGuardada(false), 5000);
-      
-      toast.success(`Asistencia guardada correctamente (${asistenciasAGuardar.length} alumnos)`);
+
+      toast.success(
+        `Asistencia guardada correctamente (${asistenciasAGuardar.length} alumnos)`
+      );
 
       // Recargar las asistencias para sincronizar con el backend
       const asistenciasActualizadas =
@@ -530,11 +551,11 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
       setAsistenciaActual(nuevaAsistencia);
     } catch (e: any) {
       console.error(`${LOG_PREFIX} Error al guardar asistencias:`, e);
-      
+
       // Extraer información detallada del error
       let errorMsg = 'Error desconocido';
       let errorDetails = '';
-      
+
       if (e?.response) {
         // El servidor respondió con un código de error
         console.error(`${LOG_PREFIX} Error del servidor:`, {
@@ -542,9 +563,12 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
           statusText: e.response.statusText,
           data: e.response.data,
         });
-        
-        errorMsg = e.response.data?.message || e.response.statusText || `Error ${e.response.status}`;
-        
+
+        errorMsg =
+          e.response.data?.message ||
+          e.response.statusText ||
+          `Error ${e.response.status}`;
+
         // Si hay errores de validación, mostrarlos
         if (e.response.data?.errors) {
           errorDetails = '\n' + JSON.stringify(e.response.data.errors, null, 2);
@@ -557,10 +581,13 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
         // Error al configurar la petición
         errorMsg = e?.message || 'Error al configurar la petición';
       }
-      
-      toast.error(`Error al guardar las asistencias: ${errorMsg}${errorDetails}`, {
-        duration: 8000, // Más tiempo para leer el error
-      });
+
+      toast.error(
+        `Error al guardar las asistencias: ${errorMsg}${errorDetails}`,
+        {
+          duration: 8000, // Más tiempo para leer el error
+        }
+      );
     } finally {
       setIsLoading(false);
     }
@@ -604,7 +631,7 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
           </AlertDescription>
         </Alert>
       )}
-      
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
@@ -617,11 +644,12 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
             <Alert className="border-yellow-200 bg-yellow-50">
               <AlertCircle className="h-4 w-4 text-yellow-600" />
               <AlertDescription className="text-yellow-800">
-                No tienes cursos asignados. Contacta al administrador para que te asigne cursos y asignaturas.
+                No tienes cursos asignados. Contacta al administrador para que
+                te asigne cursos y asignaturas.
               </AlertDescription>
             </Alert>
           )}
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="curso">Curso</Label>
@@ -631,11 +659,13 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
                 disabled={isLoading || cursosAsignados.length === 0}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={
-                    cursosAsignados.length === 0 
-                      ? "No hay cursos disponibles" 
-                      : "Seleccionar curso"
-                  } />
+                  <SelectValue
+                    placeholder={
+                      cursosAsignados.length === 0
+                        ? 'No hay cursos disponibles'
+                        : 'Seleccionar curso'
+                    }
+                  />
                 </SelectTrigger>
                 <SelectContent>
                   {cursosAsignados.map((curso) => (
@@ -661,17 +691,26 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
           </div>
 
           {!!cursoSeleccionado && cursoActual && (
-            <Alert className={alumnosDelCurso.length === 0 ? "border-red-200 bg-red-50" : ""}>
-              <AlertCircle className={`h-4 w-4 ${alumnosDelCurso.length === 0 ? "text-red-600" : ""}`} />
-              <AlertDescription className={alumnosDelCurso.length === 0 ? "text-red-800" : ""}>
+            <Alert
+              className={
+                alumnosDelCurso.length === 0 ? 'border-red-200 bg-red-50' : ''
+              }
+            >
+              <AlertCircle
+                className={`h-4 w-4 ${alumnosDelCurso.length === 0 ? 'text-red-600' : ''}`}
+              />
+              <AlertDescription
+                className={alumnosDelCurso.length === 0 ? 'text-red-800' : ''}
+              >
                 <div className="space-y-1">
                   <div>
-                    Curso: <strong>{cursoActual.nombre}</strong> — {cursoActual.asignatura?.nombre}
+                    Curso: <strong>{cursoActual.nombre}</strong> —{' '}
+                    {cursoActual.asignatura?.nombre}
                   </div>
                   <div className="text-sm">
-                    Asignatura ID: {cursoActual.asignatura?.id_asignatura} | 
-                    Alumnos: {alumnosDelCurso.length} |
-                    Fecha: {fechaSeleccionada}
+                    Asignatura ID: {cursoActual.asignatura?.id_asignatura} |
+                    Alumnos: {alumnosDelCurso.length} | Fecha:{' '}
+                    {fechaSeleccionada}
                   </div>
                   {alumnosDelCurso.length === 0 && (
                     <div className="text-sm font-medium mt-1">
@@ -780,7 +819,9 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
                 <Button
                   onClick={handleGuardarAsistencia}
                   className="bg-green-600 hover:bg-green-700"
-                  disabled={isLoading || Object.keys(asistenciaActual).length === 0}
+                  disabled={
+                    isLoading || Object.keys(asistenciaActual).length === 0
+                  }
                 >
                   <Save className="w-4 h-4 mr-2" />
                   {isLoading ? 'Guardando...' : 'Guardar Asistencia'}
@@ -788,12 +829,14 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
               </div>
               {estadosCount.sinMarcar > 0 && (
                 <p className="text-sm text-orange-600 mt-2">
-                  ⚠️ Quedan {estadosCount.sinMarcar} alumnos sin marcar asistencia
+                  ⚠️ Quedan {estadosCount.sinMarcar} alumnos sin marcar
+                  asistencia
                 </p>
               )}
               {Object.keys(asistenciaActual).length === 0 && (
                 <p className="text-sm text-gray-600 mt-2">
-                  📝 Marca la asistencia de al menos un alumno para poder guardar
+                  📝 Marca la asistencia de al menos un alumno para poder
+                  guardar
                 </p>
               )}
             </CardContent>
@@ -982,6 +1025,11 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
 
   // HISTORIAL (filtros ordenados + buscador por nombre)
   const renderHistorial = () => {
+    // Estados para paginación del subhistorial
+    const [registroSeleccionado, setRegistroSeleccionado] = useState<number | null>(null);
+    const [paginaHistorialExpandido, setPaginaHistorialExpandido] = useState<{ [key: number]: number }>({});
+    const itemsPorPaginaHistorial = 3;
+
     const acciones: AccionHistorial[] = [
       'CREATE',
       'UPDATE',
@@ -1324,12 +1372,14 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
                       <span className="text-sm font-medium text-gray-700">
-                        {listaFiltradaPorNombre.length} asistencias (estado actual)
+                        {listaFiltradaPorNombre.length} asistencias (estado
+                        actual)
                       </span>
                     </div>
                     <div className="h-4 w-px bg-gray-300"></div>
                     <span className="text-xs text-gray-600">
-                      Haz clic en un registro para ver todo su historial de cambios
+                      Haz clic en un registro para ver todo su historial de
+                      cambios
                     </span>
                   </div>
                 </div>
@@ -1434,340 +1484,419 @@ export function AsistenciaModule({ user }: AsistenciaModuleProps) {
                         ? historialAgrupado[h.id_asistencia] || []
                         : [];
                       const totalCambios = historialCompleto.length; // Total de cambios incluyendo el CREATE
-                      const estaExpandido = registroSeleccionado === h.id_asistencia;
+                      const estaExpandido =
+                        registroSeleccionado === h.id_asistencia;
 
                       return (
                         <React.Fragment key={h.id}>
-                        <TableRow
-                          className="hover:bg-blue-50/30 transition-colors group cursor-pointer"
-                          onClick={() => {
-                            const nuevoEstado = estaExpandido ? null : h.id_asistencia || null;
-                            setRegistroSeleccionado(nuevoEstado);
-                            // Resetear la página del historial al cerrar
-                            if (estaExpandido && h.id_asistencia) {
-                              setPaginaHistorialExpandido(prev => ({
-                                ...prev,
-                                [h.id_asistencia!]: 1
-                              }));
-                            }
-                          }}
-                        >
-                          {/* Fecha/Hora */}
-                          <TableCell className="font-medium">
-                            <div className="flex flex-col gap-1">
+                          <TableRow
+                            className="hover:bg-blue-50/30 transition-colors group cursor-pointer"
+                            onClick={() => {
+                              const nuevoEstado = estaExpandido
+                                ? null
+                                : h.id_asistencia || null;
+                              setRegistroSeleccionado(nuevoEstado);
+                              // Resetear la página del historial al cerrar
+                              if (estaExpandido && h.id_asistencia) {
+                                setPaginaHistorialExpandido((prev) => ({
+                                  ...prev,
+                                  [h.id_asistencia!]: 1,
+                                }));
+                              }
+                            }}
+                          >
+                            {/* Fecha/Hora */}
+                            <TableCell className="font-medium">
+                              <div className="flex flex-col gap-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-semibold text-gray-900">
+                                    {fechaFormato}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1 text-xs text-gray-500">
+                                  <Clock className="w-3 h-3" />
+                                  {horaFormato}
+                                </div>
+                              </div>
+                            </TableCell>
+
+                            {/* Alumno */}
+                            <TableCell>
                               <div className="flex items-center gap-2">
-                                <span className="text-sm font-semibold text-gray-900">
-                                  {fechaFormato}
+                                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white text-xs font-semibold flex-shrink-0">
+                                  {nombreAlumno
+                                    .split(' ')
+                                    .map((n) => n[0])
+                                    .join('')
+                                    .slice(0, 2)
+                                    .toUpperCase()}
+                                </div>
+                                <span className="font-medium text-gray-900 whitespace-nowrap">
+                                  {nombreAlumno}
                                 </span>
                               </div>
-                              <div className="flex items-center gap-1 text-xs text-gray-500">
-                                <Clock className="w-3 h-3" />
-                                {horaFormato}
-                              </div>
-                            </div>
-                          </TableCell>
+                            </TableCell>
 
-                          {/* Alumno */}
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white text-xs font-semibold flex-shrink-0">
-                                {nombreAlumno
-                                  .split(' ')
-                                  .map((n) => n[0])
-                                  .join('')
-                                  .slice(0, 2)
-                                  .toUpperCase()}
-                              </div>
-                              <span className="font-medium text-gray-900 whitespace-nowrap">
-                                {nombreAlumno}
-                              </span>
-                            </div>
-                          </TableCell>
-
-                          {/* Asignatura */}
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
-                              <span className="text-sm text-gray-700 whitespace-nowrap">
-                                {nombreAsignatura}
-                              </span>
-                            </div>
-                          </TableCell>
-
-                          {/* Estado Actual */}
-                          <TableCell>
-                            <Badge
-                              variant="outline"
-                              className={`text-xs px-2 py-0.5 ${getEstadoColor(
-                                h.estado_nuevo || h.estado_anterior || ''
-                              )}`}
-                            >
-                              {getEstadoLabel(h.estado_nuevo || h.estado_anterior || '')}
-                            </Badge>
-                          </TableCell>
-
-                          {/* Observación */}
-                          <TableCell className="max-w-[250px]">
-                            <div className="group/obs relative">
-                              {h.observacion_nueva || h.observacion_anterior ? (
-                                <p className="text-sm text-gray-600 line-clamp-2 leading-relaxed">
-                                  {short(
-                                    h.observacion_nueva ?? h.observacion_anterior
-                                  )}
-                                </p>
-                              ) : (
-                                <span className="text-xs text-gray-400 italic">
-                                  Sin observación
+                            {/* Asignatura */}
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
+                                <span className="text-sm text-gray-700 whitespace-nowrap">
+                                  {nombreAsignatura}
                                 </span>
-                              )}
-                            </div>
-                          </TableCell>
-
-                          {/* Docente */}
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <div className="w-7 h-7 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center text-white text-xs font-semibold">
-                                {nombreDocente
-                                  .split(' ')
-                                  .map((n) => n[0])
-                                  .join('')
-                                  .slice(0, 2)
-                                  .toUpperCase()}
                               </div>
-                              <span className="text-sm text-gray-700 whitespace-nowrap">
-                                {nombreDocente}
-                              </span>
-                            </div>
-                          </TableCell>
+                            </TableCell>
 
-                          {/* Cambios */}
-                          <TableCell>
-                            {totalCambios > 1 ? (
+                            {/* Estado Actual */}
+                            <TableCell>
                               <Badge
                                 variant="outline"
-                                className="bg-orange-50 text-orange-700 border-orange-200"
+                                className={`text-xs px-2 py-0.5 ${getEstadoColor(
+                                  h.estado_nuevo || h.estado_anterior || ''
+                                )}`}
                               >
-                                {totalCambios} registro{totalCambios > 1 ? 's' : ''}
+                                {getEstadoLabel(
+                                  h.estado_nuevo || h.estado_anterior || ''
+                                )}
                               </Badge>
-                            ) : (
-                              <span className="text-xs text-gray-400">
-                                Registro inicial
-                              </span>
-                            )}
-                          </TableCell>
+                            </TableCell>
 
-                          {/* Acciones */}
-                          <TableCell className="text-right">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="opacity-0 group-hover:opacity-100 transition-opacity"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const nuevoEstado = estaExpandido ? null : h.id_asistencia || null;
-                                setRegistroSeleccionado(nuevoEstado);
-                                // Resetear la página del historial al abrir/cerrar
-                                if (h.id_asistencia) {
-                                  setPaginaHistorialExpandido(prev => ({
-                                    ...prev,
-                                    [h.id_asistencia!]: 1
-                                  }));
-                                }
-                              }}
-                            >
-                              {estaExpandido ? (
-                                <>
-                                  <ChevronLeft className="w-4 h-4 mr-2" />
-                                  Ocultar
-                                </>
-                              ) : (
-                                <>
-                                  <Eye className="w-4 h-4 mr-2" />
-                                  Ver historial
-                                </>
-                              )}
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-{/* Fila expandible con el historial de cambios */}
-                        {estaExpandido && totalCambios > 0 && (
-                          <TableRow>
-                            <TableCell colSpan={8} className="bg-gray-50 p-0">
-                              <div className="p-4 space-y-3">
-                                <div className="flex items-center justify-between mb-3">
-                                  <div className="flex items-center gap-2">
-                                    <Clock className="w-4 h-4 text-blue-600" />
-                                    <h4 className="font-semibold text-gray-900">
-                                      Historial Completo ({totalCambios} registro{totalCambios > 1 ? 's' : ''})
-                                    </h4>
-                                  </div>
-                                  {totalCambios > itemsPorPaginaHistorial && (
-                                    <div className="text-xs text-gray-500">
-                                      Página {(paginaHistorialExpandido[h.id_asistencia!] || 1)} de {Math.ceil(totalCambios / itemsPorPaginaHistorial)}
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="flex gap-3 overflow-x-auto pb-2">
-                                  {(() => {
-                                    const paginaActual = paginaHistorialExpandido[h.id_asistencia!] || 1;
-                                    const inicio = (paginaActual - 1) * itemsPorPaginaHistorial;
-                                    const fin = inicio + itemsPorPaginaHistorial;
-                                    const registrosPaginados = historialCompleto.slice(inicio, fin);
-                                    
-                                    return registrosPaginados.map((cambio) => {
-                                      const fechaCambio = new Date(cambio.created_at);
-                                      return (
-                                        <div
-                                          key={cambio.id}
-                                          style={{ width: '320px', height: '208px' }}
-                                          className="flex-shrink-0 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all p-4 flex flex-col overflow-hidden"
-                                        >
-                                          {/* Header con badge y fecha */}
-                                          <div className="flex items-center justify-between mb-3 gap-2 min-w-0">
-                                            <div className="flex-shrink-0">
-                                              {badgeForAccion(cambio.accion)}
-                                            </div>
-                                            <div className="text-xs text-gray-500 flex-shrink-0 text-right whitespace-nowrap">
-                                              {fechaCambio.toLocaleDateString('es-ES', { 
-                                                day: '2-digit', 
-                                                month: 'short'
-                                              })}, {fechaCambio.toLocaleTimeString('es-ES', { 
-                                                hour: '2-digit',
-                                                minute: '2-digit'
-                                              })}
-                                            </div>
-                                          </div>
-                                          
-                                          {/* Estados */}
-                                          <div className="flex items-center gap-2 mb-3 min-h-[28px] overflow-hidden">
-                                            {cambio.estado_anterior && (
-                                              <Badge
-                                                variant="outline"
-                                                className={`text-xs flex-shrink-0 ${getEstadoColor(
-                                                  cambio.estado_anterior
-                                                )}`}
-                                              >
-                                                {getEstadoLabel(cambio.estado_anterior)}
-                                              </Badge>
-                                            )}
-                                            {cambio.estado_anterior && cambio.estado_nuevo && (
-                                              <ArrowRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                                            )}
-                                            {cambio.estado_nuevo && (
-                                              <Badge
-                                                variant="outline"
-                                                className={`text-xs flex-shrink-0 ${getEstadoColor(
-                                                  cambio.estado_nuevo
-                                                )}`}
-                                              >
-                                                {getEstadoLabel(cambio.estado_nuevo)}
-                                              </Badge>
-                                            )}
-                                          </div>
-                                          
-                                          {/* Observación */}
-                                          <div className="text-sm text-gray-600 mb-3 flex-1 overflow-hidden min-w-0">
-                                            {cambio.observacion_anterior && cambio.observacion_nueva ? (
-                                              <div className="space-y-1 h-full overflow-hidden">
-                                                <div className="line-through text-gray-400 text-xs truncate">
-                                                  {cambio.observacion_anterior}
-                                                </div>
-                                                <div 
-                                                  className="font-medium overflow-hidden text-ellipsis"
-                                                  style={{
-                                                    display: '-webkit-box',
-                                                    WebkitLineClamp: 3,
-                                                    WebkitBoxOrient: 'vertical',
-                                                    wordBreak: 'break-all',
-                                                    overflowWrap: 'anywhere'
-                                                  }}
-                                                >
-                                                  {cambio.observacion_nueva}
-                                                </div>
-                                              </div>
-                                            ) : (cambio.observacion_nueva || cambio.observacion_anterior) ? (
-                                              <div 
-                                                className="overflow-hidden h-full text-ellipsis"
-                                                style={{
-                                                  display: '-webkit-box',
-                                                  WebkitLineClamp: 4,
-                                                  WebkitBoxOrient: 'vertical',
-                                                  wordBreak: 'break-all',
-                                                  overflowWrap: 'anywhere'
-                                                }}
-                                              >
-                                                {cambio.observacion_nueva || cambio.observacion_anterior}
-                                              </div>
-                                            ) : (
-                                              <span className="text-gray-400 italic">Sin observación</span>
-                                            )}
-                                          </div>
-                                          
-                                          {/* Docente */}
-                                          <div className="flex items-center gap-2 text-sm text-gray-500 pt-3 border-t border-gray-100 mt-auto min-h-[44px] min-w-0">
-                                            <UserCheck className="w-4 h-4 flex-shrink-0" />
-                                            <span className="truncate">
-                                              {cambio.orientador
-                                                ? `${cambio.orientador.nombre.split(' ')[0]} ${cambio.orientador.apellido.split(' ')[0]}`
-                                                : `ID ${cambio.id_orientador_registro}`}
-                                            </span>
-                                          </div>
-                                        </div>
-                                      );
-                                    });
-                                  })()}
-                                </div>
-                                {/* Paginación del historial expandido */}
-                                {totalCambios > itemsPorPaginaHistorial && (
-                                  <div className="flex items-center justify-center gap-2 mt-4 pt-3 border-t border-gray-200">
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        const paginaActual = paginaHistorialExpandido[h.id_asistencia!] || 1;
-                                        if (paginaActual > 1) {
-                                          setPaginaHistorialExpandido(prev => ({
-                                            ...prev,
-                                            [h.id_asistencia!]: paginaActual - 1
-                                          }));
-                                        }
-                                      }}
-                                      disabled={(paginaHistorialExpandido[h.id_asistencia!] || 1) <= 1}
-                                      className="h-8 w-8 p-0"
-                                    >
-                                      <ChevronLeft className="w-4 h-4" />
-                                    </Button>
-                                    
-                                    <span className="text-sm text-gray-600 px-2">
-                                      {paginaHistorialExpandido[h.id_asistencia!] || 1} / {Math.ceil(totalCambios / itemsPorPaginaHistorial)}
-                                    </span>
-                                    
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        const paginaActual = paginaHistorialExpandido[h.id_asistencia!] || 1;
-                                        const totalPaginas = Math.ceil(totalCambios / itemsPorPaginaHistorial);
-                                        if (paginaActual < totalPaginas) {
-                                          setPaginaHistorialExpandido(prev => ({
-                                            ...prev,
-                                            [h.id_asistencia!]: paginaActual + 1
-                                          }));
-                                        }
-                                      }}
-                                      disabled={(paginaHistorialExpandido[h.id_asistencia!] || 1) >= Math.ceil(totalCambios / itemsPorPaginaHistorial)}
-                                      className="h-8 w-8 p-0"
-                                    >
-                                      <ChevronRight className="w-4 h-4" />
-                                    </Button>
-                                  </div>
+                            {/* Observación */}
+                            <TableCell className="max-w-[250px]">
+                              <div className="group/obs relative">
+                                {h.observacion_nueva ||
+                                h.observacion_anterior ? (
+                                  <p className="text-sm text-gray-600 line-clamp-2 leading-relaxed">
+                                    {short(
+                                      h.observacion_nueva ??
+                                        h.observacion_anterior
+                                    )}
+                                  </p>
+                                ) : (
+                                  <span className="text-xs text-gray-400 italic">
+                                    Sin observación
+                                  </span>
                                 )}
                               </div>
                             </TableCell>
+
+                            {/* Docente */}
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <div className="w-7 h-7 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center text-white text-xs font-semibold">
+                                  {nombreDocente
+                                    .split(' ')
+                                    .map((n) => n[0])
+                                    .join('')
+                                    .slice(0, 2)
+                                    .toUpperCase()}
+                                </div>
+                                <span className="text-sm text-gray-700 whitespace-nowrap">
+                                  {nombreDocente}
+                                </span>
+                              </div>
+                            </TableCell>
+
+                            {/* Cambios */}
+                            <TableCell>
+                              {totalCambios > 1 ? (
+                                <Badge
+                                  variant="outline"
+                                  className="bg-orange-50 text-orange-700 border-orange-200"
+                                >
+                                  {totalCambios} registro
+                                  {totalCambios > 1 ? 's' : ''}
+                                </Badge>
+                              ) : (
+                                <span className="text-xs text-gray-400">
+                                  Registro inicial
+                                </span>
+                              )}
+                            </TableCell>
+
+                            {/* Acciones */}
+                            <TableCell className="text-right">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const nuevoEstado = estaExpandido
+                                    ? null
+                                    : h.id_asistencia || null;
+                                  setRegistroSeleccionado(nuevoEstado);
+                                  // Resetear la página del historial al abrir/cerrar
+                                  if (h.id_asistencia) {
+                                    setPaginaHistorialExpandido((prev) => ({
+                                      ...prev,
+                                      [h.id_asistencia!]: 1,
+                                    }));
+                                  }
+                                }}
+                              >
+                                {estaExpandido ? (
+                                  <>
+                                    <ChevronLeft className="w-4 h-4 mr-2" />
+                                    Ocultar
+                                  </>
+                                ) : (
+                                  <>
+                                    <Eye className="w-4 h-4 mr-2" />
+                                    Ver historial
+                                  </>
+                                )}
+                              </Button>
+                            </TableCell>
                           </TableRow>
-                        )}
+                          {/* Fila expandible con el historial de cambios */}
+                          {estaExpandido && totalCambios > 0 && (
+                            <TableRow>
+                              <TableCell colSpan={8} className="bg-gray-50 p-0">
+                                <div className="p-4 space-y-3">
+                                  <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center gap-2">
+                                      <Clock className="w-4 h-4 text-blue-600" />
+                                      <h4 className="font-semibold text-gray-900">
+                                        Historial Completo ({totalCambios}{' '}
+                                        registro{totalCambios > 1 ? 's' : ''})
+                                      </h4>
+                                    </div>
+                                    {totalCambios > itemsPorPaginaHistorial && (
+                                      <div className="text-xs text-gray-500">
+                                        Página{' '}
+                                        {paginaHistorialExpandido[
+                                          h.id_asistencia!
+                                        ] || 1}{' '}
+                                        de{' '}
+                                        {Math.ceil(
+                                          totalCambios / itemsPorPaginaHistorial
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    {(() => {
+                                      const paginaActual = paginaHistorialExpandido[h.id_asistencia!] || 1;
+                                      const inicio = (paginaActual - 1) * itemsPorPaginaHistorial;
+                                      const fin = inicio + itemsPorPaginaHistorial;
+                                      const registrosPaginados = historialCompleto.slice(inicio, fin);
+
+                                      return registrosPaginados.map(
+                                        (cambio) => {
+                                          const fechaCambio = new Date(
+                                            cambio.created_at
+                                          );
+                                          return (
+                                            <div
+                                              key={cambio.id}
+                                              className="bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all p-4 flex flex-col h-[208px]"
+                                            >
+                                              {/* Header con badge y fecha */}
+                                              <div className="flex items-center justify-between mb-3 gap-2 min-w-0">
+                                                <div className="flex-shrink-0">
+                                                  {badgeForAccion(
+                                                    cambio.accion
+                                                  )}
+                                                </div>
+                                                <div className="text-xs text-gray-500 flex-shrink-0 text-right whitespace-nowrap">
+                                                  {fechaCambio.toLocaleDateString(
+                                                    'es-ES',
+                                                    {
+                                                      day: '2-digit',
+                                                      month: 'short',
+                                                    }
+                                                  )}
+                                                  ,{' '}
+                                                  {fechaCambio.toLocaleTimeString(
+                                                    'es-ES',
+                                                    {
+                                                      hour: '2-digit',
+                                                      minute: '2-digit',
+                                                    }
+                                                  )}
+                                                </div>
+                                              </div>
+
+                                              {/* Estados */}
+                                              <div className="flex items-center gap-2 mb-3 min-h-[28px] overflow-hidden">
+                                                {cambio.estado_anterior && (
+                                                  <Badge
+                                                    variant="outline"
+                                                    className={`text-xs flex-shrink-0 ${getEstadoColor(
+                                                      cambio.estado_anterior
+                                                    )}`}
+                                                  >
+                                                    {getEstadoLabel(
+                                                      cambio.estado_anterior
+                                                    )}
+                                                  </Badge>
+                                                )}
+                                                {cambio.estado_anterior &&
+                                                  cambio.estado_nuevo && (
+                                                    <ArrowRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                                                  )}
+                                                {cambio.estado_nuevo && (
+                                                  <Badge
+                                                    variant="outline"
+                                                    className={`text-xs flex-shrink-0 ${getEstadoColor(
+                                                      cambio.estado_nuevo
+                                                    )}`}
+                                                  >
+                                                    {getEstadoLabel(
+                                                      cambio.estado_nuevo
+                                                    )}
+                                                  </Badge>
+                                                )}
+                                              </div>
+
+                                              {/* Observación */}
+                                              <div className="text-sm text-gray-600 mb-3 flex-1 overflow-hidden min-w-0">
+                                                {cambio.observacion_anterior &&
+                                                cambio.observacion_nueva ? (
+                                                  <div className="space-y-1 h-full overflow-hidden">
+                                                    <div className="line-through text-gray-400 text-xs truncate">
+                                                      {
+                                                        cambio.observacion_anterior
+                                                      }
+                                                    </div>
+                                                    <div
+                                                      className="font-medium overflow-hidden text-ellipsis"
+                                                      style={{
+                                                        display: '-webkit-box',
+                                                        WebkitLineClamp: 3,
+                                                        WebkitBoxOrient:
+                                                          'vertical',
+                                                        wordBreak: 'break-all',
+                                                        overflowWrap:
+                                                          'anywhere',
+                                                      }}
+                                                    >
+                                                      {cambio.observacion_nueva}
+                                                    </div>
+                                                  </div>
+                                                ) : cambio.observacion_nueva ||
+                                                  cambio.observacion_anterior ? (
+                                                  <div
+                                                    className="overflow-hidden h-full text-ellipsis"
+                                                    style={{
+                                                      display: '-webkit-box',
+                                                      WebkitLineClamp: 4,
+                                                      WebkitBoxOrient:
+                                                        'vertical',
+                                                      wordBreak: 'break-all',
+                                                      overflowWrap: 'anywhere',
+                                                    }}
+                                                  >
+                                                    {cambio.observacion_nueva ||
+                                                      cambio.observacion_anterior}
+                                                  </div>
+                                                ) : (
+                                                  <span className="text-gray-400 italic">
+                                                    Sin observación
+                                                  </span>
+                                                )}
+                                              </div>
+
+                                              {/* Docente */}
+                                              <div className="flex items-center gap-2 text-sm text-gray-500 pt-3 border-t border-gray-100 mt-auto min-h-[44px] min-w-0">
+                                                <UserCheck className="w-4 h-4 flex-shrink-0" />
+                                                <span className="truncate">
+                                                  {cambio.orientador
+                                                    ? `${cambio.orientador.nombre.split(' ')[0]} ${cambio.orientador.apellido.split(' ')[0]}`
+                                                    : `ID ${cambio.id_orientador_registro}`}
+                                                </span>
+                                              </div>
+                                            </div>
+                                          );
+                                        }
+                                      );
+                                    })()}
+                                  </div>
+                                  {/* Paginación del historial expandido */}
+                                  {totalCambios > itemsPorPaginaHistorial && (
+                                    <div className="flex items-center justify-center gap-2 mt-4 pt-3 border-t border-gray-200">
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          const paginaActual =
+                                            paginaHistorialExpandido[
+                                              h.id_asistencia!
+                                            ] || 1;
+                                          if (paginaActual > 1) {
+                                            setPaginaHistorialExpandido(
+                                              (prev) => ({
+                                                ...prev,
+                                                [h.id_asistencia!]:
+                                                  paginaActual - 1,
+                                              })
+                                            );
+                                          }
+                                        }}
+                                        disabled={
+                                          (paginaHistorialExpandido[
+                                            h.id_asistencia!
+                                          ] || 1) <= 1
+                                        }
+                                        className="h-8 w-8 p-0"
+                                      >
+                                        <ChevronLeft className="w-4 h-4" />
+                                      </Button>
+
+                                      <span className="text-sm text-gray-600 px-2">
+                                        {paginaHistorialExpandido[
+                                          h.id_asistencia!
+                                        ] || 1}{' '}
+                                        /{' '}
+                                        {Math.ceil(
+                                          totalCambios / itemsPorPaginaHistorial
+                                        )}
+                                      </span>
+
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          const paginaActual =
+                                            paginaHistorialExpandido[
+                                              h.id_asistencia!
+                                            ] || 1;
+                                          const totalPaginas = Math.ceil(
+                                            totalCambios /
+                                              itemsPorPaginaHistorial
+                                          );
+                                          if (paginaActual < totalPaginas) {
+                                            setPaginaHistorialExpandido(
+                                              (prev) => ({
+                                                ...prev,
+                                                [h.id_asistencia!]:
+                                                  paginaActual + 1,
+                                              })
+                                            );
+                                          }
+                                        }}
+                                        disabled={
+                                          (paginaHistorialExpandido[
+                                            h.id_asistencia!
+                                          ] || 1) >=
+                                          Math.ceil(
+                                            totalCambios /
+                                              itemsPorPaginaHistorial
+                                          )
+                                        }
+                                        className="h-8 w-8 p-0"
+                                      >
+                                        <ChevronRight className="w-4 h-4" />
+                                      </Button>
+                                    </div>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
                         </React.Fragment>
                       );
                     })}
