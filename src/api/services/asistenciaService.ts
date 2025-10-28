@@ -1,136 +1,300 @@
 import { api } from '../axiosConfig';
 
-// Types
-interface Alumno {
-  id: string;
-  nombre: string;
-  apellido: string;
-  rut: string;
-  cursoId: string;
-}
+// ============================================
+// TYPES - ASISTENCIA
+// ============================================
 
-interface Curso {
-  id: string;
-  nombre: string;
-  nivel: string;
-  asignatura: string;
-  alumnos: number;
-}
+// Enums que coinciden con el backend
+export type EstadoAsistencia = 'P' | 'E' | 'SP' | 'A';
+export type AccionAsistencia =
+  | 'CREATE'
+  | 'UPDATE'
+  | 'DELETE'
+  | 'BULK_IMPORT'
+  | 'RECTIFY'
+  | 'ROLLBACK';
 
-interface CreateAsistenciaDto {
-  id_alumno: number;
-  id_asignatura: number;
-  id_orientador: number;
+// DTO para crear una asistencia individual
+export interface CreateAsistenciaDto {
+  id_alumno: string;
+  id_asignatura: string;
+  id_orientador: string;
   fecha: string;
-  estado: 'P' | 'E' | 'SP' | 'A';
+  estado: EstadoAsistencia;
+  anio_academico: string;
   observacion?: string;
-  anio_academico?: string; // String según schema de BD
-  trimestre?: number;
 }
 
-interface UpdateAsistenciaDto {
-  estado?: 'P' | 'E' | 'SP' | 'A';
-  observacion?: string;
-  trimestre?: number;
+// DTO para crear asistencias en lote (bulk)
+export interface BulkAsistenciaDto {
+  asistencias: CreateAsistenciaDto[];
 }
 
-interface AsistenciaResponse {
-  id_asistencia: number;
-  id_alumno: number;
-  id_asignatura: number;
-  id_orientador: number;
+// DTO para actualizar asistencia
+export interface UpdateAsistenciaDto {
+  estado?: EstadoAsistencia;
+  observacion?: string;
+}
+
+// Response de asistencia
+export interface AsistenciaResponse {
+  id_asistencia: string;
+  id_alumno: string;
+  id_asignatura: string;
+  id_orientador: string;
   fecha: string;
-  estado: string;
+  estado: EstadoAsistencia;
+  anio_academico: string;
   observacion: string | null;
-  anio_academico: string; // String según schema de BD
-  trimestre: number;
-  created_at: string;
-  updated_at: string;
+  creadoEn: string;
 }
 
-// Service methods
+// Servicio de asistencia
 export const asistenciaService = {
-  // Registrar asistencias (individual o bloque)
-  async create(
-    asistencias: CreateAsistenciaDto[]
-  ): Promise<AsistenciaResponse[]> {
-    const { data } = await api.post<AsistenciaResponse[]>(
-      '/asistencias',
-      asistencias
+  createBulk: async (
+    data: BulkAsistenciaDto
+  ): Promise<AsistenciaResponse[]> => {
+    const response = await api.post<AsistenciaResponse[]>(
+      '/asistencia/bulk',
+      data
     );
-    return data;
+    return response.data;
   },
 
-  // Obtener asistencias por asignatura y fecha específica
-  async findByAsignaturaAndFecha(
-    id_asignatura: number,
-    fecha: string
-  ): Promise<AsistenciaResponse[]> {
-    const { data } = await api.get<AsistenciaResponse[]>(
-      `/asistencias/asignatura/${id_asignatura}/fecha/${fecha}`
-    );
-    return data;
+  getAll: async (): Promise<AsistenciaResponse[]> => {
+    const response = await api.get<AsistenciaResponse[]>('/asistencia');
+    return response.data;
   },
 
-  // Obtener asistencias registradas por un docente
-  async findByDocente(id_orientador: number): Promise<AsistenciaResponse[]> {
-    const { data } = await api.get<AsistenciaResponse[]>(
-      `/asistencias/docente/${id_orientador}`
-    );
-    return data;
+  getById: async (id: string): Promise<AsistenciaResponse> => {
+    const response = await api.get<AsistenciaResponse>(`/asistencia/${id}`);
+    return response.data;
   },
 
-  // Obtener historial de asistencias de un alumno
-  async findByAlumno(id_alumno: number): Promise<AsistenciaResponse[]> {
-    const { data } = await api.get<AsistenciaResponse[]>(
-      `/asistencias/alumno/${id_alumno}`
+  update: async (
+    id: string,
+    data: UpdateAsistenciaDto
+  ): Promise<AsistenciaResponse> => {
+    const response = await api.patch<AsistenciaResponse>(
+      `/asistencia/${id}`,
+      data
     );
-    return data;
+    return response.data;
   },
 
-  // Actualizar una asistencia específica
-  async update(
-    id_asistencia: number,
-    updateData: UpdateAsistenciaDto
-  ): Promise<AsistenciaResponse> {
-    const { data } = await api.patch<AsistenciaResponse>(
-      `/asistencias/${id_asistencia}`,
-      updateData
+  delete: async (id: string): Promise<void> => {
+    await api.delete(`/asistencia/${id}`);
+  },
+};
+
+// ============================================
+// TYPES - CONDUCTA E INFRACCIONES
+// ============================================
+
+export type CategoriaInfraccion = 'MENOS_GRAVE' | 'GRAVE' | 'MUY_GRAVE';
+
+export interface CreateInfraccionCatalogoDto {
+  categoria: CategoriaInfraccion;
+  articulo: string;
+  descripcion: string;
+  puntos: number;
+}
+
+export interface UpdateInfraccionCatalogoDto {
+  categoria?: CategoriaInfraccion;
+  articulo?: string;
+  descripcion?: string;
+  puntos?: number;
+}
+
+export interface InfraccionCatalogoResponse {
+  id_infraccion: string;
+  categoria: CategoriaInfraccion;
+  articulo: string;
+  descripcion: string;
+  puntos: number;
+  creadoEn: string;
+}
+
+export interface CreateConductaDto {
+  id_alumno: string;
+  id_orientador: string;
+  id_infraccion: string;
+  fecha: string;
+  anio_academico: string;
+  observacion?: string;
+}
+
+export interface UpdateConductaDto {
+  id_infraccion?: string;
+  observacion?: string;
+}
+
+export interface ConductaResponse {
+  id_conducta: string;
+  id_alumno: string;
+  id_orientador: string;
+  id_infraccion: string;
+  fecha: string;
+  anio_academico: string;
+  observacion: string | null;
+  creadoEn: string;
+  infraccion?: InfraccionCatalogoResponse;
+}
+
+// Servicio de conducta
+export const conductaService = {
+  createCatalogo: async (
+    data: CreateInfraccionCatalogoDto
+  ): Promise<InfraccionCatalogoResponse> => {
+    const response = await api.post<InfraccionCatalogoResponse>(
+      '/conducta/catalogo',
+      data
     );
-    return data;
+    return response.data;
   },
 
-  // Obtener cursos asignados a un docente
-  async getCursosAsignados(id_orientador: number): Promise<Curso[]> {
-    const { data } = await api.get<Curso[]>(
-      `/cursos/asignados/${id_orientador}`
-    );
-    return data;
+  getAllCatalogo: async (): Promise<InfraccionCatalogoResponse[]> => {
+    const response =
+      await api.get<InfraccionCatalogoResponse[]>('/conducta/catalogo');
+    return response.data;
   },
 
-  // Obtener alumnos de un curso
-  async getAlumnosPorCurso(id_curso: number): Promise<Alumno[]> {
-    const { data } = await api.get<Alumno[]>(`/cursos/${id_curso}/alumnos`);
-    return data;
+  getCatalogoById: async (id: string): Promise<InfraccionCatalogoResponse> => {
+    const response = await api.get<InfraccionCatalogoResponse>(
+      `/conducta/catalogo/${id}`
+    );
+    return response.data;
   },
 
-  // Obtener consolidado mensual por curso
-  async getConsolidadoMensual(id_curso: number, anio: number, mes: number) {
-    const { data } = await api.get(
-      `/asistencias/mensual/curso/${id_curso}/${anio}/${mes}`
+  updateCatalogo: async (
+    id: string,
+    data: UpdateInfraccionCatalogoDto
+  ): Promise<InfraccionCatalogoResponse> => {
+    const response = await api.patch<InfraccionCatalogoResponse>(
+      `/conducta/catalogo/${id}`,
+      data
     );
-    return data;
+    return response.data;
   },
 
-  // Obtener consolidado trimestral por curso
-  async getConsolidadoTrimestral(
-    id_curso: number,
-    anio: number,
-    trimestre: number
-  ) {
-    const { data } = await api.get(
-      `/asistencias/trimestral/curso/${id_curso}/${anio}/${trimestre}`
+  deleteCatalogo: async (id: string): Promise<void> => {
+    await api.delete(`/conducta/catalogo/${id}`);
+  },
+
+  create: async (data: CreateConductaDto): Promise<ConductaResponse> => {
+    const response = await api.post<ConductaResponse>('/conducta', data);
+    return response.data;
+  },
+
+  getAll: async (): Promise<ConductaResponse[]> => {
+    const response = await api.get<ConductaResponse[]>('/conducta');
+    return response.data;
+  },
+
+  getByAlumno: async (idAlumno: string): Promise<ConductaResponse[]> => {
+    const response = await api.get<ConductaResponse[]>(
+      `/conducta/alumno/${idAlumno}`
     );
-    return data;
+    return response.data;
+  },
+
+  getById: async (id: string): Promise<ConductaResponse> => {
+    const response = await api.get<ConductaResponse>(`/conducta/${id}`);
+    return response.data;
+  },
+
+  update: async (
+    id: string,
+    data: UpdateConductaDto
+  ): Promise<ConductaResponse> => {
+    const response = await api.patch<ConductaResponse>(`/conducta/${id}`, data);
+    return response.data;
+  },
+
+  delete: async (id: string): Promise<void> => {
+    await api.delete(`/conducta/${id}`);
+  },
+};
+
+// ============================================
+// TYPES - RESÚMENES
+// ============================================
+
+export interface ResumenMensualDto {
+  id_curso: string;
+  mes: number;
+  anio_academico: string;
+}
+
+export interface InfraccionDetalle {
+  categoria: CategoriaInfraccion;
+  articulo: string;
+  puntos: number;
+  conteo: number;
+}
+
+export interface ResumenMensualResponse {
+  id_curso: string;
+  mes: number;
+  anio_academico: string;
+  estudiantes: Array<{
+    id_alumno: string;
+    nombre: string;
+    apellidos: string;
+    dias_asistidos: number;
+    dias_ausencias: number;
+    dias_excusados: number;
+    dias_sin_permiso: number;
+    total_dias_habiles: number;
+    porcentaje_asistencia: number;
+    asistencias_detalle: Array<{
+      fecha: string;
+      estado: EstadoAsistencia;
+      asignatura: string;
+    }>;
+  }>;
+}
+
+export interface ResumenTrimestralDto {
+  id_curso: string;
+  trimestre: number;
+  anio_academico: string;
+}
+
+export interface ResumenTrimestralResponse {
+  id_curso: string;
+  trimestre: number;
+  anio_academico: string;
+  estudiantes: Array<{
+    id_alumno: string;
+    nombre: string;
+    apellidos: string;
+    total_ausencias_injustificadas: number;
+    infracciones: InfraccionDetalle[];
+    nota_conducta: number;
+  }>;
+}
+
+// Servicio de resúmenes
+export const resumenService = {
+  getResumenMensual: async (
+    params: ResumenMensualDto
+  ): Promise<ResumenMensualResponse> => {
+    const response = await api.get<ResumenMensualResponse>(
+      '/resumen/asistencia-mensual',
+      { params }
+    );
+    return response.data;
+  },
+
+  getResumenTrimestral: async (
+    params: ResumenTrimestralDto
+  ): Promise<ResumenTrimestralResponse> => {
+    const response = await api.get<ResumenTrimestralResponse>(
+      '/resumen/trimestral',
+      { params }
+    );
+    return response.data;
   },
 };
