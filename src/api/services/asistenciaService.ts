@@ -16,18 +16,19 @@ export type AccionAsistencia =
 
 // DTO para crear una asistencia individual
 export interface CreateAsistenciaDto {
-  id_alumno: string;
-  id_asignatura: string;
-  id_orientador: string;
+  id_alumno: number;
+  id_asignatura: number;
+  id_orientador: number;
   fecha: string;
   estado: EstadoAsistencia;
   anio_academico: string;
-  observacion?: string;
+  trimestre: number;
+  observacion?: string | null;
 }
 
 // DTO para crear asistencias en lote (bulk)
 export interface BulkAsistenciaDto {
-  asistencias: CreateAsistenciaDto[];
+  registros: CreateAsistenciaDto[];
 }
 
 // DTO para actualizar asistencia
@@ -222,9 +223,9 @@ export const conductaService = {
 // ============================================
 
 export interface ResumenMensualDto {
-  id_curso: string;
+  cursoId: number;
   mes: number;
-  anio_academico: string;
+  anio: number;
 }
 
 export interface InfraccionDetalle {
@@ -235,53 +236,44 @@ export interface InfraccionDetalle {
 }
 
 export interface ResumenMensualResponse {
-  id_curso: string;
-  mes: number;
-  anio_academico: string;
-  estudiantes: Array<{
-    id_alumno: string;
-    nombre: string;
-    apellidos: string;
-    dias_asistidos: number;
-    dias_ausencias: number;
-    dias_excusados: number;
-    dias_sin_permiso: number;
-    total_dias_habiles: number;
-    porcentaje_asistencia: number;
-    asistencias_detalle: Array<{
-      fecha: string;
-      estado: EstadoAsistencia;
-      asignatura: string;
-    }>;
-  }>;
+  id_alumno: number;
+  nombre: string;
+  apellido: string;
+  justificadas: number; // Ausencias con permiso (E)
+  injustificadas: number; // Ausencias sin permiso (SP)
+  atrasos: number; // Llegadas tarde (A)
 }
 
 export interface ResumenTrimestralDto {
-  id_curso: string;
+  cursoId: number;
   trimestre: number;
-  anio_academico: string;
+  anio: number;
+}
+
+export interface InfraccionResumen {
+  categoria: CategoriaInfraccion;
+  articulo: string;
+  descripcion: string;
+  puntos: number;
+  cantidad: number;
 }
 
 export interface ResumenTrimestralResponse {
-  id_curso: string;
-  trimestre: number;
-  anio_academico: string;
-  estudiantes: Array<{
-    id_alumno: string;
-    nombre: string;
-    apellidos: string;
-    total_ausencias_injustificadas: number;
-    infracciones: InfraccionDetalle[];
-    nota_conducta: number;
-  }>;
+  id_alumno: number;
+  nombre: string;
+  apellido: string;
+  justificadas: number; // Ausencias con permiso (E)
+  injustificadas: number; // Ausencias sin permiso (SP)
+  infracciones: InfraccionResumen[];
+  puntajeConducta: number; // Calculado: 10 - (SP × 0.2) - (infracciones según categoría)
 }
 
 // Servicio de resúmenes
 export const resumenService = {
   getResumenMensual: async (
     params: ResumenMensualDto
-  ): Promise<ResumenMensualResponse> => {
-    const response = await api.get<ResumenMensualResponse>(
+  ): Promise<ResumenMensualResponse[]> => {
+    const response = await api.get<ResumenMensualResponse[]>(
       '/resumen/asistencia-mensual',
       { params }
     );
@@ -290,8 +282,8 @@ export const resumenService = {
 
   getResumenTrimestral: async (
     params: ResumenTrimestralDto
-  ): Promise<ResumenTrimestralResponse> => {
-    const response = await api.get<ResumenTrimestralResponse>(
+  ): Promise<ResumenTrimestralResponse[]> => {
+    const response = await api.get<ResumenTrimestralResponse[]>(
       '/resumen/trimestral',
       { params }
     );

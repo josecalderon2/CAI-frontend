@@ -56,16 +56,16 @@ import {
   asistenciaService,
   conductaService,
   resumenService,
-  type CreateAsistenciaDto,
+  type EstadoAsistencia,
   type BulkAsistenciaDto,
-  type CreateConductaDto,
-  type CreateInfraccionCatalogoDto,
-  type InfraccionCatalogoResponse,
   type ResumenMensualDto,
   type ResumenMensualResponse,
   type ResumenTrimestralDto,
   type ResumenTrimestralResponse,
-  type EstadoAsistencia,
+  type InfraccionCatalogoResponse,
+  type InfraccionResumen,
+  type CreateInfraccionCatalogoDto,
+  type CreateConductaDto,
   type CategoriaInfraccion,
 } from '../api/services/asistenciaService';
 import { cursosService } from '../api/services/cursosService';
@@ -86,7 +86,6 @@ interface AlumnoResponse {
   id_alumno: number;
   nombre: string;
   apellido: string;
-  rut: string;
 }
 
 interface CursoResponse {
@@ -156,21 +155,23 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
   });
 
   // Estados para Resúmenes
-  const [resumenMensual, setResumenMensual] =
-    useState<ResumenMensualResponse | null>(null);
-  const [resumenTrimestral, setResumenTrimestral] =
-    useState<ResumenTrimestralResponse | null>(null);
+  const [resumenMensual, setResumenMensual] = useState<
+    ResumenMensualResponse[] | null
+  >(null);
+  const [resumenTrimestral, setResumenTrimestral] = useState<
+    ResumenTrimestralResponse[] | null
+  >(null);
   const [filtroResumenMensual, setFiltroResumenMensual] =
     useState<ResumenMensualDto>({
-      id_curso: '',
+      cursoId: 0,
       mes: new Date().getMonth() + 1,
-      anio_academico: new Date().getFullYear().toString(),
+      anio: new Date().getFullYear(),
     });
   const [filtroResumenTrimestral, setFiltroResumenTrimestral] =
     useState<ResumenTrimestralDto>({
-      id_curso: '',
-      trimestre: Math.floor(new Date().getMonth() / 3) + 1,
-      anio_academico: new Date().getFullYear().toString(),
+      cursoId: 0,
+      trimestre: Math.floor(new Date().getMonth() / 4) + 1,
+      anio: new Date().getFullYear(),
     });
 
   // Cargar datos iniciales
@@ -238,8 +239,9 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
           .map((curso: any) => {
             // El backend retorna asignaturas como array, necesitamos mapearlo
             const asignaturasArray = curso.asignaturas || [];
-            const primeraAsignatura = asignaturasArray.length > 0 ? asignaturasArray[0] : null;
-            
+            const primeraAsignatura =
+              asignaturasArray.length > 0 ? asignaturasArray[0] : null;
+
             const cursoMapeado = {
               id_curso: curso.id_curso
                 ? parseInt(curso.id_curso, 10)
@@ -324,7 +326,6 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
               id_alumno: a.id_alumno ?? parseInt(a.id, 10),
               nombre: a.nombre,
               apellido: a.apellido,
-              rut: a.rut ?? 'N/A',
             }));
           } catch (err) {
             console.error(
@@ -390,23 +391,29 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
 
     setIsLoading(true);
     try {
-      const asistencias: CreateAsistenciaDto[] = Object.entries(
-        asistenciaActual
-      ).map(([alumnoId, datos]) => ({
-        id_alumno: alumnoId,
-        id_asignatura: cursoActual.asignatura!.id_asignatura.toString(),
-        id_orientador: user.id,
-        fecha: fechaSeleccionada,
-        estado: datos.estado,
-        anio_academico: new Date().getFullYear().toString(),
-        observacion: datos.observacion || undefined,
-      }));
+      // Calcular trimestre basado en la fecha
+      const fecha = new Date(fechaSeleccionada);
+      const mes = fecha.getMonth() + 1;
+      const trimestre = Math.ceil(mes / 4); // 1-4 = T1, 5-8 = T2, 9-12 = T3
 
-      const bulkData: BulkAsistenciaDto = { asistencias };
+      const registros = Object.entries(asistenciaActual).map(
+        ([alumnoId, datos]) => ({
+          id_alumno: parseInt(alumnoId),
+          id_asignatura: cursoActual.asignatura!.id_asignatura,
+          id_orientador: parseInt(user.id),
+          fecha: fechaSeleccionada,
+          estado: datos.estado,
+          anio_academico: new Date().getFullYear().toString(),
+          trimestre: trimestre,
+          observacion: datos.observacion || null,
+        })
+      );
+
+      const bulkData: BulkAsistenciaDto = { registros };
       await asistenciaService.createBulk(bulkData);
 
       toast.success(
-        `Asistencia guardada correctamente (${asistencias.length} alumnos)`
+        `Asistencia guardada correctamente (${registros.length} alumnos)`
       );
       setAsistenciaActual({});
     } catch (e: any) {
@@ -499,7 +506,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
 
   // Handlers para Resúmenes
   const handleGenerarResumenMensual = async () => {
-    if (!filtroResumenMensual.id_curso) {
+    if (!filtroResumenMensual.cursoId || filtroResumenMensual.cursoId === 0) {
       toast.error('Debe seleccionar un curso');
       return;
     }
@@ -519,7 +526,10 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
   };
 
   const handleGenerarResumenTrimestral = async () => {
-    if (!filtroResumenTrimestral.id_curso) {
+    if (
+      !filtroResumenTrimestral.cursoId ||
+      filtroResumenTrimestral.cursoId === 0
+    ) {
       toast.error('Debe seleccionar un curso');
       return;
     }
@@ -543,12 +553,10 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
   const alumnosDelCurso = cursoSeleccionado
     ? alumnosPorCurso[cursoSeleccionado] || []
     : [];
-  const alumnosFiltrados = alumnosDelCurso.filter(
-    (al) =>
-      `${al.nombre} ${al.apellido}`
-        .toLowerCase()
-        .includes(busquedaAlumno.toLowerCase()) ||
-      al.rut.includes(busquedaAlumno)
+  const alumnosFiltrados = alumnosDelCurso.filter((al) =>
+    `${al.nombre} ${al.apellido}`
+      .toLowerCase()
+      .includes(busquedaAlumno.toLowerCase())
   );
 
   const contarEstados = () => {
@@ -762,9 +770,6 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                         <p className="font-medium">
                           {alumno.nombre} {alumno.apellido}
                         </p>
-                        <p className="text-sm text-gray-600">
-                          RUT: {alumno.rut}
-                        </p>
                       </div>
 
                       <div className="flex items-center space-x-3">
@@ -841,7 +846,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                                 ? 'bg-blue-600 hover:bg-blue-700'
                                 : ''
                             }
-                            title="Eximido"
+                            title="Justificado/Con Permiso"
                           >
                             <AlertCircle className="w-4 h-4" />
                           </Button>
@@ -1204,11 +1209,11 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
             <div>
               <Label>Curso</Label>
               <Select
-                value={filtroResumenMensual.id_curso}
+                value={filtroResumenMensual.cursoId?.toString() || ''}
                 onValueChange={(v) =>
                   setFiltroResumenMensual({
                     ...filtroResumenMensual,
-                    id_curso: v,
+                    cursoId: parseInt(v),
                   })
                 }
               >
@@ -1256,11 +1261,11 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
               <Label>Año</Label>
               <Input
                 type="number"
-                value={filtroResumenMensual.anio_academico}
+                value={filtroResumenMensual.anio}
                 onChange={(e) =>
                   setFiltroResumenMensual({
                     ...filtroResumenMensual,
-                    anio_academico: e.target.value,
+                    anio: parseInt(e.target.value),
                   })
                 }
               />
@@ -1268,7 +1273,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
           </div>
           <Button
             onClick={handleGenerarResumenMensual}
-            disabled={isLoading || !filtroResumenMensual.id_curso}
+            disabled={isLoading || !filtroResumenMensual.cursoId}
           >
             <Download className="w-4 h-4 mr-2" />
             {isLoading ? 'Generando...' : 'Generar Resumen'}
@@ -1276,53 +1281,38 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
         </CardContent>
       </Card>
 
-      {resumenMensual && (
+      {resumenMensual && resumenMensual.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Resultado - Resumen Mensual</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-gray-500 mb-4">
-              Curso: {resumenMensual.id_curso} | Mes: {resumenMensual.mes} |
-              Año: {resumenMensual.anio_academico}
+              Curso:{' '}
+              {cursosAsignados.find(
+                (c) => c.id_curso === filtroResumenMensual.cursoId
+              )?.nombre || filtroResumenMensual.cursoId}{' '}
+              | Mes: {filtroResumenMensual.mes} | Año:{' '}
+              {filtroResumenMensual.anio}
             </p>
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Alumno</TableHead>
-                  <TableHead>Presentes</TableHead>
-                  <TableHead>Ausencias</TableHead>
-                  <TableHead>Excusados</TableHead>
-                  <TableHead>Sin Permiso</TableHead>
-                  <TableHead>% Asistencia</TableHead>
+                  <TableHead>Justificadas (E)</TableHead>
+                  <TableHead>Injustificadas (SP)</TableHead>
+                  <TableHead>Atrasos (A)</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {resumenMensual.estudiantes.map((est) => (
+                {resumenMensual.map((est: ResumenMensualResponse) => (
                   <TableRow key={est.id_alumno}>
                     <TableCell className="font-medium">
-                      {est.nombre} {est.apellidos}
+                      {est.nombre} {est.apellido}
                     </TableCell>
-                    <TableCell>{est.dias_asistidos}</TableCell>
-                    <TableCell>{est.dias_ausencias}</TableCell>
-                    <TableCell>{est.dias_excusados}</TableCell>
-                    <TableCell>{est.dias_sin_permiso}</TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          est.porcentaje_asistencia >= 80
-                            ? 'default'
-                            : 'destructive'
-                        }
-                        className={
-                          est.porcentaje_asistencia >= 80
-                            ? 'bg-green-600 hover:bg-green-700'
-                            : 'bg-red-600 hover:bg-red-700'
-                        }
-                      >
-                        {est.porcentaje_asistencia.toFixed(1)}%
-                      </Badge>
-                    </TableCell>
+                    <TableCell>{est.justificadas}</TableCell>
+                    <TableCell>{est.injustificadas}</TableCell>
+                    <TableCell>{est.atrasos}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -1347,11 +1337,11 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
             <div>
               <Label>Curso</Label>
               <Select
-                value={filtroResumenTrimestral.id_curso}
+                value={filtroResumenTrimestral.cursoId?.toString() || ''}
                 onValueChange={(v) =>
                   setFiltroResumenTrimestral({
                     ...filtroResumenTrimestral,
-                    id_curso: v,
+                    cursoId: parseInt(v),
                   })
                 }
               >
@@ -1395,11 +1385,11 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
               <Label>Año</Label>
               <Input
                 type="number"
-                value={filtroResumenTrimestral.anio_academico}
+                value={filtroResumenTrimestral.anio}
                 onChange={(e) =>
                   setFiltroResumenTrimestral({
                     ...filtroResumenTrimestral,
-                    anio_academico: e.target.value,
+                    anio: parseInt(e.target.value),
                   })
                 }
               />
@@ -1407,7 +1397,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
           </div>
           <Button
             onClick={handleGenerarResumenTrimestral}
-            disabled={isLoading || !filtroResumenTrimestral.id_curso}
+            disabled={isLoading || !filtroResumenTrimestral.cursoId}
           >
             <Download className="w-4 h-4 mr-2" />
             {isLoading ? 'Generando...' : 'Generar Resumen'}
@@ -1425,47 +1415,54 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
         </CardContent>
       </Card>
 
-      {resumenTrimestral && (
+      {resumenTrimestral && resumenTrimestral.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Resultado - Resumen Trimestral</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-gray-500 mb-4">
-              Curso: {resumenTrimestral.id_curso} | Trimestre:{' '}
-              {resumenTrimestral.trimestre} | Año:{' '}
-              {resumenTrimestral.anio_academico}
+              Curso:{' '}
+              {cursosAsignados.find(
+                (c) => c.id_curso === filtroResumenTrimestral.cursoId
+              )?.nombre || filtroResumenTrimestral.cursoId}{' '}
+              | Trimestre: {filtroResumenTrimestral.trimestre} | Año:{' '}
+              {filtroResumenTrimestral.anio}
             </p>
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Alumno</TableHead>
-                  <TableHead>Ausencias Injustificadas</TableHead>
+                  <TableHead>Justificadas (E)</TableHead>
+                  <TableHead>Injustificadas (SP)</TableHead>
                   <TableHead>Infracciones</TableHead>
                   <TableHead>Nota de Conducta</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {resumenTrimestral.estudiantes.map((est) => (
+                {resumenTrimestral.map((est: ResumenTrimestralResponse) => (
                   <TableRow key={est.id_alumno}>
                     <TableCell className="font-medium">
-                      {est.nombre} {est.apellidos}
+                      {est.nombre} {est.apellido}
                     </TableCell>
-                    <TableCell>{est.total_ausencias_injustificadas}</TableCell>
+                    <TableCell>{est.justificadas}</TableCell>
+                    <TableCell>{est.injustificadas}</TableCell>
                     <TableCell>
                       {est.infracciones.length > 0 ? (
                         <div className="space-y-1">
-                          {est.infracciones.map((inf, idx) => (
-                            <div key={idx} className="text-xs">
-                              <Badge
-                                variant="outline"
-                                className={getBadgeColor(inf.categoria)}
-                              >
-                                {inf.articulo}: {inf.conteo}x (-{inf.puntos}{' '}
-                                pts)
-                              </Badge>
-                            </div>
-                          ))}
+                          {est.infracciones.map(
+                            (inf: InfraccionResumen, idx: number) => (
+                              <div key={idx} className="text-xs">
+                                <Badge
+                                  variant="outline"
+                                  className={getBadgeColor(inf.categoria)}
+                                >
+                                  {inf.articulo}: {inf.cantidad}x (-{inf.puntos}{' '}
+                                  pts)
+                                </Badge>
+                              </div>
+                            )
+                          )}
                         </div>
                       ) : (
                         <span className="text-gray-500 text-sm">
@@ -1477,17 +1474,17 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                       <div className="flex items-center gap-2">
                         <Badge
                           variant={
-                            est.nota_conducta >= 6 ? 'default' : 'destructive'
+                            est.puntajeConducta >= 6 ? 'default' : 'destructive'
                           }
                           className={
-                            est.nota_conducta >= 6
+                            est.puntajeConducta >= 6
                               ? 'bg-green-600 hover:bg-green-700 text-lg px-3 py-1'
                               : 'bg-red-600 hover:bg-red-700 text-lg px-3 py-1'
                           }
                         >
-                          {est.nota_conducta.toFixed(1)}
+                          {est.puntajeConducta.toFixed(1)}
                         </Badge>
-                        {est.nota_conducta < 6 && (
+                        {est.puntajeConducta < 6 && (
                           <TrendingDown className="w-4 h-4 text-red-600" />
                         )}
                       </div>
