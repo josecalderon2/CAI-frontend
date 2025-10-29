@@ -28,7 +28,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from './ui/dialog';
-import { Alert, AlertDescription } from './ui/alert';
+import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import {
   Calendar,
   Users,
@@ -135,6 +135,8 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
   >([]);
   const [modalInfraccion, setModalInfraccion] = useState(false);
   const [modalConducta, setModalConducta] = useState(false);
+  const [categoriaFiltro, setCategoriaFiltro] = useState<CategoriaInfraccion | 'TODAS'>('TODAS');
+  const [busquedaAlumnoConducta, setBusquedaAlumnoConducta] = useState('');
   const [nuevaInfraccion, setNuevaInfraccion] =
     useState<CreateInfraccionCatalogoDto>({
       categoria: 'MENOS_GRAVE',
@@ -446,20 +448,25 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
   // Handlers para Conducta
   const handleCrearInfraccion = async () => {
     if (!nuevaInfraccion.articulo || !nuevaInfraccion.descripcion) {
-      toast.error('Debe completar todos los campos obligatorios');
+      toast.error('Debe completar artículo y descripción');
+      return;
+    }
+
+    if (nuevaInfraccion.puntos <= 0) {
+      toast.error('Los puntos deben ser mayor a 0');
       return;
     }
 
     setIsLoading(true);
     try {
       await conductaService.createCatalogo(nuevaInfraccion);
-      toast.success('Infracción creada correctamente');
+      toast.success('Infracción creada correctamente en el catálogo');
       setModalInfraccion(false);
       setNuevaInfraccion({
         categoria: 'MENOS_GRAVE',
         articulo: '',
         descripcion: '',
-        puntos: 0,
+        puntos: 1,
       });
       cargarCatalogoInfracciones();
     } catch (e: any) {
@@ -476,6 +483,11 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
       return;
     }
 
+    if (!nuevaConducta.fecha) {
+      toast.error('Debe seleccionar una fecha');
+      return;
+    }
+
     setIsLoading(true);
     try {
       const conductaData: CreateConductaDto = {
@@ -488,7 +500,14 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
       };
 
       await conductaService.create(conductaData);
-      toast.success('Conducta registrada correctamente');
+      
+      const alumno = alumnosDelCurso.find(a => a.id_alumno.toString() === nuevaConducta.id_alumno);
+      const infraccion = catalogoInfracciones.find(i => i.id_infraccion === nuevaConducta.id_infraccion);
+      
+      toast.success(
+        `Conducta registrada: ${alumno?.nombre} ${alumno?.apellido} - ${infraccion?.articulo}`
+      );
+      
       setModalConducta(false);
       setNuevaConducta({
         id_alumno: '',
@@ -496,9 +515,11 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
         fecha: new Date().toISOString().split('T')[0],
         observacion: '',
       });
+      setBusquedaAlumnoConducta('');
     } catch (e: any) {
       console.error('Error al registrar conducta:', e);
-      toast.error('Error al registrar la conducta');
+      const errorMsg = e?.response?.data?.message || 'Error desconocido';
+      toast.error(`Error al registrar la conducta: ${errorMsg}`);
     } finally {
       setIsLoading(false);
     }
@@ -584,6 +605,62 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
         return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
+
+  const getCategoriaLabel = (categoria: CategoriaInfraccion) => {
+    switch (categoria) {
+      case 'MENOS_GRAVE':
+        return 'Menos Grave';
+      case 'GRAVE':
+        return 'Grave';
+      case 'MUY_GRAVE':
+        return 'Muy Grave';
+      default:
+        return categoria;
+    }
+  };
+
+  const getCategoriaIcon = (categoria: CategoriaInfraccion) => {
+    switch (categoria) {
+      case 'MENOS_GRAVE':
+        return '⚠️';
+      case 'GRAVE':
+        return '🚨';
+      case 'MUY_GRAVE':
+        return '🔴';
+      default:
+        return '•';
+    }
+  };
+
+  const getPuntosPorCategoria = (categoria: CategoriaInfraccion) => {
+    switch (categoria) {
+      case 'MENOS_GRAVE':
+        return 1;
+      case 'GRAVE':
+        return 2;
+      case 'MUY_GRAVE':
+        return 3;
+      default:
+        return 0;
+    }
+  };
+
+  // Agrupar infracciones por categoría
+  const infraccionesPorCategoria = {
+    MENOS_GRAVE: catalogoInfracciones.filter(inf => inf.categoria === 'MENOS_GRAVE'),
+    GRAVE: catalogoInfracciones.filter(inf => inf.categoria === 'GRAVE'),
+    MUY_GRAVE: catalogoInfracciones.filter(inf => inf.categoria === 'MUY_GRAVE'),
+  };
+
+  // Filtrar alumnos en modal de conducta
+  const alumnosFiltradosConducta = alumnosDelCurso.filter(al =>
+    `${al.nombre} ${al.apellido}`.toLowerCase().includes(busquedaAlumnoConducta.toLowerCase())
+  );
+
+  // Obtener infracción seleccionada
+  const infraccionSeleccionada = catalogoInfracciones.find(
+    inf => inf.id_infraccion === nuevaConducta.id_infraccion
+  );
 
   // Render tabs
   const renderTomarAsistencia = () => (
@@ -738,6 +815,39 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
             </CardContent>
           </Card>
 
+          <Alert className="bg-blue-50 border-blue-200">
+            <AlertCircle className="h-4 w-4 text-blue-600" />
+            <AlertDescription className="text-blue-900">
+              <div className="space-y-2">
+                <p className="font-semibold">Estados de Asistencia:</p>
+                <ul className="text-sm space-y-1 ml-4">
+                  <li>
+                    <strong className="text-green-600">P - Presente:</strong>{' '}
+                    Alumno asistió normalmente
+                  </li>
+                  <li>
+                    <strong className="text-red-600">A - Atraso:</strong> Llegó
+                    tarde a clase
+                  </li>
+                  <li>
+                    <strong className="text-orange-600">
+                      SP - Sin Permiso:
+                    </strong>{' '}
+                    Ausente sin justificación (afecta conducta: -0.2 pts c/u)
+                  </li>
+                  <li>
+                    <strong className="text-blue-600">E - Con Permiso:</strong>{' '}
+                    Ausente con justificación (no afecta conducta)
+                  </li>
+                </ul>
+                <p className="text-sm mt-2">
+                  💡 <strong>Fórmula de Conducta:</strong> 10 - (SP × 0.2) -{' '}
+                  (Menos Graves × 1) - (Graves × 2) - (Muy Graves × 3)
+                </p>
+              </div>
+            </AlertDescription>
+          </Alert>
+
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
@@ -761,6 +871,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                 {alumnosFiltrados.map((alumno) => {
                   const estadoActual =
                     asistenciaActual[alumno.id_alumno.toString()];
+
                   return (
                     <div
                       key={alumno.id_alumno}
@@ -808,7 +919,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                                 ? 'bg-red-600 hover:bg-red-700'
                                 : ''
                             }
-                            title="Ausente"
+                            title="Atraso/Tarde"
                           >
                             <XCircle className="w-4 h-4" />
                           </Button>
@@ -827,7 +938,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                                 ? 'bg-orange-600 hover:bg-orange-700'
                                 : ''
                             }
-                            title="Sin Permiso"
+                            title="Ausente Sin Permiso"
                           >
                             <Clock className="w-4 h-4" />
                           </Button>
@@ -846,7 +957,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                                 ? 'bg-blue-600 hover:bg-blue-700'
                                 : ''
                             }
-                            title="Justificado/Con Permiso"
+                            title="Ausente Justificado/Con Permiso"
                           >
                             <AlertCircle className="w-4 h-4" />
                           </Button>
@@ -921,34 +1032,83 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                   Nueva Infracción
                 </Button>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent className="max-w-lg">
                 <DialogHeader>
-                  <DialogTitle>Crear Nueva Infracción</DialogTitle>
+                  <DialogTitle className="flex items-center space-x-2">
+                    <Plus className="w-5 h-5" />
+                    <span>Crear Nueva Infracción en el Catálogo</span>
+                  </DialogTitle>
                 </DialogHeader>
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="categoria">Categoría</Label>
+                <div className="space-y-6">
+                  <Alert className="bg-blue-50 border-blue-200">
+                    <AlertCircle className="h-4 w-4 text-blue-600" />
+                    <AlertDescription>
+                      Las infracciones creadas aquí estarán disponibles para registrar conductas de alumnos.
+                    </AlertDescription>
+                  </Alert>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="categoria" className="text-base font-semibold">
+                      1. Categoría de la Infracción
+                    </Label>
                     <Select
                       value={nuevaInfraccion.categoria}
-                      onValueChange={(v: CategoriaInfraccion) =>
-                        setNuevaInfraccion({ ...nuevaInfraccion, categoria: v })
-                      }
+                      onValueChange={(v: CategoriaInfraccion) => {
+                        const puntosDefault = getPuntosPorCategoria(v);
+                        setNuevaInfraccion({ 
+                          ...nuevaInfraccion, 
+                          categoria: v,
+                          puntos: puntosDefault
+                        });
+                      }}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="h-11">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="MENOS_GRAVE">Menos Grave</SelectItem>
-                        <SelectItem value="GRAVE">Grave</SelectItem>
-                        <SelectItem value="MUY_GRAVE">Muy Grave</SelectItem>
+                        <SelectItem value="MENOS_GRAVE">
+                          <div className="flex items-center space-x-2">
+                            <span>⚠️</span>
+                            <span>Menos Grave</span>
+                            <Badge variant="outline" className="ml-2 bg-yellow-100 text-yellow-800">
+                              -1 pt
+                            </Badge>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="GRAVE">
+                          <div className="flex items-center space-x-2">
+                            <span>🚨</span>
+                            <span>Grave</span>
+                            <Badge variant="outline" className="ml-2 bg-orange-100 text-orange-800">
+                              -2 pts
+                            </Badge>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="MUY_GRAVE">
+                          <div className="flex items-center space-x-2">
+                            <span>🔴</span>
+                            <span>Muy Grave</span>
+                            <Badge variant="outline" className="ml-2 bg-red-100 text-red-800">
+                              -3 pts
+                            </Badge>
+                          </div>
+                        </SelectItem>
                       </SelectContent>
                     </Select>
+                    <p className="text-xs text-gray-500">
+                      {nuevaInfraccion.categoria === 'MENOS_GRAVE' && 'Faltas leves que afectan mínimamente la conducta'}
+                      {nuevaInfraccion.categoria === 'GRAVE' && 'Faltas que requieren atención y seguimiento'}
+                      {nuevaInfraccion.categoria === 'MUY_GRAVE' && 'Faltas graves que requieren intervención inmediata'}
+                    </p>
                   </div>
-                  <div>
-                    <Label htmlFor="articulo">Artículo</Label>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="articulo" className="text-base font-semibold">
+                      2. Artículo o Código
+                    </Label>
                     <Input
                       id="articulo"
-                      placeholder="Ej: Art. 10"
+                      placeholder="Ej: Art. 10, Código 3.1, etc."
                       value={nuevaInfraccion.articulo}
                       onChange={(e) =>
                         setNuevaInfraccion({
@@ -956,13 +1116,20 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                           articulo: e.target.value,
                         })
                       }
+                      className="h-11 font-mono"
                     />
+                    <p className="text-xs text-gray-500">
+                      Identificador del reglamento interno
+                    </p>
                   </div>
-                  <div>
-                    <Label htmlFor="descripcion">Descripción</Label>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="descripcion" className="text-base font-semibold">
+                      3. Descripción de la Infracción
+                    </Label>
                     <Textarea
                       id="descripcion"
-                      placeholder="Descripción de la infracción..."
+                      placeholder="Ej: Uso de celular en clase sin autorización, no traer materiales, falta de respeto a compañeros..."
                       value={nuevaInfraccion.descripcion}
                       onChange={(e) =>
                         setNuevaInfraccion({
@@ -970,31 +1137,102 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                           descripcion: e.target.value,
                         })
                       }
+                      rows={4}
                     />
+                    <p className="text-xs text-gray-500">
+                      Describe claramente la falta que comete el alumno
+                    </p>
                   </div>
-                  <div>
-                    <Label htmlFor="puntos">Puntos Negativos</Label>
-                    <Input
-                      id="puntos"
-                      type="number"
-                      min="0"
-                      step="0.1"
-                      value={nuevaInfraccion.puntos}
-                      onChange={(e) =>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="puntos" className="text-base font-semibold">
+                      4. Puntos Negativos
+                    </Label>
+                    <div className="flex items-center space-x-3">
+                      <Input
+                        id="puntos"
+                        type="number"
+                        min="0"
+                        max="10"
+                        step="0.5"
+                        value={nuevaInfraccion.puntos}
+                        onChange={(e) =>
+                          setNuevaInfraccion({
+                            ...nuevaInfraccion,
+                            puntos: parseFloat(e.target.value) || 0,
+                          })
+                        }
+                        className="h-11"
+                      />
+                      <Badge className={`${getBadgeColor(nuevaInfraccion.categoria)} px-4 py-2`}>
+                        -{nuevaInfraccion.puntos} pts
+                      </Badge>
+                    </div>
+                    <Alert className="bg-yellow-50 border-yellow-200">
+                      <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                      <AlertDescription className="text-xs">
+                        <strong>Recomendado:</strong> Menos Grave (1 pt), Grave (2 pts), Muy Grave (3 pts)
+                      </AlertDescription>
+                    </Alert>
+                  </div>
+
+                  {/* Preview */}
+                  <div className="border rounded-lg p-4 bg-gray-50">
+                    <p className="text-sm font-medium text-gray-700 mb-2">Vista previa:</p>
+                    <div className="space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <Badge variant="outline" className="font-mono">
+                          {nuevaInfraccion.articulo || 'Art. XX'}
+                        </Badge>
+                        <Badge className={getBadgeColor(nuevaInfraccion.categoria)}>
+                          {getCategoriaIcon(nuevaInfraccion.categoria)} {getCategoriaLabel(nuevaInfraccion.categoria)} • -{nuevaInfraccion.puntos} pts
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-gray-600">
+                        {nuevaInfraccion.descripcion || 'Descripción de la infracción...'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex space-x-3 pt-4 border-t">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setModalInfraccion(false);
                         setNuevaInfraccion({
-                          ...nuevaInfraccion,
-                          puntos: parseFloat(e.target.value) || 0,
-                        })
+                          categoria: 'MENOS_GRAVE',
+                          articulo: '',
+                          descripcion: '',
+                          puntos: 0,
+                        });
+                      }}
+                      className="flex-1"
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      onClick={handleCrearInfraccion}
+                      disabled={
+                        isLoading ||
+                        !nuevaInfraccion.articulo ||
+                        !nuevaInfraccion.descripcion ||
+                        nuevaInfraccion.puntos <= 0
                       }
-                    />
+                      className="flex-1"
+                    >
+                      {isLoading ? (
+                        <>
+                          <Clock className="w-4 h-4 mr-2 animate-spin" />
+                          Creando...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          Crear Infracción
+                        </>
+                      )}
+                    </Button>
                   </div>
-                  <Button
-                    onClick={handleCrearInfraccion}
-                    disabled={isLoading}
-                    className="w-full"
-                  >
-                    {isLoading ? 'Creando...' : 'Crear Infracción'}
-                  </Button>
                 </div>
               </DialogContent>
             </Dialog>
@@ -1068,22 +1306,29 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                   Nuevo Registro
                 </Button>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle>Registrar Conducta</DialogTitle>
+                  <DialogTitle className="flex items-center space-x-2">
+                    <FileText className="w-5 h-5" />
+                    <span>Registrar Conducta de Alumno</span>
+                  </DialogTitle>
                 </DialogHeader>
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="curso-conducta">Curso</Label>
+                <div className="space-y-6">
+                  {/* Selección de Curso */}
+                  <div className="space-y-2">
+                    <Label htmlFor="curso-conducta" className="text-base font-semibold">
+                      1. Seleccionar Curso
+                    </Label>
                     <Select
                       value={cursoSeleccionado}
                       onValueChange={(v) => {
                         setCursoSeleccionado(v);
                         setNuevaConducta({ ...nuevaConducta, id_alumno: '' });
+                        setBusquedaAlumnoConducta('');
                       }}
                     >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar curso" />
+                      <SelectTrigger className="h-11">
+                        <SelectValue placeholder="Seleccionar curso..." />
                       </SelectTrigger>
                       <SelectContent>
                         {cursosAsignados.map((curso) => (
@@ -1091,79 +1336,280 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                             key={curso.id_curso}
                             value={curso.id_curso.toString()}
                           >
-                            {curso.nombre}
+                            <div className="flex items-center space-x-2">
+                              <span className="font-medium">{curso.nombre}</span>
+                              {curso.seccion && (
+                                <Badge variant="outline" className="text-xs">
+                                  {curso.seccion}
+                                </Badge>
+                              )}
+                            </div>
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
-                    <Label htmlFor="alumno-conducta">Alumno</Label>
-                    <Select
-                      value={nuevaConducta.id_alumno}
-                      onValueChange={(v) =>
-                        setNuevaConducta({ ...nuevaConducta, id_alumno: v })
-                      }
-                      disabled={!cursoSeleccionado}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar alumno" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {alumnosDelCurso.map((alumno) => (
-                          <SelectItem
-                            key={alumno.id_alumno}
-                            value={alumno.id_alumno.toString()}
-                          >
-                            {alumno.nombre} {alumno.apellido}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+
+                  {/* Selección de Alumno con búsqueda */}
+                  <div className="space-y-2">
+                    <Label htmlFor="alumno-conducta" className="text-base font-semibold">
+                      2. Seleccionar Alumno
+                    </Label>
+                    {cursoSeleccionado ? (
+                      <>
+                        <Input
+                          placeholder="🔍 Buscar alumno por nombre..."
+                          value={busquedaAlumnoConducta}
+                          onChange={(e) => setBusquedaAlumnoConducta(e.target.value)}
+                          className="h-11"
+                          disabled={!cursoSeleccionado}
+                        />
+                        <Select
+                          value={nuevaConducta.id_alumno}
+                          onValueChange={(v) =>
+                            setNuevaConducta({ ...nuevaConducta, id_alumno: v })
+                          }
+                          disabled={!cursoSeleccionado}
+                        >
+                          <SelectTrigger className="h-11">
+                            <SelectValue placeholder="Seleccionar alumno..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {alumnosFiltradosConducta.length > 0 ? (
+                              alumnosFiltradosConducta.map((alumno) => (
+                                <SelectItem
+                                  key={alumno.id_alumno}
+                                  value={alumno.id_alumno.toString()}
+                                >
+                                  {alumno.nombre} {alumno.apellido}
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <div className="px-2 py-6 text-center text-sm text-gray-500">
+                                No se encontraron alumnos
+                              </div>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </>
+                    ) : (
+                      <Alert className="bg-blue-50 border-blue-200">
+                        <AlertCircle className="h-4 w-4 text-blue-600" />
+                        <AlertTitle>Primero selecciona un curso</AlertTitle>
+                      </Alert>
+                    )}
                   </div>
-                  <div>
-                    <Label htmlFor="infraccion-conducta">Infracción</Label>
-                    <Select
-                      value={nuevaConducta.id_infraccion}
-                      onValueChange={(v) =>
-                        setNuevaConducta({ ...nuevaConducta, id_infraccion: v })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar infracción" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {catalogoInfracciones.map((infraccion) => (
-                          <SelectItem
-                            key={infraccion.id_infraccion}
-                            value={infraccion.id_infraccion}
-                          >
-                            {infraccion.articulo} -{' '}
-                            {infraccion.descripcion.substring(0, 50)}...
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+
+                  {/* Filtro por categoría */}
+                  <div className="space-y-2">
+                    <Label className="text-base font-semibold">
+                      3. Seleccionar Infracción
+                    </Label>
+                    <div className="flex gap-2 flex-wrap">
+                      <Button
+                        type="button"
+                        variant={categoriaFiltro === 'TODAS' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setCategoriaFiltro('TODAS')}
+                      >
+                        Todas ({catalogoInfracciones.length})
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={categoriaFiltro === 'MENOS_GRAVE' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setCategoriaFiltro('MENOS_GRAVE')}
+                        className={categoriaFiltro === 'MENOS_GRAVE' ? 'bg-yellow-600 hover:bg-yellow-700' : ''}
+                      >
+                        ⚠️ Menos Grave ({infraccionesPorCategoria.MENOS_GRAVE.length})
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={categoriaFiltro === 'GRAVE' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setCategoriaFiltro('GRAVE')}
+                        className={categoriaFiltro === 'GRAVE' ? 'bg-orange-600 hover:bg-orange-700' : ''}
+                      >
+                        🚨 Grave ({infraccionesPorCategoria.GRAVE.length})
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={categoriaFiltro === 'MUY_GRAVE' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setCategoriaFiltro('MUY_GRAVE')}
+                        className={categoriaFiltro === 'MUY_GRAVE' ? 'bg-red-600 hover:bg-red-700' : ''}
+                      >
+                        🔴 Muy Grave ({infraccionesPorCategoria.MUY_GRAVE.length})
+                      </Button>
+                    </div>
                   </div>
-                  <div>
-                    <Label htmlFor="fecha-conducta">Fecha</Label>
-                    <Input
-                      id="fecha-conducta"
-                      type="date"
-                      value={nuevaConducta.fecha}
-                      onChange={(e) =>
-                        setNuevaConducta({
-                          ...nuevaConducta,
-                          fecha: e.target.value,
-                        })
-                      }
-                    />
+
+                  {/* Lista de infracciones por categoría */}
+                  <div className="space-y-3 max-h-64 overflow-y-auto border rounded-lg p-4 bg-gray-50">
+                    {categoriaFiltro === 'TODAS' ? (
+                      // Mostrar todas agrupadas por categoría
+                      <>
+                        {(['MENOS_GRAVE', 'GRAVE', 'MUY_GRAVE'] as CategoriaInfraccion[]).map((cat) => {
+                          const infracciones = infraccionesPorCategoria[cat];
+                          if (infracciones.length === 0) return null;
+                          
+                          return (
+                            <div key={cat} className="space-y-2">
+                              <div className="flex items-center space-x-2 pb-2 border-b">
+                                <span className="text-lg">{getCategoriaIcon(cat)}</span>
+                                <h4 className="font-semibold text-sm">{getCategoriaLabel(cat)}</h4>
+                                <Badge variant="outline" className={`text-xs ${getBadgeColor(cat)}`}>
+                                  -{getPuntosPorCategoria(cat)} pts
+                                </Badge>
+                              </div>
+                              <div className="space-y-1">
+                                {infracciones.map((infraccion) => (
+                                  <button
+                                    key={infraccion.id_infraccion}
+                                    type="button"
+                                    onClick={() =>
+                                      setNuevaConducta({
+                                        ...nuevaConducta,
+                                        id_infraccion: infraccion.id_infraccion,
+                                      })
+                                    }
+                                    className={`w-full text-left p-3 rounded-lg border-2 transition-all hover:shadow-md ${
+                                      nuevaConducta.id_infraccion === infraccion.id_infraccion
+                                        ? 'border-blue-500 bg-blue-50 shadow-md'
+                                        : 'border-gray-200 hover:border-gray-300 bg-white'
+                                    }`}
+                                  >
+                                    <div className="flex items-start justify-between">
+                                      <div className="flex-1">
+                                        <div className="flex items-center space-x-2 mb-1">
+                                          <Badge variant="outline" className="text-xs font-mono">
+                                            {infraccion.articulo}
+                                          </Badge>
+                                          <Badge className={`text-xs ${getBadgeColor(infraccion.categoria)}`}>
+                                            -{infraccion.puntos} pts
+                                          </Badge>
+                                        </div>
+                                        <p className="text-sm text-gray-700">
+                                          {infraccion.descripcion}
+                                        </p>
+                                      </div>
+                                      {nuevaConducta.id_infraccion === infraccion.id_infraccion && (
+                                        <CheckCircle className="w-5 h-5 text-blue-600 flex-shrink-0 ml-2" />
+                                      )}
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </>
+                    ) : (
+                      // Mostrar solo la categoría filtrada
+                      <div className="space-y-1">
+                        {infraccionesPorCategoria[categoriaFiltro].length > 0 ? (
+                          infraccionesPorCategoria[categoriaFiltro].map((infraccion) => (
+                            <button
+                              key={infraccion.id_infraccion}
+                              type="button"
+                              onClick={() =>
+                                setNuevaConducta({
+                                  ...nuevaConducta,
+                                  id_infraccion: infraccion.id_infraccion,
+                                })
+                              }
+                              className={`w-full text-left p-3 rounded-lg border-2 transition-all hover:shadow-md ${
+                                nuevaConducta.id_infraccion === infraccion.id_infraccion
+                                  ? 'border-blue-500 bg-blue-50 shadow-md'
+                                  : 'border-gray-200 hover:border-gray-300 bg-white'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center space-x-2 mb-1">
+                                    <Badge variant="outline" className="text-xs font-mono">
+                                      {infraccion.articulo}
+                                    </Badge>
+                                    <Badge className={`text-xs ${getBadgeColor(infraccion.categoria)}`}>
+                                      -{infraccion.puntos} pts
+                                    </Badge>
+                                  </div>
+                                  <p className="text-sm text-gray-700">
+                                    {infraccion.descripcion}
+                                  </p>
+                                </div>
+                                {nuevaConducta.id_infraccion === infraccion.id_infraccion && (
+                                  <CheckCircle className="w-5 h-5 text-blue-600 flex-shrink-0 ml-2" />
+                                )}
+                              </div>
+                            </button>
+                          ))
+                        ) : (
+                          <div className="text-center py-8 text-gray-500">
+                            <AlertTriangle className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                            <p className="text-sm">No hay infracciones en esta categoría</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <Label htmlFor="observacion-conducta">Observación</Label>
+
+                  {/* Resumen de infracción seleccionada */}
+                  {infraccionSeleccionada && (
+                    <Alert className="bg-blue-50 border-blue-200">
+                      <AlertCircle className="h-4 w-4 text-blue-600" />
+                      <AlertTitle>Infracción seleccionada</AlertTitle>
+                      <div className="mt-2 space-y-1">
+                        <p className="text-sm flex items-center space-x-2">
+                          <Badge variant="outline" className="font-mono">
+                            {infraccionSeleccionada.articulo}
+                          </Badge>
+                          <Badge className={getBadgeColor(infraccionSeleccionada.categoria)}>
+                            {getCategoriaLabel(infraccionSeleccionada.categoria)} • -{infraccionSeleccionada.puntos} pts
+                          </Badge>
+                        </p>
+                        <p className="text-sm text-gray-700">
+                          {infraccionSeleccionada.descripcion}
+                        </p>
+                      </div>
+                    </Alert>
+                  )}
+
+                  {/* Fecha y Observación */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="fecha-conducta">4. Fecha del Incidente</Label>
+                      <Input
+                        id="fecha-conducta"
+                        type="date"
+                        value={nuevaConducta.fecha}
+                        onChange={(e) =>
+                          setNuevaConducta({
+                            ...nuevaConducta,
+                            fecha: e.target.value,
+                          })
+                        }
+                        className="h-11"
+                        max={new Date().toISOString().split('T')[0]}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-sm text-gray-500">
+                        Trimestre calculado
+                      </Label>
+                      <div className="h-11 flex items-center px-3 bg-gray-100 rounded-md border">
+                        <Badge variant="outline">
+                          Trimestre {Math.ceil((new Date(nuevaConducta.fecha).getMonth() + 1) / 4)}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="observacion-conducta">5. Observaciones (opcional)</Label>
                     <Textarea
                       id="observacion-conducta"
-                      placeholder="Detalles adicionales..."
+                      placeholder="Detalles adicionales del incidente, contexto, testigos, etc..."
                       value={nuevaConducta.observacion}
                       onChange={(e) =>
                         setNuevaConducta({
@@ -1171,15 +1617,51 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                           observacion: e.target.value,
                         })
                       }
+                      rows={3}
                     />
                   </div>
-                  <Button
-                    onClick={handleRegistrarConducta}
-                    disabled={isLoading}
-                    className="w-full"
-                  >
-                    {isLoading ? 'Registrando...' : 'Registrar Conducta'}
-                  </Button>
+
+                  {/* Botón de guardar */}
+                  <div className="flex space-x-3 pt-4 border-t">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setModalConducta(false);
+                        setNuevaConducta({
+                          id_alumno: '',
+                          id_infraccion: '',
+                          fecha: new Date().toISOString().split('T')[0],
+                          observacion: '',
+                        });
+                        setBusquedaAlumnoConducta('');
+                      }}
+                      className="flex-1"
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      onClick={handleRegistrarConducta}
+                      disabled={
+                        isLoading ||
+                        !nuevaConducta.id_alumno ||
+                        !nuevaConducta.id_infraccion ||
+                        !nuevaConducta.fecha
+                      }
+                      className="flex-1"
+                    >
+                      {isLoading ? (
+                        <>
+                          <Clock className="w-4 h-4 mr-2 animate-spin" />
+                          Registrando...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          Registrar Conducta
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </div>
               </DialogContent>
             </Dialog>
