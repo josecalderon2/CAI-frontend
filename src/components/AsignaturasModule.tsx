@@ -47,6 +47,8 @@ interface Asignatura {
   nombre: string;
   metodoEvaluacion: string;
   nivel: string;
+  seccionCurso?: string; // Sección del curso
+  idCurso?: number | null; // ID del curso
   tipoAsignatura: string;
   sistemaEvaluacion: string;
   fechaCreacion: string;
@@ -98,7 +100,7 @@ export function AsignaturasModule() {
       try {
         const [resMet, resCur, resTip, resSis] = await Promise.all([
           api.get('/metodos-evaluacion'),
-          api.get('/cursos'),
+          api.get('/cursos/all'), // Usar endpoint que trae todos los cursos activos
           api.get('/tipos-asignatura'),
           api.get('/sistemas-evaluacion'),
         ]);
@@ -112,11 +114,18 @@ export function AsignaturasModule() {
               : [];
 
         setMetodos(safeData(resMet.data));
-        // Adaptar cursos para incluir sección si existe
+
+        // Adaptar cursos para incluir sección
         const cursosAdaptados = safeData(resCur.data).map((c: any) => ({
-          ...c,
+          id_curso: c.id_curso,
+          nombre: c.nombre,
           seccion: c.seccion || '',
         }));
+
+        console.log(
+          `📚 Cursos cargados: ${cursosAdaptados.length}`,
+          cursosAdaptados
+        );
         setCursos(cursosAdaptados);
         setTipos(safeData(resTip.data));
         setSistemas(safeData(resSis.data));
@@ -143,6 +152,8 @@ export function AsignaturasModule() {
             nombre: a.nombre ?? 'N/A',
             metodoEvaluacion: a.metodoEvaluacion?.nombre ?? 'N/A',
             nivel: a.curso?.nombre ?? 'N/A',
+            seccionCurso: a.curso?.seccion ?? '', // Guardar la sección del curso
+            idCurso: a.curso?.id_curso ?? null, // Guardar el ID del curso
             tipoAsignatura: a.tipoAsignatura?.nombre ?? 'N/A',
             sistemaEvaluacion: a.sistemaEvaluacion?.nombre ?? 'N/A',
             fechaCreacion: a.createdAt ?? 'N/A',
@@ -174,7 +185,7 @@ export function AsignaturasModule() {
 
   // Filtros
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterNivel, setFilterNivel] = useState<string>('todos');
+  const [filterNivel, setFilterNivel] = useState<string>('todos'); // Ahora guardará el id_curso
   const [filterMetodo, setFilterMetodo] = useState<string>('todos');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingAsignatura, setEditingAsignatura] = useState<Asignatura | null>(
@@ -197,10 +208,15 @@ export function AsignaturasModule() {
     const matchesSearch = asignatura.nombre
       .toLowerCase()
       .includes(searchTerm.toLowerCase());
+
+    // Filtrar por ID de curso para que funcione con múltiples secciones
     const matchesNivel =
-      filterNivel === 'todos' || asignatura.nivel === filterNivel;
+      filterNivel === 'todos' ||
+      (asignatura.idCurso && asignatura.idCurso.toString() === filterNivel);
+
     const matchesMetodo =
       filterMetodo === 'todos' || asignatura.metodoEvaluacion === filterMetodo;
+
     return matchesSearch && matchesNivel && matchesMetodo;
   });
 
@@ -470,15 +486,12 @@ export function AsignaturasModule() {
                 <SelectContent>
                   <SelectItem value="todos">Todos los Cursos</SelectItem>
                   {cursos.map((curso) => (
-                    <SelectItem key={curso.id_curso} value={curso.nombre}>
-                      <div>
-                        <span className="font-medium">{curso.nombre}</span>
-                        {curso.seccion && (
-                          <span className="text-xs text-gray-500 ml-1">
-                            Sección: {curso.seccion}
-                          </span>
-                        )}
-                      </div>
+                    <SelectItem
+                      key={curso.id_curso}
+                      value={curso.id_curso.toString()}
+                    >
+                      {curso.nombre}
+                      {curso.seccion ? ` - ${curso.seccion}` : ''}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -562,14 +575,8 @@ export function AsignaturasModule() {
                         className="text-blue-700 border-blue-200 bg-blue-50 capitalize"
                       >
                         {asignatura.nivel || 'N/A'}
-                        {(() => {
-                          const curso = cursos.find(
-                            (c) => c.nombre === asignatura.nivel
-                          );
-                          return curso && curso.seccion
-                            ? ` (Sección: ${curso.seccion})`
-                            : '';
-                        })()}
+                        {asignatura.seccionCurso &&
+                          ` - ${asignatura.seccionCurso}`}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -725,14 +732,8 @@ export function AsignaturasModule() {
                         key={c.id_curso}
                         value={c.id_curso.toString()}
                       >
-                        <div>
-                          <span className="font-medium">{c.nombre}</span>
-                          {c.seccion && (
-                            <span className="text-xs text-gray-500 ml-1">
-                              Sección: {c.seccion}
-                            </span>
-                          )}
-                        </div>
+                        {c.nombre}
+                        {c.seccion ? ` - ${c.seccion}` : ''}
                       </SelectItem>
                     ))}
                   </SelectContent>
