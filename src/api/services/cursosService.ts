@@ -162,9 +162,15 @@ export const cursosService = {
     return this.update(id, { activo: active });
   },
 
-  // Obtener cursos asignados a un docente
+  // Obtener cursos asignados a un docente (requiere ID explícito)
   async findCursosAsignadosDocente(docenteId: number): Promise<Curso[]> {
     const res = await api.get(`${base}/asignados/${docenteId}`);
+    return res.data as Curso[];
+  },
+
+  // Obtener cursos del usuario autenticado (usa el token JWT automáticamente)
+  async getMisCursos(): Promise<Curso[]> {
+    const res = await api.get(`${base}/mis-cursos`);
     return res.data as Curso[];
   },
 
