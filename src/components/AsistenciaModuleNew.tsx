@@ -496,14 +496,15 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
     setIsLoading(true);
     try {
       const conductaData: CreateConductaDto = {
-        id_alumno: nuevaConducta.id_alumno,
-        id_orientador: user.id,
+        id_alumno: parseInt(nuevaConducta.id_alumno),
+        id_orientador: parseInt(user.id),
         id_infraccion: nuevaConducta.id_infraccion,
         fecha: nuevaConducta.fecha,
         anio_academico: new Date().getFullYear().toString(),
         observacion: nuevaConducta.observacion || undefined,
       };
 
+      console.log('📝 Enviando conducta:', conductaData);
       await conductaService.create(conductaData);
 
       const alumno = alumnosDelCurso.find(

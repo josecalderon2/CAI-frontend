@@ -118,8 +118,8 @@ export interface InfraccionCatalogoResponse {
 }
 
 export interface CreateConductaDto {
-  id_alumno: string;
-  id_orientador: string;
+  id_alumno: number;
+  id_orientador: number;
   id_infraccion: string;
   fecha: string;
   anio_academico: string;
