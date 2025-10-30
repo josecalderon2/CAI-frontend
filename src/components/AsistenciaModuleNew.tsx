@@ -66,7 +66,6 @@ import {
   type InfraccionCatalogoResponse,
   type InfraccionResumen,
   type CreateInfraccionCatalogoDto,
-  type CreateConductaDto,
   type CategoriaInfraccion,
 } from '../api/services/asistenciaService';
 import { cursosService } from '../api/services/cursosService';
@@ -495,16 +494,78 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
 
     setIsLoading(true);
     try {
-      const conductaData: CreateConductaDto = {
-        id_alumno: parseInt(nuevaConducta.id_alumno),
-        id_orientador: parseInt(user.id),
-        id_infraccion: nuevaConducta.id_infraccion,
-        fecha: nuevaConducta.fecha,
-        anio_academico: new Date().getFullYear().toString(),
-        observacion: nuevaConducta.observacion || undefined,
+      console.log('🔍 Datos antes de procesar:', {
+        id_alumno_raw: nuevaConducta.id_alumno,
+        id_infraccion_raw: nuevaConducta.id_infraccion,
+        user_id_raw: user.id,
+        fecha_raw: nuevaConducta.fecha,
+      });
+
+      // Validar que los IDs sean números válidos
+      const idAlumno = parseInt(nuevaConducta.id_alumno, 10);
+      const idInfraccion = parseInt(nuevaConducta.id_infraccion, 10);
+      const idOrientador = parseInt(user.id, 10);
+
+      console.log('🔍 Datos después de parseInt:', {
+        idAlumno,
+        idInfraccion,
+        idOrientador,
+        isNaN_alumno: isNaN(idAlumno),
+        isNaN_infraccion: isNaN(idInfraccion),
+        isNaN_orientador: isNaN(idOrientador),
+      });
+
+      if (isNaN(idAlumno) || isNaN(idInfraccion) || isNaN(idOrientador)) {
+        toast.error('Error en los datos: IDs inválidos');
+        console.error('IDs inválidos:', {
+          idAlumno,
+          idInfraccion,
+          idOrientador,
+        });
+        return;
+      }
+
+      // Buscar la infracción seleccionada para obtener la descripción
+      console.log('🔍 Buscando infracción:', {
+        id_buscado: nuevaConducta.id_infraccion,
+        tipo_id: typeof nuevaConducta.id_infraccion,
+        primer_catalogo_id: catalogoInfracciones[0]?.id_infraccion,
+        tipo_catalogo: typeof catalogoInfracciones[0]?.id_infraccion,
+        total_infracciones: catalogoInfracciones.length,
+      });
+
+      const infraccionSeleccionada = catalogoInfracciones.find(
+        (i) => String(i.id_infraccion) === String(nuevaConducta.id_infraccion)
+      );
+
+      if (!infraccionSeleccionada) {
+        toast.error('Error: Infracción no encontrada');
+        console.error('❌ Infracción no encontrada en catálogo');
+        return;
+      }
+
+      // Construir el objeto con los campos obligatorios
+      const conductaData: any = {
+        id_alumno: idAlumno,
+        id_infraccion: idInfraccion, // ✅ Nombre correcto según backend
+        id_orientador: idOrientador,
+        fecha: new Date(nuevaConducta.fecha).toISOString(),
+        descripcion: infraccionSeleccionada.descripcion, // ✅ Obligatorio
       };
 
+      // Agregar campos opcionales solo si tienen valor válido
+      if (nuevaConducta.observacion && nuevaConducta.observacion.trim()) {
+        conductaData.observacion = nuevaConducta.observacion.trim();
+      }
+
       console.log('📝 Enviando conducta:', conductaData);
+      console.log('📝 Tipos:', {
+        id_alumno: typeof conductaData.id_alumno,
+        id_infraccion: typeof conductaData.id_infraccion,
+        id_orientador: typeof conductaData.id_orientador,
+        fecha: typeof conductaData.fecha,
+        descripcion: typeof conductaData.descripcion,
+      });
       await conductaService.create(conductaData);
 
       const alumno = alumnosDelCurso.find(
@@ -528,6 +589,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
       setBusquedaAlumnoConducta('');
     } catch (e: any) {
       console.error('Error al registrar conducta:', e);
+      console.error('RESPUESTA DEL BACKEND:', e?.response?.data);
       const errorMsg = e?.response?.data?.message || 'Error desconocido';
       toast.error(`Error al registrar la conducta: ${errorMsg}`);
     } finally {
@@ -1260,12 +1322,14 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                                     onClick={() =>
                                       setNuevaConducta({
                                         ...nuevaConducta,
-                                        id_infraccion: infraccion.id_infraccion,
+                                        id_infraccion: String(
+                                          infraccion.id_infraccion
+                                        ),
                                       })
                                     }
                                     className={`w-full text-left p-3 rounded-lg border-2 transition-all hover:shadow-md ${
                                       nuevaConducta.id_infraccion ===
-                                      infraccion.id_infraccion
+                                      String(infraccion.id_infraccion)
                                         ? 'border-blue-500 bg-blue-50 shadow-md'
                                         : 'border-gray-200 hover:border-gray-300 bg-white'
                                     }`}
@@ -1314,12 +1378,14 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                                 onClick={() =>
                                   setNuevaConducta({
                                     ...nuevaConducta,
-                                    id_infraccion: infraccion.id_infraccion,
+                                    id_infraccion: String(
+                                      infraccion.id_infraccion
+                                    ),
                                   })
                                 }
                                 className={`w-full text-left p-3 rounded-lg border-2 transition-all hover:shadow-md ${
                                   nuevaConducta.id_infraccion ===
-                                  infraccion.id_infraccion
+                                  String(infraccion.id_infraccion)
                                     ? 'border-blue-500 bg-blue-50 shadow-md'
                                     : 'border-gray-200 hover:border-gray-300 bg-white'
                                 }`}
