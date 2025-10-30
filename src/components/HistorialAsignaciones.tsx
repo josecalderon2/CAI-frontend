@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-
 import {
   Table,
   TableBody,
@@ -275,37 +274,44 @@ export function HistorialAsignaciones() {
               </TableBody>
             </Table>
           )}
+
           {/* Paginación */}
-          <div className="flex items-center justify-between space-x-2 py-4">
-            <p className="text-sm text-gray-600">
-              Mostrando{' '}
-              <span className="font-semibold">{paginatedHistorial.length}</span>{' '}
-              de{' '}
-              <span className="font-semibold">{filteredHistorial.length}</span>{' '}
-              resultados
-            </p>
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
-                disabled={page === 1}
-                className="text-sm px-4 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Anterior
-              </button>
-              <span className="text-sm text-gray-700">
-                Página {page} de {totalPages}
-              </span>
-              <button
-                onClick={() =>
-                  setPage((prev) => (prev < totalPages ? prev + 1 : prev))
-                }
-                disabled={page >= totalPages}
-                className="text-sm px-4 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Siguiente
-              </button>
+          {filteredHistorial.length > 0 && totalPages > 1 && (
+            <div className="flex items-center justify-between space-x-2 py-4">
+              <p className="text-sm text-gray-600">
+                Mostrando{' '}
+                <span className="font-semibold">
+                  {paginatedHistorial.length}
+                </span>{' '}
+                de{' '}
+                <span className="font-semibold">
+                  {filteredHistorial.length}
+                </span>{' '}
+                resultados
+              </p>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+                  disabled={page === 1}
+                  className="text-sm px-4 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Anterior
+                </button>
+                <span className="text-sm text-gray-700">
+                  Página {page} de {totalPages}
+                </span>
+                <button
+                  onClick={() =>
+                    setPage((prev) => (prev < totalPages ? prev + 1 : prev))
+                  }
+                  disabled={page >= totalPages}
+                  className="text-sm px-4 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Siguiente
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </CardContent>
       </Card>
     </>
