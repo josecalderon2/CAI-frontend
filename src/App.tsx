@@ -26,7 +26,7 @@ import { CursosModule } from './components/CursosModule';
 import { AsignaturasModule } from './components/AsignaturasModule';
 import { AsignacionesModule } from './components/AsignacionesModule';
 import { PerfilModule } from './components/PerfilModule';
-import { AsistenciaModule } from './components/AsistenciaModule';
+import { AsistenciaModuleNew } from './components/AsistenciaModuleNew';
 
 // ================= Helpers de auth =================
 function getUser() {
@@ -336,7 +336,7 @@ function AppRoutes() {
           path="/asistencia"
           element={
             <ProtectedRoute>
-              <AsistenciaModule user={getUser() as any} />
+              <AsistenciaModuleNew user={getUser()} />{' '}
             </ProtectedRoute>
           }
         />
