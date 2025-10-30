@@ -20,6 +20,11 @@ import {
   actualizarSoloResponsable,
   actualizarRelacionResponsable,
 } from '../api/services/responsableService';
+import inscripcionesService, {
+  type InscripcionResponse,
+} from '../api/services/inscripcionesService';
+import { cursosService, type Curso } from '../api/services/cursosService';
+import promocionesService from '../api/services/promocionesService';
 import {
   Table,
   TableBody,
@@ -43,6 +48,7 @@ import {
   SelectValue,
 } from './ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { PromocionesModule } from './PromocionesModule';
 import {
   GraduationCap,
   UserPlus,
@@ -68,6 +74,10 @@ import {
   Building,
   Stethoscope,
   Save,
+  BookOpen,
+  Trash2,
+  Loader2,
+  RefreshCcw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { DatosResponsable } from '../types';
@@ -227,6 +237,22 @@ interface Alumno {
 
   // Responsables
   responsables: ResponsableCompleto[];
+
+  // Inscripción activa (opcional - para mostrar curso actual)
+  inscripcionActiva?: {
+    id: number;
+    cursoId: number;
+    anioAcademico: string;
+    estado: string;
+    curso?: {
+      id_curso: number;
+      nombre: string;
+      seccion?: string;
+      gradoAcademico?: {
+        nombre: string;
+      };
+    };
+  };
 }
 
 // Hook para debounce del término de búsqueda
@@ -240,6 +266,707 @@ const useDebounce = (value: string, delay: number) => {
   }, [value, delay]);
   return debouncedValue;
 };
+
+// Componente para la pestaña de Inscripciones
+function InscripcionesTab() {
+  const currentYear = new Date().getFullYear().toString();
+
+  const [alumnos, setAlumnos] = useState<any[]>([]);
+  const [cursos, setCursos] = useState<Curso[]>([]);
+  const [alumnoSeleccionado, setAlumnoSeleccionado] = useState<string>('');
+  const [inscripciones, setInscripciones] = useState<InscripcionResponse[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showInscribirDialog, setShowInscribirDialog] = useState(false);
+  const [busquedaNombre, setBusquedaNombre] = useState<string>('');
+  const [showRetirarDialog, setShowRetirarDialog] = useState(false);
+  const [inscripcionARetirar, setInscripcionARetirar] = useState<number | null>(
+    null
+  );
+
+  // Estados para nueva inscripción
+  const [cursoId, setCursoId] = useState<string>('');
+  const [anioAcademico, setAnioAcademico] = useState<string>(currentYear);
+  const [seccionAsignada, setSeccionAsignada] = useState<string>('');
+  const [observaciones, setObservaciones] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Estados para paginación
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const itemsPerPage = 10;
+
+  // Cargar alumnos y cursos al montar el componente
+  useEffect(() => {
+    loadAlumnos();
+    loadCursos();
+  }, []);
+
+  // Cargar inscripciones cuando se selecciona un alumno
+  useEffect(() => {
+    if (alumnoSeleccionado) {
+      loadInscripciones();
+      // Actualizar la inscripción activa del alumno seleccionado
+      actualizarInscripcionActivaAlumno();
+    }
+  }, [alumnoSeleccionado]);
+
+  const actualizarInscripcionActivaAlumno = async () => {
+    if (!alumnoSeleccionado) return;
+
+    try {
+      const inscripcionesResponse =
+        await inscripcionesService.obtenerInscripcionesAlumno(
+          parseInt(alumnoSeleccionado)
+        );
+      // Buscar cualquier inscripción ACTIVA (sin filtrar por año)
+      const inscripcionActiva = inscripcionesResponse.find(
+        (insc) => insc.estado === 'ACTIVO'
+      );
+
+      // Actualizar el alumno en la lista
+      setAlumnos((prevAlumnos) =>
+        prevAlumnos.map((alumno) =>
+          alumno.id_alumno.toString() === alumnoSeleccionado
+            ? { ...alumno, inscripcionActiva }
+            : alumno
+        )
+      );
+    } catch (error) {
+      // Error al actualizar inscripción activa
+    }
+  };
+
+  const loadAlumnos = async () => {
+    try {
+      const response = await api.get('/alumnos', {
+        params: { incluirInactivos: false },
+      });
+
+      // Cargar inscripción activa para cada alumno
+      const alumnosConInscripciones = await Promise.all(
+        (response.data as any[]).map(async (alumno) => {
+          let inscripcionActiva = undefined;
+          try {
+            const inscripcionesResponse =
+              await inscripcionesService.obtenerInscripcionesAlumno(
+                alumno.id_alumno
+              );
+            // Buscar cualquier inscripción ACTIVA (sin filtrar por año)
+            inscripcionActiva = inscripcionesResponse.find(
+              (insc) => insc.estado === 'ACTIVO'
+            );
+          } catch (error) {
+            // Si hay error al cargar inscripciones, continuar sin ellas
+          }
+          return { ...alumno, inscripcionActiva };
+        })
+      );
+
+      setAlumnos(alumnosConInscripciones);
+    } catch (error) {
+      toast.error('No se pudieron cargar los alumnos');
+    }
+  };
+
+  const loadCursos = async () => {
+    try {
+      const response = await cursosService.list({ activo: true });
+      setCursos(response.items);
+    } catch (error) {
+      toast.error('No se pudieron cargar los cursos');
+    }
+  };
+
+  const loadInscripciones = async () => {
+    if (!alumnoSeleccionado) return;
+
+    try {
+      setIsLoading(true);
+
+      if (alumnoSeleccionado === 'todos') {
+        // Cargar inscripciones de todos los alumnos
+        const todasInscripciones: InscripcionResponse[] = [];
+
+        for (const alumno of alumnosFiltrados) {
+          try {
+            const data = await inscripcionesService.obtenerInscripcionesAlumno(
+              alumno.id_alumno
+            );
+            // Agregar nombre del alumno a cada inscripción para mostrar en la tabla
+            const inscripcionesConAlumno = data.map((insc) => ({
+              ...insc,
+              alumnoNombre: `${alumno.nombre} ${alumno.apellido}`,
+              alumnoId: alumno.id_alumno,
+            }));
+            todasInscripciones.push(...inscripcionesConAlumno);
+          } catch (error) {
+            // Error al cargar inscripciones de un alumno
+          }
+        }
+
+        setInscripciones(todasInscripciones);
+      } else {
+        // Cargar inscripciones de un alumno específico
+        const data = await inscripcionesService.obtenerInscripcionesAlumno(
+          parseInt(alumnoSeleccionado)
+        );
+        setInscripciones(data);
+      }
+    } catch (error) {
+      toast.error('No se pudieron cargar las inscripciones');
+      setInscripciones([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleInscribir = async () => {
+    if (!alumnoSeleccionado || !cursoId || !anioAcademico) {
+      toast.error('Complete todos los campos obligatorios');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await inscripcionesService.inscribirAlumnoCurso(
+        parseInt(alumnoSeleccionado),
+        {
+          cursoId: parseInt(cursoId),
+          anioAcademico,
+          seccionAsignada: seccionAsignada || undefined,
+          observaciones: observaciones || undefined,
+        }
+      );
+
+      toast.success('Alumno inscrito exitosamente');
+      setShowInscribirDialog(false);
+      resetForm();
+      await loadAlumnos(); // Recargar alumnos para actualizar inscripción activa
+      loadInscripciones();
+    } catch (error: any) {
+      const mensaje =
+        error.response?.data?.message || 'No se pudo inscribir al alumno';
+      toast.error(mensaje);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRetirar = async (inscripcionId: number) => {
+    setInscripcionARetirar(inscripcionId);
+    setShowRetirarDialog(true);
+  };
+
+  const confirmarRetiro = async () => {
+    if (!inscripcionARetirar) return;
+
+    try {
+      // Buscar la inscripción para obtener el año académico
+      const inscripcion = inscripciones.find(
+        (i) => i.id === inscripcionARetirar
+      );
+
+      if (!inscripcion) {
+        toast.error('No se encontró la inscripción');
+        return;
+      }
+
+      // Usar el mismo endpoint que en PromocionesModule para garantizar consistencia
+      await promocionesService.finalizarAlumno({
+        alumnoId: parseInt(alumnoSeleccionado),
+        anioActual: inscripcion.anioAcademico,
+        estado: 'NO REINSCRITO',
+        marcarInactivo: true,
+      });
+
+      toast.success('Alumno retirado del curso exitosamente');
+      await loadAlumnos(); // Recargar alumnos para actualizar inscripción activa
+      loadInscripciones();
+    } catch (error: any) {
+      const mensaje =
+        error.response?.data?.message || 'No se pudo retirar al alumno';
+      toast.error(mensaje);
+    } finally {
+      setShowRetirarDialog(false);
+      setInscripcionARetirar(null);
+    }
+  };
+
+  const handleReactivarAlumno = async () => {
+    if (!alumnoSeleccionado) return;
+
+    try {
+      await reactivarAlumno(parseInt(alumnoSeleccionado));
+      toast.success('Alumno reactivado exitosamente');
+      await loadAlumnos(); // Recargar alumnos
+      loadInscripciones(); // Recargar inscripciones
+    } catch (error: any) {
+      const mensaje =
+        error.response?.data?.message || 'No se pudo reactivar al alumno';
+      toast.error(mensaje);
+    }
+  };
+
+  const resetForm = () => {
+    setCursoId('');
+    setAnioAcademico(currentYear);
+    setSeccionAsignada('');
+    setObservaciones('');
+  };
+
+  const alumnoInfo = alumnos.find(
+    (a) => a.id_alumno.toString() === alumnoSeleccionado
+  );
+
+  // Filtrar alumnos por búsqueda de nombre
+  const alumnosFiltrados = alumnos.filter((alumno) => {
+    // Filtro por nombre
+    const coincideNombre =
+      !busquedaNombre.trim() ||
+      `${alumno.nombre} ${alumno.apellido}`
+        .toLowerCase()
+        .includes(busquedaNombre.toLowerCase());
+
+    return coincideNombre;
+  });
+
+  // Auto-seleccionar alumno si solo hay un resultado en la búsqueda
+  useEffect(() => {
+    if (busquedaNombre.trim() && alumnosFiltrados.length === 1) {
+      // Si hay exactamente 1 resultado, seleccionarlo automáticamente
+      setAlumnoSeleccionado(alumnosFiltrados[0].id_alumno.toString());
+    } else if (!busquedaNombre.trim()) {
+      // Si el campo está vacío, limpiar la selección
+      setAlumnoSeleccionado('');
+    } else if (busquedaNombre.trim() && alumnosFiltrados.length === 0) {
+      // Si no hay resultados, limpiar selección
+      setAlumnoSeleccionado('');
+    }
+  }, [busquedaNombre, alumnosFiltrados.length]);
+
+  // Actualizar paginación cuando cambian las inscripciones
+  useEffect(() => {
+    setTotalPages(Math.ceil(inscripciones.length / itemsPerPage));
+    setPage(1);
+  }, [inscripciones.length, itemsPerPage]);
+
+  // Obtener inscripciones paginadas
+  const paginatedInscripciones = inscripciones.slice(
+    (page - 1) * itemsPerPage,
+    page * itemsPerPage
+  );
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-2xl font-bold flex items-center gap-2">
+            <BookOpen className="h-6 w-6" />
+            Gestión de Inscripciones a Cursos
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Filtros en una sola línea */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {/* Campo de búsqueda por nombre */}
+            <div className="space-y-1">
+              <Label htmlFor="busqueda-nombre" className="text-xs">
+                Buscar por nombre
+              </Label>
+              <Input
+                id="busqueda-nombre"
+                type="text"
+                placeholder="Nombre del alumno..."
+                value={busquedaNombre}
+                onChange={(e) => setBusquedaNombre(e.target.value)}
+                className="h-9"
+              />
+            </div>
+
+            {/* Selector de alumno */}
+            <div className="space-y-1">
+              <Label htmlFor="alumno" className="text-xs">
+                Seleccionar Alumno
+              </Label>
+              <Select
+                value={alumnoSeleccionado}
+                onValueChange={setAlumnoSeleccionado}
+              >
+                <SelectTrigger id="alumno" className="h-9">
+                  <SelectValue placeholder="Seleccione un alumno" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos los alumnos</SelectItem>
+                  {alumnosFiltrados.map((alumno) => (
+                    <SelectItem
+                      key={alumno.id_alumno}
+                      value={alumno.id_alumno.toString()}
+                    >
+                      {alumno.nombre} {alumno.apellido}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Información de resultados y botón */}
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-gray-600">
+              {busquedaNombre ? (
+                <>
+                  {alumnosFiltrados.length === 0 ? (
+                    <span className="text-red-500">
+                      No se encontraron alumnos con ese nombre
+                    </span>
+                  ) : (
+                    <span>
+                      {alumnosFiltrados.length} alumno(s) encontrado(s)
+                    </span>
+                  )}
+                </>
+              ) : null}
+            </div>
+
+            {alumnoSeleccionado && alumnoSeleccionado !== 'todos' && (
+              <Button
+                onClick={() => setShowInscribirDialog(true)}
+                className="bg-blue-600 hover:bg-blue-700 h-9"
+                disabled={alumnoInfo && !alumnoInfo.activo}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                {alumnoInfo && !alumnoInfo.activo
+                  ? 'Alumno Inactivo'
+                  : 'Nueva Inscripción'}
+              </Button>
+            )}
+          </div>
+
+          {/* Información del alumno seleccionado */}
+          {alumnoInfo && alumnoSeleccionado !== 'todos' && (
+            <Card className="bg-blue-50">
+              <CardContent className="p-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600">Nombre completo</p>
+                    <p className="font-medium">
+                      {alumnoInfo.nombre} {alumnoInfo.apellido}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Curso Actual</p>
+                    <p className="font-medium">
+                      {alumnoInfo.inscripcionActiva?.curso?.nombre
+                        ? `${alumnoInfo.inscripcionActiva.curso.nombre} ${alumnoInfo.inscripcionActiva.curso.seccion || ''}`.trim()
+                        : '-'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Grado Académico</p>
+                    <p className="font-medium">
+                      {alumnoInfo.inscripcionActiva?.curso?.gradoAcademico
+                        ?.nombre || '-'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Estado</p>
+                    <Badge
+                      variant={alumnoInfo.activo ? 'success' : 'destructive'}
+                    >
+                      {alumnoInfo.activo ? 'ACTIVO' : 'INACTIVO'}
+                    </Badge>
+                  </div>
+                </div>
+
+                {/* Botón para reactivar alumno si está inactivo */}
+                {!alumnoInfo.activo && (
+                  <div className="mt-4 pt-4 border-t">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleReactivarAlumno}
+                      className="w-full bg-green-50 hover:bg-green-100 border-green-200 text-green-700"
+                    >
+                      <RefreshCcw className="w-4 h-4 mr-2" />
+                      Reactivar Alumno
+                    </Button>
+                    <p className="text-xs text-gray-500 mt-2 text-center">
+                      Al reactivar, podrás inscribir al alumno nuevamente
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Tabla de inscripciones */}
+          {alumnoSeleccionado && (
+            <>
+              {isLoading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
+                </div>
+              ) : inscripciones.length > 0 ? (
+                <>
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          {alumnoSeleccionado === 'todos' && (
+                            <TableHead>Alumno</TableHead>
+                          )}
+                          <TableHead>Curso / Sección</TableHead>
+                          <TableHead>Grado Académico</TableHead>
+                          <TableHead>Año Académico</TableHead>
+                          <TableHead>Estado</TableHead>
+                          <TableHead>Fecha Inscripción</TableHead>
+                          <TableHead>Fecha Retiro</TableHead>
+                          <TableHead>Observaciones</TableHead>
+                          <TableHead className="text-right">Acciones</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {paginatedInscripciones.map((inscripcion) => (
+                          <TableRow key={inscripcion.id}>
+                            {alumnoSeleccionado === 'todos' && (
+                              <TableCell className="font-medium">
+                                {(inscripcion as any).alumnoNombre || '-'}
+                              </TableCell>
+                            )}
+                            <TableCell className="font-medium">
+                              {inscripcion.curso?.nombre || '-'}
+                              {(inscripcion.seccionAsignada ||
+                                inscripcion.curso?.seccion) &&
+                                ` - ${inscripcion.seccionAsignada || inscripcion.curso?.seccion}`}
+                            </TableCell>
+                            <TableCell>
+                              {inscripcion.curso?.gradoAcademico?.nombre || '-'}
+                            </TableCell>
+                            <TableCell>{inscripcion.anioAcademico}</TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={
+                                  inscripcion.estado === 'ACTIVO'
+                                    ? 'success'
+                                    : 'destructive'
+                                }
+                              >
+                                {inscripcion.estado}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {new Date(
+                                inscripcion.fechaInscripcion
+                              ).toLocaleDateString('es-SV')}
+                            </TableCell>
+                            <TableCell>
+                              {inscripcion.fechaRetiro
+                                ? new Date(
+                                    inscripcion.fechaRetiro
+                                  ).toLocaleDateString('es-SV')
+                                : '-'}
+                            </TableCell>
+                            <TableCell>
+                              {inscripcion.observaciones || '-'}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {inscripcion.estado === 'ACTIVO' && (
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => handleRetirar(inscripcion.id)}
+                                >
+                                  <Trash2 className="w-4 h-4 mr-1" />
+                                  Retirar
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {/* Controles de Paginación */}
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between px-2 py-4">
+                      <div className="text-sm text-gray-500">
+                        Mostrando {(page - 1) * itemsPerPage + 1} a{' '}
+                        {Math.min(page * itemsPerPage, inscripciones.length)} de{' '}
+                        {inscripciones.length} inscripciones
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setPage((p) => Math.max(1, p - 1))}
+                          disabled={page === 1}
+                        >
+                          Anterior
+                        </Button>
+                        <div className="text-sm">
+                          Página {page} de {totalPages}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            setPage((p) => Math.min(totalPages, p + 1))
+                          }
+                          disabled={page === totalPages}
+                        >
+                          Siguiente
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  Este alumno no tiene inscripciones registradas
+                </div>
+              )}
+            </>
+          )}
+
+          {!alumnoSeleccionado && (
+            <div className="text-center py-8 text-gray-500">
+              Seleccione un alumno para ver sus inscripciones
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Dialog para nueva inscripción */}
+      <Dialog open={showInscribirDialog} onOpenChange={setShowInscribirDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Inscribir Alumno a Curso</DialogTitle>
+            <DialogDescription>
+              Complete los datos para inscribir al alumno en un nuevo curso
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="curso">Curso *</Label>
+              <Select value={cursoId} onValueChange={setCursoId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccione un curso" />
+                </SelectTrigger>
+                <SelectContent>
+                  {cursos.map((curso) => (
+                    <SelectItem
+                      key={curso.id_curso}
+                      value={curso.id_curso?.toString() || ''}
+                    >
+                      {curso.nombre} {curso.seccion || ''} -{' '}
+                      {curso.gradoAcademico?.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="anio">Año Académico *</Label>
+              <Select value={anioAcademico} onValueChange={setAnioAcademico}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccione un año" />
+                </SelectTrigger>
+                <SelectContent>
+                  {[
+                    parseInt(currentYear) - 1,
+                    parseInt(currentYear),
+                    parseInt(currentYear) + 1,
+                  ].map((year) => (
+                    <SelectItem key={year} value={year.toString()}>
+                      {year}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="obs">Observaciones</Label>
+              <Textarea
+                id="obs"
+                value={observaciones}
+                onChange={(e) => setObservaciones(e.target.value)}
+                placeholder="Observaciones sobre la inscripción"
+                rows={3}
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 mt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowInscribirDialog(false);
+                resetForm();
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleInscribir}
+              disabled={isSubmitting || !cursoId || !anioAcademico}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {isSubmitting && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Inscribir
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de confirmación para retirar */}
+      <Dialog open={showRetirarDialog} onOpenChange={setShowRetirarDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-red-600">
+              Confirmar Retiro
+            </DialogTitle>
+            <DialogDescription className="pt-4">
+              ¿Está seguro de retirar al alumno de este curso?
+              <br />
+              <br />
+              Esta acción marcará la inscripción como inactiva y registrará la
+              fecha de retiro.
+              <br />
+              <br />
+              <span className="font-semibold text-gray-700">
+                Esta acción no se puede deshacer.
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowRetirarDialog(false);
+                setInscripcionARetirar(null);
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={confirmarRetiro}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              Sí, Retirar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
 
 export function AlumnosModule() {
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
@@ -271,24 +998,47 @@ export function AlumnosModule() {
         params: { incluirInactivos: true },
       });
 
-      // Aseguramos que cada alumno tenga la propiedad responsables definida
-      const alumnosData = (response.data as Alumno[]).map((alumno) => {
-        return {
-          ...alumno,
-          responsables: alumno.responsables || [],
-          detalle: alumno.detalle || {
-            viveCon: '',
-            dependenciaEconomica: '',
-            capacidadPago: false,
-            tieneHermanosEnColegio: false,
-            hermanosEnColegio: [],
-          },
-        };
-      });
+      const currentYear = new Date().getFullYear().toString();
 
-      setAlumnos(alumnosData);
-      setTotalItems(alumnosData.length);
-      setTotalPages(Math.ceil(alumnosData.length / itemsPerPage));
+      // Aseguramos que cada alumno tenga la propiedad responsables definida
+      // Y cargamos su inscripción activa
+      const alumnosConInscripciones = await Promise.all(
+        (response.data as Alumno[]).map(async (alumno) => {
+          // Cargar inscripciones del alumno
+          let inscripcionActiva = undefined;
+          try {
+            const inscripcionesResponse =
+              await inscripcionesService.obtenerInscripcionesAlumno(
+                alumno.id_alumno
+              );
+
+            // Buscar la inscripción activa del año actual
+            inscripcionActiva = inscripcionesResponse.find(
+              (insc) =>
+                insc.estado === 'ACTIVO' && insc.anioAcademico === currentYear
+            );
+          } catch (error) {
+            // Si hay error al cargar inscripciones, continuamos sin ellas
+          }
+
+          return {
+            ...alumno,
+            responsables: alumno.responsables || [],
+            detalle: alumno.detalle || {
+              viveCon: '',
+              dependenciaEconomica: '',
+              capacidadPago: false,
+              tieneHermanosEnColegio: false,
+              hermanosEnColegio: [],
+            },
+            inscripcionActiva,
+          };
+        })
+      );
+
+      setAlumnos(alumnosConInscripciones);
+      setTotalItems(alumnosConInscripciones.length);
+      setTotalPages(Math.ceil(alumnosConInscripciones.length / itemsPerPage));
       setError(null);
     } catch (err) {
       setError('Error al cargar los alumnos. Intente de nuevo más tarde.');
@@ -370,7 +1120,7 @@ export function AlumnosModule() {
     nivel: 'basica' as 'parvularia' | 'basica' | 'media',
     grado: '',
     seccion: '',
-    fechaIngreso: '',
+    fechaIngreso: new Date().toISOString().split('T')[0],
     repiteGrado: false,
     condicionado: false,
 
@@ -461,7 +1211,7 @@ export function AlumnosModule() {
       nivel: 'basica',
       grado: '',
       seccion: '',
-      fechaIngreso: '',
+      fechaIngreso: new Date().toISOString().split('T')[0],
       repiteGrado: false,
       condicionado: false,
       viveCon: '',
@@ -1788,7 +2538,7 @@ export function AlumnosModule() {
     // --- VALIDACIÓN (global) ---
     const data = { ...formData, responsables };
 
-    const { valid, errors } = validateFields(data, schema, {
+    const { valid } = validateFields(data, schema, {
       toast,
       toastAll: true,
       stopOnFirstError: true,
@@ -1796,7 +2546,6 @@ export function AlumnosModule() {
     });
 
     if (!valid) {
-      console.log('Errores:', errors);
       return;
     }
 
@@ -2221,7 +2970,7 @@ export function AlumnosModule() {
           nivel: 'basica',
           grado: '',
           seccion: '',
-          fechaIngreso: '',
+          fechaIngreso: new Date().toISOString().split('T')[0],
           repiteGrado: false,
           condicionado: false,
           viveCon: '',
@@ -2364,2521 +3113,2684 @@ export function AlumnosModule() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">
+      <Tabs defaultValue="gestion" className="w-full">
+        <TabsList className="grid w-full grid-cols-3 mb-6">
+          <TabsTrigger value="gestion" className="flex items-center gap-2">
+            <User className="w-4 h-4" />
             Gestión de Alumnos
-          </h1>
-          <p className="text-gray-600">
-            Administra la información completa de los estudiantes
-          </p>
-        </div>
-        <div className="flex items-center space-x-2">
-          <Button
-            onClick={handleCreateAlumno}
-            className="bg-blue-600 hover:bg-blue-700"
+          </TabsTrigger>
+          <TabsTrigger
+            value="inscripciones"
+            className="flex items-center gap-2"
           >
-            <UserPlus className="w-4 h-4 mr-2" />
-            Nuevo Alumno
-          </Button>
+            <FileText className="w-4 h-4" />
+            Inscripciones a Cursos
+          </TabsTrigger>
+          <TabsTrigger value="promociones" className="flex items-center gap-2">
+            <GraduationCap className="w-4 h-4" />
+            Promociones
+          </TabsTrigger>
+        </TabsList>
 
-          <ImportButton
-            triggerLabel="Importar"
-            onImport={async (file) => {
-              const res = await importMatricula(file);
-              // refrescar lista
-              await cargarAlumnos();
-              return res;
-            }}
-          />
-        </div>
-      </div>
-
-      {/* Estadísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="border-l-4 border-l-blue-600">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Total Alumnos</p>
-                <p className="text-2xl font-bold text-blue-600">
-                  {alumnos.length}
-                </p>
-              </div>
-              <GraduationCap className="w-8 h-8 text-blue-600" />
+        <TabsContent value="gestion" className="space-y-6">
+          {/* Header */}
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">
+                Gestión de Alumnos
+              </h1>
+              <p className="text-gray-600">
+                Administra la información completa de los estudiantes
+              </p>
             </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-l-4 border-l-green-600">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Parvularia</p>
-                <p className="text-2xl font-bold text-green-600">
-                  {alumnos.filter((a) => a.nivel === 'parvularia').length}
-                </p>
-              </div>
-              <User className="w-8 h-8 text-green-600" />
+            <div className="flex gap-2">
+              <ImportButton
+                triggerLabel="Importar"
+                onImport={async (file) => {
+                  const res = await importMatricula(file);
+                  // refrescar lista
+                  await cargarAlumnos();
+                  return res;
+                }}
+              />
+              <Button
+                onClick={handleCreateAlumno}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                <UserPlus className="w-4 h-4 mr-2" />
+                Nuevo Alumno
+              </Button>
             </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-l-4 border-l-purple-600">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Básica</p>
-                <p className="text-2xl font-bold text-purple-600">
-                  {alumnos.filter((a) => a.nivel === 'basica').length}
-                </p>
-              </div>
-              <GraduationCap className="w-8 h-8 text-purple-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-l-4 border-l-orange-600">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Media</p>
-                <p className="text-2xl font-bold text-orange-600">
-                  {alumnos.filter((a) => a.nivel === 'media').length}
-                </p>
-              </div>
-              <User className="w-8 h-8 text-orange-600" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Filtros y búsqueda */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <Input
-                  placeholder="Buscar por nombre o apellidos..."
-                  value={searchTerm}
-                  onChange={(e) => {
-                    setSearchTerm(e.target.value);
-                    setPage(1); // Volver a la primera página al buscar
-                  }}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-            <Select
-              value={filterNivel}
-              onValueChange={(value) => {
-                setFilterNivel(value);
-                setPage(1); // Volver a la primera página al cambiar el filtro
-              }}
-            >
-              <SelectTrigger className="w-full md:w-48">
-                <SelectValue placeholder="Filtrar por nivel" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos los niveles</SelectItem>
-                <SelectItem value="parvularia">Parvularia</SelectItem>
-                <SelectItem value="basica">Básica</SelectItem>
-                <SelectItem value="media">Media</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select
-              value={filterEstado}
-              onValueChange={(value) => {
-                setFilterEstado(value);
-                setPage(1); // Volver a la primera página al cambiar el filtro
-              }}
-            >
-              <SelectTrigger className="w-full md:w-48">
-                <SelectValue placeholder="Filtrar por estado" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos los estados</SelectItem>
-                <SelectItem value="activo">Activo</SelectItem>
-                <SelectItem value="inactivo">Inactivo</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
-        </CardContent>
-      </Card>
 
-      {/* Tabla de alumnos */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <GraduationCap className="w-5 h-5" />
-            <span>Lista de Alumnos ({totalItems})</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nombre Completo</TableHead>
-                <TableHead>Edad</TableHead>
-                <TableHead>Nivel/Grado</TableHead>
-                <TableHead>Responsable Principal</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead>Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8">
-                    <div className="flex flex-col items-center justify-center">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                      <p className="mt-2 text-sm text-gray-500">
-                        Cargando alumnos...
-                      </p>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ) : error ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8">
-                    <div className="flex flex-col items-center justify-center">
-                      <XCircle className="h-8 w-8 text-red-500" />
-                      <p className="mt-2 text-sm text-gray-500">{error}</p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="mt-4"
-                        onClick={() => {
-                          setIsLoading(true);
-                          api
-                            .get('/alumnos', {
-                              params: { incluirInactivos: true },
-                            })
-                            .then((response) => {
-                              // Aseguramos que cada alumno tenga la propiedad responsables definida
-                              const alumnosData = (
-                                response.data as Alumno[]
-                              ).map((alumno) => ({
-                                ...alumno,
-                                responsables: alumno.responsables || [],
-                                detalle: alumno.detalle || {
-                                  viveCon: '',
-                                  dependenciaEconomica: '',
-                                  capacidadPago: false,
-                                  tieneHermanosEnColegio: false,
-                                  hermanosEnColegio: [],
-                                },
-                              }));
-                              setAlumnos(alumnosData);
-                              setError(null);
-                            })
-                            .catch(() => {
-                              setError(
-                                'Error al cargar los alumnos. Intente de nuevo más tarde.'
-                              );
-                            })
-                            .then(
-                              () => {
-                                setIsLoading(false);
-                              },
-                              () => {
-                                setIsLoading(false);
-                              }
-                            );
-                        }}
-                      >
-                        Reintentar
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ) : filteredAlumnos.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8">
-                    <p className="text-sm text-gray-500">
-                      No se encontraron alumnos
+          {/* Estadísticas */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Card className="border-l-4 border-l-blue-600">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Total Alumnos</p>
+                    <p className="text-2xl font-bold text-blue-600">
+                      {alumnos.length}
                     </p>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredAlumnos.map((alumno) => {
-                  // Obtenemos el responsable principal
-                  const responsablePrincipal = getResponsablePrincipal(alumno);
+                  </div>
+                  <GraduationCap className="w-8 h-8 text-blue-600" />
+                </div>
+              </CardContent>
+            </Card>
 
-                  // Verificamos que exista el responsable principal
-                  if (responsablePrincipal) {
-                    // El responsable principal existe
-                  }
-                  return (
-                    <TableRow
-                      key={alumno.id_alumno}
-                      className="cursor-pointer hover:bg-gray-50"
-                      onClick={() => handleViewAlumno(alumno)}
-                    >
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">
-                            {alumno.nombre} {alumno.apellido}
-                          </p>
-                          <p className="text-sm text-gray-500">
-                            {alumno.grado}° {alumno.seccion}
+            <Card className="border-l-4 border-l-green-600">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Alumnos Activos</p>
+                    <p className="text-2xl font-bold text-green-600">
+                      {alumnos.filter((a) => a.activo).length}
+                    </p>
+                  </div>
+                  <User className="w-8 h-8 text-green-600" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-l-4 border-l-purple-600">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Con Inscripción</p>
+                    <p className="text-2xl font-bold text-purple-600">
+                      {
+                        alumnos.filter(
+                          (a) =>
+                            a.inscripcionActiva &&
+                            a.inscripcionActiva.estado === 'ACTIVO'
+                        ).length
+                      }
+                    </p>
+                  </div>
+                  <GraduationCap className="w-8 h-8 text-purple-600" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-l-4 border-l-red-600">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Alumnos Inactivos</p>
+                    <p className="text-2xl font-bold text-red-600">
+                      {alumnos.filter((a) => !a.activo).length}
+                    </p>
+                  </div>
+                  <User className="w-8 h-8 text-red-600" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Filtros y búsqueda */}
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex flex-col md:flex-row gap-4">
+                <div className="flex-1">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <Input
+                      placeholder="Buscar por nombre o apellidos..."
+                      value={searchTerm}
+                      onChange={(e) => {
+                        setSearchTerm(e.target.value);
+                        setPage(1); // Volver a la primera página al buscar
+                      }}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+                <Select
+                  value={filterNivel}
+                  onValueChange={(value) => {
+                    setFilterNivel(value);
+                    setPage(1); // Volver a la primera página al cambiar el filtro
+                  }}
+                >
+                  <SelectTrigger className="w-full md:w-48">
+                    <SelectValue placeholder="Filtrar por nivel" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos los niveles</SelectItem>
+                    <SelectItem value="parvularia">Parvularia</SelectItem>
+                    <SelectItem value="basica">Básica</SelectItem>
+                    <SelectItem value="media">Media</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={filterEstado}
+                  onValueChange={(value) => {
+                    setFilterEstado(value);
+                    setPage(1); // Volver a la primera página al cambiar el filtro
+                  }}
+                >
+                  <SelectTrigger className="w-full md:w-48">
+                    <SelectValue placeholder="Filtrar por estado" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos los estados</SelectItem>
+                    <SelectItem value="activo">Activo</SelectItem>
+                    <SelectItem value="inactivo">Inactivo</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Tabla de alumnos */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <GraduationCap className="w-5 h-5" />
+                <span>Lista de Alumnos ({totalItems})</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nombre Completo</TableHead>
+                    <TableHead>Edad</TableHead>
+                    <TableHead>Curso / Grado Académico</TableHead>
+                    <TableHead>Responsable Principal</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead>Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8">
+                        <div className="flex flex-col items-center justify-center">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                          <p className="mt-2 text-sm text-gray-500">
+                            Cargando alumnos...
                           </p>
                         </div>
                       </TableCell>
-                      <TableCell>
-                        {alumno.fechaNacimiento
-                          ? `${calcularEdadDisplay(alumno.fechaNacimiento)} años`
-                          : 'No registrado'}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="capitalize">
-                          {alumno.nivel} - {alumno.grado}°
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          {responsablePrincipal ? (
-                            <>
-                              <p className="font-medium text-sm">
-                                {/* Usando las propiedades correctas según la estructura del responsable */}
-                                {(() => {
-                                  if (!responsablePrincipal)
-                                    return 'Sin responsable';
-
-                                  // Verificamos si los datos están en responsable (nueva estructura)
-                                  if (
-                                    responsablePrincipal.responsable?.nombre
-                                  ) {
-                                    return `${responsablePrincipal.responsable.nombre} ${responsablePrincipal.responsable.apellido || ''}`;
-                                  }
-
-                                  // O si están en datosResponsable (estructura anterior)
-                                  if (
-                                    responsablePrincipal.datosResponsable
-                                      ?.nombre
-                                  ) {
-                                    return `${responsablePrincipal.datosResponsable.nombre} ${responsablePrincipal.datosResponsable.apellido || ''}`;
-                                  }
-
-                                  return 'Sin nombre Sin apellido';
-                                })()}
-                              </p>
-                              <p className="text-xs text-gray-500">
-                                {(() => {
-                                  if (!responsablePrincipal) return '';
-
-                                  // Si tiene parentesco anidado, lo usamos directamente
-                                  if (responsablePrincipal.parentesco?.nombre) {
-                                    return responsablePrincipal.parentesco
-                                      .nombre;
-                                  }
-
-                                  // Si tiene parentescoId en nivel raíz
-                                  if (
-                                    responsablePrincipal.parentescoId !==
-                                    undefined
-                                  ) {
-                                    return getParentescoNombre(
-                                      responsablePrincipal.parentescoId,
-                                      responsablePrincipal.parentescoLibre || ''
-                                    );
-                                  }
-
-                                  // Si tiene relacion.parentescoId
-                                  if (
-                                    responsablePrincipal.relacion
-                                      ?.parentescoId !== undefined
-                                  ) {
-                                    return getParentescoNombre(
-                                      responsablePrincipal.relacion
-                                        .parentescoId,
-                                      responsablePrincipal.relacion
-                                        .parentescoLibre || ''
-                                    );
-                                  }
-
-                                  return 'Contacto principal';
-                                })()}
-                              </p>
-                              {alumno.responsables &&
-                                alumno.responsables.length > 1 && (
-                                  <p className="text-xs text-blue-600">
-                                    +{alumno.responsables.length - 1} más
-                                  </p>
-                                )}
-                            </>
-                          ) : (
-                            <p className="text-sm text-gray-400">
-                              Sin responsable principal
-                            </p>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={alumno.activo ? 'default' : 'destructive'}
-                        >
-                          {alumno.activo ? 'Activo' : 'Inactivo'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div
-                          className="flex space-x-2"
-                          onClick={(e) => e.stopPropagation()}
-                        >
+                    </TableRow>
+                  ) : error ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8">
+                        <div className="flex flex-col items-center justify-center">
+                          <XCircle className="h-8 w-8 text-red-500" />
+                          <p className="mt-2 text-sm text-gray-500">{error}</p>
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => handleViewAlumno(alumno)}
-                            title="Ver información detallada"
+                            className="mt-4"
+                            onClick={() => {
+                              setIsLoading(true);
+                              api
+                                .get('/alumnos', {
+                                  params: { incluirInactivos: true },
+                                })
+                                .then((response) => {
+                                  // Aseguramos que cada alumno tenga la propiedad responsables definida
+                                  const alumnosData = (
+                                    response.data as Alumno[]
+                                  ).map((alumno) => ({
+                                    ...alumno,
+                                    responsables: alumno.responsables || [],
+                                    detalle: alumno.detalle || {
+                                      viveCon: '',
+                                      dependenciaEconomica: '',
+                                      capacidadPago: false,
+                                      tieneHermanosEnColegio: false,
+                                      hermanosEnColegio: [],
+                                    },
+                                  }));
+                                  setAlumnos(alumnosData);
+                                  setError(null);
+                                })
+                                .catch(() => {
+                                  setError(
+                                    'Error al cargar los alumnos. Intente de nuevo más tarde.'
+                                  );
+                                })
+                                .then(
+                                  () => {
+                                    setIsLoading(false);
+                                  },
+                                  () => {
+                                    setIsLoading(false);
+                                  }
+                                );
+                            }}
                           >
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleEditAlumno(alumno)}
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleToggleStatus(alumno)}
-                            className={
-                              alumno.activo
-                                ? 'text-orange-600 hover:text-orange-700'
-                                : 'text-green-600 hover:text-green-700'
-                            }
-                            title={
-                              alumno.activo
-                                ? 'Desactivar alumno'
-                                : 'Activar alumno'
-                            }
-                          >
-                            {alumno.activo ? (
-                              <ToggleLeft className="w-4 h-4" />
-                            ) : (
-                              <ToggleRight className="w-4 h-4" />
-                            )}
+                            Reintentar
                           </Button>
                         </div>
                       </TableCell>
                     </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-          <div className="flex items-center justify-between space-x-2 py-4">
-            <p className="text-sm text-gray-600">
-              Mostrando{' '}
-              <span className="font-semibold">{filteredAlumnos.length}</span> de{' '}
-              <span className="font-semibold">{totalItems}</span> resultados
-              {(debouncedSearchTerm ||
-                filterNivel !== 'todos' ||
-                filterEstado !== 'todos') && (
-                <Badge
-                  variant="outline"
-                  className="ml-2 bg-blue-50 text-blue-700"
-                >
-                  Filtrado
-                </Badge>
-              )}
-            </p>
-            <div className="flex items-center space-x-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
-                disabled={page === 1}
-              >
-                Anterior
-              </Button>
-              <span className="text-sm text-gray-600">
-                Página {page} de {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setPage((prev) => (prev < totalPages ? prev + 1 : prev))
-                }
-                disabled={page >= totalPages}
-              >
-                Siguiente
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+                  ) : filteredAlumnos.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8">
+                        <p className="text-sm text-gray-500">
+                          No se encontraron alumnos
+                        </p>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredAlumnos.map((alumno) => {
+                      // Obtenemos el responsable principal
+                      const responsablePrincipal =
+                        getResponsablePrincipal(alumno);
 
-      {/* Dialog para crear/editar alumno */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-6xl max-h-[95vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {editingAlumno ? 'Editar Alumno' : 'Registrar Nuevo Alumno'}
-            </DialogTitle>
-            <DialogDescription>
-              {editingAlumno
-                ? 'Modifica la información completa del alumno'
-                : 'Completa todos los datos del nuevo alumno'}
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleSubmit}>
-            <Tabs
-              value={currentTab}
-              onValueChange={setCurrentTab}
-              className="w-full"
-            >
-              <TabsList className="grid w-full grid-cols-8">
-                <TabsTrigger
-                  value="personal"
-                  className="flex items-center space-x-1"
-                >
-                  <User className="w-4 h-4" />
-                  <span className="hidden sm:inline">Personal</span>
-                </TabsTrigger>
-                <TabsTrigger
-                  value="nacimiento"
-                  className="flex items-center space-x-1"
-                >
-                  <Calendar className="w-4 h-4" />
-                  <span className="hidden sm:inline">Nacimiento</span>
-                </TabsTrigger>
-                <TabsTrigger
-                  value="medico"
-                  className="flex items-center space-x-1"
-                >
-                  <Stethoscope className="w-4 h-4" />
-                  <span className="hidden sm:inline">Médico</span>
-                </TabsTrigger>
-                <TabsTrigger
-                  value="residencia"
-                  className="flex items-center space-x-1"
-                >
-                  <MapPin className="w-4 h-4" />
-                  <span className="hidden sm:inline">Residencia</span>
-                </TabsTrigger>
-                <TabsTrigger
-                  value="transporte"
-                  className="flex items-center space-x-1"
-                >
-                  <Car className="w-4 h-4" />
-                  <span className="hidden sm:inline">Transporte</span>
-                </TabsTrigger>
-                <TabsTrigger
-                  value="academico"
-                  className="flex items-center space-x-1"
-                >
-                  <GraduationCap className="w-4 h-4" />
-                  <span className="hidden sm:inline">Académico</span>
-                </TabsTrigger>
-                <TabsTrigger
-                  value="detalles"
-                  className="flex items-center space-x-1"
-                >
-                  <FileText className="w-4 h-4" />
-                  <span className="hidden sm:inline">Detalles</span>
-                </TabsTrigger>
-                <TabsTrigger
-                  value="responsables"
-                  className="flex items-center space-x-1"
-                >
-                  <Users className="w-4 h-4" />
-                  <span className="hidden sm:inline">Responsables</span>
-                </TabsTrigger>
-              </TabsList>
-
-              {/* Tab: Datos Personales */}
-              <TabsContent value="personal" className="space-y-4 mt-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="nombre">Nombre *</Label>
-                    <Input
-                      id="nombre"
-                      value={formData.nombre}
-                      onChange={(e) =>
-                        setFormData({ ...formData, nombre: e.target.value })
+                      // Verificamos que exista el responsable principal
+                      if (responsablePrincipal) {
+                        // El responsable principal existe
                       }
-                      placeholder="Juan Carlos"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="apellido">Apellido *</Label>
-                    <Input
-                      id="apellido"
-                      value={formData.apellido}
-                      onChange={(e) =>
-                        setFormData({ ...formData, apellido: e.target.value })
-                      }
-                      placeholder="Pérez González"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="genero">Género</Label>
-                    <Select
-                      value={formData.genero}
-                      onValueChange={(value) =>
-                        setFormData({ ...formData, genero: value })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar género" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Masculino">Masculino</SelectItem>
-                        <SelectItem value="Femenino">Femenino</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="fechaNacimiento">
-                      Fecha de Nacimiento * (DD/MM/YYYY)
-                    </Label>
-                    <Input
-                      id="fechaNacimiento"
-                      value={formData.fechaNacimiento}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          fechaNacimiento: e.target.value,
-                        })
-                      }
-                      placeholder="01/01/2010"
-                      minLength={10}
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="nacionalidad">Nacionalidad</Label>
-                    <Input
-                      id="nacionalidad"
-                      value={formData.nacionalidad}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          nacionalidad: e.target.value,
-                        })
-                      }
-                      placeholder="Salvadoreña"
-                    />
-                  </div>
-                </div>
-              </TabsContent>
-
-              {/* Tab: Datos de Nacimiento */}
-              <TabsContent value="nacimiento" className="space-y-4 mt-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="partidaNumero">Número de Partida</Label>
-                    <Input
-                      id="partidaNumero"
-                      value={formData.partidaNumero}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          partidaNumero: e.target.value,
-                        })
-                      }
-                      placeholder="123456"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="folio">Folio</Label>
-                    <Input
-                      id="folio"
-                      value={formData.folio}
-                      onChange={(e) =>
-                        setFormData({ ...formData, folio: e.target.value })
-                      }
-                      placeholder="123"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="libro">Libro</Label>
-                    <Input
-                      id="libro"
-                      value={formData.libro}
-                      onChange={(e) =>
-                        setFormData({ ...formData, libro: e.target.value })
-                      }
-                      placeholder="456"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="anioPartida">Año de Partida</Label>
-                    <Input
-                      id="anioPartida"
-                      value={formData.anioPartida}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          anioPartida: e.target.value,
-                        })
-                      }
-                      placeholder="2010"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="departamentoNacimiento">
-                      Departamento de Nacimiento
-                    </Label>
-                    <Select
-                      value={formData.departamentoNacimiento}
-                      onValueChange={(value) =>
-                        setFormData({
-                          ...formData,
-                          departamentoNacimiento: value,
-                        })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar departamento" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {DEPARTAMENTOS.map((dept) => (
-                          <SelectItem key={dept} value={dept}>
-                            {dept}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="municipioNacimiento">
-                      Municipio de Nacimiento
-                    </Label>
-                    <Input
-                      id="municipioNacimiento"
-                      value={formData.municipioNacimiento}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          municipioNacimiento: e.target.value,
-                        })
-                      }
-                      placeholder="San Salvador"
-                    />
-                  </div>
-                </div>
-              </TabsContent>
-
-              {/* Tab: Datos Médicos */}
-              <TabsContent value="medico" className="space-y-4 mt-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="tipoSangre">Tipo de Sangre</Label>
-                    <Select
-                      value={formData.tipoSangre}
-                      onValueChange={(value) =>
-                        setFormData({ ...formData, tipoSangre: value })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar tipo de sangre" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {TIPOS_SANGRE.map((tipo) => (
-                          <SelectItem key={tipo} value={tipo}>
-                            {tipo}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="problemaFisico">Problemas Físicos</Label>
-                    <Input
-                      id="problemaFisico"
-                      value={formData.problemaFisico}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          problemaFisico: e.target.value,
-                        })
-                      }
-                      placeholder="Ninguno"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="centroAsistencial">
-                      Centro Asistencial
-                    </Label>
-                    <Input
-                      id="centroAsistencial"
-                      value={formData.centroAsistencial}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          centroAsistencial: e.target.value,
-                        })
-                      }
-                      placeholder="Hospital Central"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="medicoNombre">Nombre del Médico</Label>
-                    <Input
-                      id="medicoNombre"
-                      value={formData.medicoNombre}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          medicoNombre: e.target.value,
-                        })
-                      }
-                      placeholder="Dr. Juan Pérez"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="medicoTelefono">Teléfono del Médico</Label>
-                    <Input
-                      id="medicoTelefono"
-                      value={formData.medicoTelefono}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          medicoTelefono: e.target.value,
-                        })
-                      }
-                      placeholder="2222-3333"
-                    />
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <Label htmlFor="observacionesMedicas">
-                      Observaciones Médicas
-                    </Label>
-                    <Textarea
-                      id="observacionesMedicas"
-                      value={formData.observacionesMedicas}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          observacionesMedicas: e.target.value,
-                        })
-                      }
-                      placeholder="Sin alergias conocidas"
-                      rows={3}
-                    />
-                  </div>
-                </div>
-              </TabsContent>
-
-              {/* Tab: Datos de Residencia */}
-              <TabsContent value="residencia" className="space-y-4 mt-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="zonaResidencia">Zona de Residencia</Label>
-                    <Select
-                      value={formData.zonaResidencia}
-                      onValueChange={(value) =>
-                        setFormData({ ...formData, zonaResidencia: value })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar zona" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Urbana">Urbana</SelectItem>
-                        <SelectItem value="Rural">Rural</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="departamento">Departamento</Label>
-                    <Select
-                      value={formData.departamento}
-                      onValueChange={(value) =>
-                        setFormData({ ...formData, departamento: value })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar departamento" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {DEPARTAMENTOS.map((dept) => (
-                          <SelectItem key={dept} value={dept}>
-                            {dept}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="municipio">Municipio</Label>
-                    <Input
-                      id="municipio"
-                      value={formData.municipio}
-                      onChange={(e) =>
-                        setFormData({ ...formData, municipio: e.target.value })
-                      }
-                      placeholder="San Salvador"
-                    />
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <Label htmlFor="direccion">Dirección Completa</Label>
-                    <Input
-                      id="direccion"
-                      value={formData.direccion}
-                      onChange={(e) =>
-                        setFormData({ ...formData, direccion: e.target.value })
-                      }
-                      placeholder="Calle Principal #123"
-                    />
-                  </div>
-                </div>
-              </TabsContent>
-
-              {/* Tab: Datos de Transporte */}
-              <TabsContent value="transporte" className="space-y-4 mt-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="distanciaKM">Distancia en KM</Label>
-                    <Input
-                      id="distanciaKM"
-                      type="number"
-                      step="0.1"
-                      value={formData.distanciaKM}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          distanciaKM: parseFloat(e.target.value) || 0,
-                        })
-                      }
-                      placeholder="5.5"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="medioTransporte">Medio de Transporte</Label>
-                    <Input
-                      id="medioTransporte"
-                      value={formData.medioTransporte}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          medioTransporte: e.target.value,
-                        })
-                      }
-                      placeholder="Autobús escolar"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="encargadoTransporte">
-                      Encargado de Transporte
-                    </Label>
-                    <Input
-                      id="encargadoTransporte"
-                      value={formData.encargadoTransporte}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          encargadoTransporte: e.target.value,
-                        })
-                      }
-                      placeholder="José Transportista"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="encargadoTelefono">
-                      Teléfono del Encargado
-                    </Label>
-                    <Input
-                      id="encargadoTelefono"
-                      value={formData.encargadoTelefono}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          encargadoTelefono: e.target.value,
-                        })
-                      }
-                      placeholder="7777-8888"
-                    />
-                  </div>
-                </div>
-              </TabsContent>
-
-              {/* Tab: Estado Académico */}
-              <TabsContent value="academico" className="space-y-4 mt-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="nivel">Nivel Educativo</Label>
-                    <Select
-                      value={formData.nivel}
-                      onValueChange={(
-                        value: 'parvularia' | 'basica' | 'media'
-                      ) => setFormData({ ...formData, nivel: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar nivel" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="parvularia">Parvularia</SelectItem>
-                        <SelectItem value="basica">Básica</SelectItem>
-                        <SelectItem value="media">Media</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="grado">Grado</Label>
-                    <Input
-                      id="grado"
-                      value={formData.grado}
-                      onChange={(e) =>
-                        setFormData({ ...formData, grado: e.target.value })
-                      }
-                      placeholder="8"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="seccion">Sección</Label>
-                    <Input
-                      id="seccion"
-                      value={formData.seccion}
-                      onChange={(e) =>
-                        setFormData({ ...formData, seccion: e.target.value })
-                      }
-                      placeholder="A"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="fechaIngreso">Fecha de Ingreso</Label>
-                    <Input
-                      id="fechaIngreso"
-                      type="date"
-                      value={formData.fechaIngreso}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          fechaIngreso: e.target.value,
-                        })
-                      }
-                    />
-                  </div>
-
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="repiteGrado"
-                      checked={formData.repiteGrado}
-                      onCheckedChange={(checked) =>
-                        setFormData({ ...formData, repiteGrado: !!checked })
-                      }
-                    />
-                    <Label htmlFor="repiteGrado">Repite Grado</Label>
-                  </div>
-
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="condicionado"
-                      checked={formData.condicionado}
-                      onCheckedChange={(checked) =>
-                        setFormData({ ...formData, condicionado: !!checked })
-                      }
-                    />
-                    <Label htmlFor="condicionado">Condicionado</Label>
-                  </div>
-                </div>
-              </TabsContent>
-
-              {/* Tab: Detalles Adicionales */}
-              <TabsContent value="detalles" className="space-y-4 mt-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="viveCon">Vive Con</Label>
-                    <Input
-                      id="viveCon"
-                      value={formData.viveCon}
-                      onChange={(e) =>
-                        setFormData({ ...formData, viveCon: e.target.value })
-                      }
-                      placeholder="Ambos padres"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="dependenciaEconomica">
-                      Dependencia Económica
-                    </Label>
-                    <Input
-                      id="dependenciaEconomica"
-                      value={formData.dependenciaEconomica}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          dependenciaEconomica: e.target.value,
-                        })
-                      }
-                      placeholder="Padre"
-                    />
-                  </div>
-
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="capacidadPago"
-                      checked={formData.capacidadPago}
-                      onCheckedChange={(checked) =>
-                        setFormData({ ...formData, capacidadPago: !!checked })
-                      }
-                    />
-                    <Label htmlFor="capacidadPago">
-                      Tiene Capacidad de Pago
-                    </Label>
-                  </div>
-
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="tieneHermanosEnColegio"
-                      checked={formData.tieneHermanosEnColegio}
-                      onCheckedChange={(checked) =>
-                        setFormData({
-                          ...formData,
-                          tieneHermanosEnColegio: !!checked,
-                        })
-                      }
-                    />
-                    <Label htmlFor="tieneHermanosEnColegio">
-                      Tiene Hermanos en el Colegio
-                    </Label>
-                  </div>
-
-                  {formData.tieneHermanosEnColegio && (
-                    <div className="md:col-span-2">
-                      <Label htmlFor="hermanos">Hermanos en el Colegio</Label>
-                      <div className="space-y-4 mt-2">
-                        {/* Lista de hermanos actuales */}
-                        {formData.hermanosEnColegio &&
-                          JSON.parse(formData.hermanosEnColegio || '[]').map(
-                            (hermano: any, index: number) => (
-                              <div key={index} className="flex gap-2">
-                                <Input
-                                  value={hermano.nombre}
-                                  placeholder="Nombre completo"
-                                  className="flex-1"
-                                  onChange={(e) => {
-                                    const hermanos = JSON.parse(
-                                      formData.hermanosEnColegio || '[]'
-                                    );
-                                    hermanos[index].nombre = e.target.value;
-                                    setFormData({
-                                      ...formData,
-                                      hermanosEnColegio:
-                                        JSON.stringify(hermanos),
-                                    });
-                                  }}
-                                />
-                                <Input
-                                  value={hermano.grado}
-                                  placeholder="Grado"
-                                  className="w-20"
-                                  onChange={(e) => {
-                                    const hermanos = JSON.parse(
-                                      formData.hermanosEnColegio || '[]'
-                                    );
-                                    hermanos[index].grado = e.target.value;
-                                    setFormData({
-                                      ...formData,
-                                      hermanosEnColegio:
-                                        JSON.stringify(hermanos),
-                                    });
-                                  }}
-                                />
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  type="button"
-                                  onClick={() => {
-                                    const hermanos = JSON.parse(
-                                      formData.hermanosEnColegio || '[]'
-                                    );
-                                    hermanos.splice(index, 1);
-                                    setFormData({
-                                      ...formData,
-                                      hermanosEnColegio:
-                                        JSON.stringify(hermanos),
-                                    });
-                                  }}
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            )
-                          )}
-
-                        {/* Botón para agregar nuevo hermano */}
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="mt-2"
-                          onClick={() => {
-                            const hermanos = JSON.parse(
-                              formData.hermanosEnColegio || '[]'
-                            );
-                            hermanos.push({ nombre: '', grado: '' });
-                            setFormData({
-                              ...formData,
-                              hermanosEnColegio: JSON.stringify(hermanos),
-                            });
-                          }}
+                      return (
+                        <TableRow
+                          key={alumno.id_alumno}
+                          className="cursor-pointer hover:bg-gray-50"
+                          onClick={() => handleViewAlumno(alumno)}
                         >
-                          <Plus className="h-4 w-4 mr-2" />
-                          Agregar Hermano
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">
+                                {alumno.nombre} {alumno.apellido}
+                              </p>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {alumno.fechaNacimiento
+                              ? `${calcularEdadDisplay(alumno.fechaNacimiento)} años`
+                              : 'No registrado'}
+                          </TableCell>
+                          <TableCell>
+                            {alumno.inscripcionActiva?.curso ? (
+                              <div className="space-y-1">
+                                <p className="font-medium text-sm">
+                                  {alumno.inscripcionActiva.curso.nombre}
+                                  {alumno.inscripcionActiva.curso.seccion &&
+                                    ` ${alumno.inscripcionActiva.curso.seccion}`}
+                                </p>
+                                <Badge variant="outline" className="text-xs">
+                                  {alumno.inscripcionActiva.curso.gradoAcademico
+                                    ?.nombre || 'Sin grado'}
+                                </Badge>
+                              </div>
+                            ) : (
+                              <span className="text-sm text-gray-500">
+                                Sin inscripción activa
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div>
+                              {responsablePrincipal ? (
+                                <>
+                                  <p className="font-medium text-sm">
+                                    {/* Usando las propiedades correctas según la estructura del responsable */}
+                                    {(() => {
+                                      if (!responsablePrincipal)
+                                        return 'Sin responsable';
 
-              {/* Tab: Responsables */}
-              <TabsContent value="responsables" className="space-y-4 mt-4">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-lg font-medium">
-                    Responsables del Alumno
-                  </h3>
+                                      // Verificamos si los datos están en responsable (nueva estructura)
+                                      if (
+                                        responsablePrincipal.responsable?.nombre
+                                      ) {
+                                        return `${responsablePrincipal.responsable.nombre} ${responsablePrincipal.responsable.apellido || ''}`;
+                                      }
+
+                                      // O si están en datosResponsable (estructura anterior)
+                                      if (
+                                        responsablePrincipal.datosResponsable
+                                          ?.nombre
+                                      ) {
+                                        return `${responsablePrincipal.datosResponsable.nombre} ${responsablePrincipal.datosResponsable.apellido || ''}`;
+                                      }
+
+                                      return 'Sin nombre Sin apellido';
+                                    })()}
+                                  </p>
+                                  <p className="text-xs text-gray-500">
+                                    {(() => {
+                                      if (!responsablePrincipal) return '';
+
+                                      // Si tiene parentesco anidado, lo usamos directamente
+                                      if (
+                                        responsablePrincipal.parentesco?.nombre
+                                      ) {
+                                        return responsablePrincipal.parentesco
+                                          .nombre;
+                                      }
+
+                                      // Si tiene parentescoId en nivel raíz
+                                      if (
+                                        responsablePrincipal.parentescoId !==
+                                        undefined
+                                      ) {
+                                        return getParentescoNombre(
+                                          responsablePrincipal.parentescoId,
+                                          responsablePrincipal.parentescoLibre ||
+                                            ''
+                                        );
+                                      }
+
+                                      // Si tiene relacion.parentescoId
+                                      if (
+                                        responsablePrincipal.relacion
+                                          ?.parentescoId !== undefined
+                                      ) {
+                                        return getParentescoNombre(
+                                          responsablePrincipal.relacion
+                                            .parentescoId,
+                                          responsablePrincipal.relacion
+                                            .parentescoLibre || ''
+                                        );
+                                      }
+
+                                      return 'Contacto principal';
+                                    })()}
+                                  </p>
+                                  {alumno.responsables &&
+                                    alumno.responsables.length > 1 && (
+                                      <p className="text-xs text-blue-600">
+                                        +{alumno.responsables.length - 1} más
+                                      </p>
+                                    )}
+                                </>
+                              ) : (
+                                <p className="text-sm text-gray-400">
+                                  Sin responsable principal
+                                </p>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={
+                                alumno.activo ? 'default' : 'destructive'
+                              }
+                            >
+                              {alumno.activo ? 'Activo' : 'Inactivo'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div
+                              className="flex space-x-2"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleViewAlumno(alumno)}
+                                title="Ver información detallada"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleEditAlumno(alumno)}
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleToggleStatus(alumno)}
+                                className={
+                                  alumno.activo
+                                    ? 'text-orange-600 hover:text-orange-700'
+                                    : 'text-green-600 hover:text-green-700'
+                                }
+                                title={
+                                  alumno.activo
+                                    ? 'Desactivar alumno'
+                                    : 'Activar alumno'
+                                }
+                              >
+                                {alumno.activo ? (
+                                  <ToggleLeft className="w-4 h-4" />
+                                ) : (
+                                  <ToggleRight className="w-4 h-4" />
+                                )}
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+              <div className="flex items-center justify-between space-x-2 py-4">
+                <p className="text-sm text-gray-600">
+                  Mostrando{' '}
+                  <span className="font-semibold">
+                    {filteredAlumnos.length}
+                  </span>{' '}
+                  de <span className="font-semibold">{totalItems}</span>{' '}
+                  resultados
+                  {(debouncedSearchTerm ||
+                    filterNivel !== 'todos' ||
+                    filterEstado !== 'todos') && (
+                    <Badge
+                      variant="outline"
+                      className="ml-2 bg-blue-50 text-blue-700"
+                    >
+                      Filtrado
+                    </Badge>
+                  )}
+                </p>
+                <div className="flex items-center space-x-2">
                   <Button
-                    type="button"
-                    onClick={addResponsable}
                     variant="outline"
                     size="sm"
+                    onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+                    disabled={page === 1}
                   >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Agregar Responsable
+                    Anterior
+                  </Button>
+                  <span className="text-sm text-gray-600">
+                    Página {page} de {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setPage((prev) => (prev < totalPages ? prev + 1 : prev))
+                    }
+                    disabled={page >= totalPages}
+                  >
+                    Siguiente
                   </Button>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
 
-                {responsables.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500 border-2 border-dashed border-gray-300 rounded-lg">
-                    <Users className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-                    <p>No hay responsables agregados</p>
-                    <Button
-                      type="button"
-                      onClick={addResponsable}
-                      variant="outline"
-                      className="mt-2"
+          {/* Dialog para crear/editar alumno */}
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogContent className="sm:max-w-6xl max-h-[95vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>
+                  {editingAlumno ? 'Editar Alumno' : 'Registrar Nuevo Alumno'}
+                </DialogTitle>
+                <DialogDescription>
+                  {editingAlumno
+                    ? 'Modifica la información completa del alumno'
+                    : 'Completa todos los datos del nuevo alumno'}
+                </DialogDescription>
+              </DialogHeader>
+
+              <form onSubmit={handleSubmit}>
+                <Tabs
+                  value={currentTab}
+                  onValueChange={setCurrentTab}
+                  className="w-full"
+                >
+                  <TabsList className="grid w-full grid-cols-8">
+                    <TabsTrigger
+                      value="personal"
+                      className="flex items-center space-x-1"
                     >
-                      <Plus className="w-4 h-4 mr-2" />
-                      Agregar Primer Responsable
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    {responsables.map((responsable, index) => (
-                      <Card key={responsable.id_responsable} className="p-4">
-                        <div className="flex justify-between items-start mb-4">
-                          <h4 className="text-md font-medium">
-                            Responsable {index + 1}
+                      <User className="w-4 h-4" />
+                      <span className="hidden sm:inline">Personal</span>
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="nacimiento"
+                      className="flex items-center space-x-1"
+                    >
+                      <Calendar className="w-4 h-4" />
+                      <span className="hidden sm:inline">Nacimiento</span>
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="medico"
+                      className="flex items-center space-x-1"
+                    >
+                      <Stethoscope className="w-4 h-4" />
+                      <span className="hidden sm:inline">Médico</span>
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="residencia"
+                      className="flex items-center space-x-1"
+                    >
+                      <MapPin className="w-4 h-4" />
+                      <span className="hidden sm:inline">Residencia</span>
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="transporte"
+                      className="flex items-center space-x-1"
+                    >
+                      <Car className="w-4 h-4" />
+                      <span className="hidden sm:inline">Transporte</span>
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="academico"
+                      className="flex items-center space-x-1"
+                    >
+                      <GraduationCap className="w-4 h-4" />
+                      <span className="hidden sm:inline">Académico</span>
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="detalles"
+                      className="flex items-center space-x-1"
+                    >
+                      <FileText className="w-4 h-4" />
+                      <span className="hidden sm:inline">Detalles</span>
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="responsables"
+                      className="flex items-center space-x-1"
+                    >
+                      <Users className="w-4 h-4" />
+                      <span className="hidden sm:inline">Responsables</span>
+                    </TabsTrigger>
+                  </TabsList>
+
+                  {/* Tab: Datos Personales */}
+                  <TabsContent value="personal" className="space-y-4 mt-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="nombre">Nombre *</Label>
+                        <Input
+                          id="nombre"
+                          value={formData.nombre}
+                          onChange={(e) =>
+                            setFormData({ ...formData, nombre: e.target.value })
+                          }
+                          placeholder="Juan Carlos"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="apellido">Apellido *</Label>
+                        <Input
+                          id="apellido"
+                          value={formData.apellido}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              apellido: e.target.value,
+                            })
+                          }
+                          placeholder="Pérez González"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="genero">Género</Label>
+                        <Select
+                          value={formData.genero}
+                          onValueChange={(value) =>
+                            setFormData({ ...formData, genero: value })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccionar género" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Masculino">Masculino</SelectItem>
+                            <SelectItem value="Femenino">Femenino</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="fechaNacimiento">
+                          Fecha de Nacimiento * (DD/MM/YYYY)
+                        </Label>
+                        <Input
+                          id="fechaNacimiento"
+                          value={formData.fechaNacimiento}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              fechaNacimiento: e.target.value,
+                            })
+                          }
+                          placeholder="01/01/2010"
+                          minLength={10}
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="nacionalidad">Nacionalidad</Label>
+                        <Input
+                          id="nacionalidad"
+                          value={formData.nacionalidad}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              nacionalidad: e.target.value,
+                            })
+                          }
+                          placeholder="Salvadoreña"
+                        />
+                      </div>
+                    </div>
+                  </TabsContent>
+
+                  {/* Tab: Datos de Nacimiento */}
+                  <TabsContent value="nacimiento" className="space-y-4 mt-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="partidaNumero">Número de Partida</Label>
+                        <Input
+                          id="partidaNumero"
+                          value={formData.partidaNumero}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              partidaNumero: e.target.value,
+                            })
+                          }
+                          placeholder="123456"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="folio">Folio</Label>
+                        <Input
+                          id="folio"
+                          value={formData.folio}
+                          onChange={(e) =>
+                            setFormData({ ...formData, folio: e.target.value })
+                          }
+                          placeholder="123"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="libro">Libro</Label>
+                        <Input
+                          id="libro"
+                          value={formData.libro}
+                          onChange={(e) =>
+                            setFormData({ ...formData, libro: e.target.value })
+                          }
+                          placeholder="456"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="anioPartida">Año de Partida</Label>
+                        <Input
+                          id="anioPartida"
+                          value={formData.anioPartida}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              anioPartida: e.target.value,
+                            })
+                          }
+                          placeholder="2010"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="departamentoNacimiento">
+                          Departamento de Nacimiento
+                        </Label>
+                        <Select
+                          value={formData.departamentoNacimiento}
+                          onValueChange={(value) =>
+                            setFormData({
+                              ...formData,
+                              departamentoNacimiento: value,
+                            })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccionar departamento" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {DEPARTAMENTOS.map((dept) => (
+                              <SelectItem key={dept} value={dept}>
+                                {dept}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="municipioNacimiento">
+                          Municipio de Nacimiento
+                        </Label>
+                        <Input
+                          id="municipioNacimiento"
+                          value={formData.municipioNacimiento}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              municipioNacimiento: e.target.value,
+                            })
+                          }
+                          placeholder="San Salvador"
+                        />
+                      </div>
+                    </div>
+                  </TabsContent>
+
+                  {/* Tab: Datos Médicos */}
+                  <TabsContent value="medico" className="space-y-4 mt-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="tipoSangre">Tipo de Sangre</Label>
+                        <Select
+                          value={formData.tipoSangre}
+                          onValueChange={(value) =>
+                            setFormData({ ...formData, tipoSangre: value })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccionar tipo de sangre" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {TIPOS_SANGRE.map((tipo) => (
+                              <SelectItem key={tipo} value={tipo}>
+                                {tipo}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="problemaFisico">
+                          Problemas Físicos
+                        </Label>
+                        <Input
+                          id="problemaFisico"
+                          value={formData.problemaFisico}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              problemaFisico: e.target.value,
+                            })
+                          }
+                          placeholder="Ninguno"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="centroAsistencial">
+                          Centro Asistencial
+                        </Label>
+                        <Input
+                          id="centroAsistencial"
+                          value={formData.centroAsistencial}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              centroAsistencial: e.target.value,
+                            })
+                          }
+                          placeholder="Hospital Central"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="medicoNombre">Nombre del Médico</Label>
+                        <Input
+                          id="medicoNombre"
+                          value={formData.medicoNombre}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              medicoNombre: e.target.value,
+                            })
+                          }
+                          placeholder="Dr. Juan Pérez"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="medicoTelefono">
+                          Teléfono del Médico
+                        </Label>
+                        <Input
+                          id="medicoTelefono"
+                          value={formData.medicoTelefono}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              medicoTelefono: e.target.value,
+                            })
+                          }
+                          placeholder="2222-3333"
+                        />
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <Label htmlFor="observacionesMedicas">
+                          Observaciones Médicas
+                        </Label>
+                        <Textarea
+                          id="observacionesMedicas"
+                          value={formData.observacionesMedicas}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              observacionesMedicas: e.target.value,
+                            })
+                          }
+                          placeholder="Sin alergias conocidas"
+                          rows={3}
+                        />
+                      </div>
+                    </div>
+                  </TabsContent>
+
+                  {/* Tab: Datos de Residencia */}
+                  <TabsContent value="residencia" className="space-y-4 mt-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="zonaResidencia">
+                          Zona de Residencia
+                        </Label>
+                        <Select
+                          value={formData.zonaResidencia}
+                          onValueChange={(value) =>
+                            setFormData({ ...formData, zonaResidencia: value })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccionar zona" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Urbana">Urbana</SelectItem>
+                            <SelectItem value="Rural">Rural</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="departamento">Departamento</Label>
+                        <Select
+                          value={formData.departamento}
+                          onValueChange={(value) =>
+                            setFormData({ ...formData, departamento: value })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccionar departamento" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {DEPARTAMENTOS.map((dept) => (
+                              <SelectItem key={dept} value={dept}>
+                                {dept}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="municipio">Municipio</Label>
+                        <Input
+                          id="municipio"
+                          value={formData.municipio}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              municipio: e.target.value,
+                            })
+                          }
+                          placeholder="San Salvador"
+                        />
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <Label htmlFor="direccion">Dirección Completa</Label>
+                        <Input
+                          id="direccion"
+                          value={formData.direccion}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              direccion: e.target.value,
+                            })
+                          }
+                          placeholder="Calle Principal #123"
+                        />
+                      </div>
+                    </div>
+                  </TabsContent>
+
+                  {/* Tab: Datos de Transporte */}
+                  <TabsContent value="transporte" className="space-y-4 mt-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="distanciaKM">Distancia en KM</Label>
+                        <Input
+                          id="distanciaKM"
+                          type="number"
+                          step="0.1"
+                          value={formData.distanciaKM}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              distanciaKM: parseFloat(e.target.value) || 0,
+                            })
+                          }
+                          placeholder="5.5"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="medioTransporte">
+                          Medio de Transporte
+                        </Label>
+                        <Input
+                          id="medioTransporte"
+                          value={formData.medioTransporte}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              medioTransporte: e.target.value,
+                            })
+                          }
+                          placeholder="Autobús escolar"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="encargadoTransporte">
+                          Encargado de Transporte
+                        </Label>
+                        <Input
+                          id="encargadoTransporte"
+                          value={formData.encargadoTransporte}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              encargadoTransporte: e.target.value,
+                            })
+                          }
+                          placeholder="José Transportista"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="encargadoTelefono">
+                          Teléfono del Encargado
+                        </Label>
+                        <Input
+                          id="encargadoTelefono"
+                          value={formData.encargadoTelefono}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              encargadoTelefono: e.target.value,
+                            })
+                          }
+                          placeholder="7777-8888"
+                        />
+                      </div>
+                    </div>
+                  </TabsContent>
+
+                  {/* Tab: Estado Académico */}
+                  <TabsContent value="academico" className="space-y-4 mt-4">
+                    {/* Mensaje informativo */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                      <div className="flex items-start space-x-3">
+                        <div className="flex-shrink-0">
+                          <svg
+                            className="w-5 h-5 text-blue-600 mt-0.5"
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="text-sm font-medium text-blue-900 mb-1">
+                            Información Académica
                           </h4>
-                          <div className="flex gap-2">
-                            {/* Botón para cancelar formularios vacíos - con depuración */}
-                            {(() => {
-                              const isEmpty = isEmptyResponsable(responsable);
-                              // Verificación de formulario vacío
-                              if (isEmpty) {
-                                return (
-                                  <Button
-                                    type="button"
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={() => {
-                                      removeResponsable(index);
-                                    }}
-                                    className="bg-gray-200 text-gray-700 hover:bg-gray-300"
-                                    title="Cancelar formulario vacío"
-                                  >
-                                    <X className="w-4 h-4 mr-1" />
-                                    Cancelar formulario
-                                  </Button>
-                                );
-                              } else {
-                                return (
-                                  <Button
-                                    type="button"
-                                    variant="destructive"
-                                    size="sm"
-                                    onClick={() => {
-                                      if (
-                                        window.confirm(
-                                          '¿Está seguro que desea eliminar este responsable?' +
-                                            (responsable.id
-                                              ? ' Esta acción no se puede deshacer.'
-                                              : '')
-                                        )
-                                      ) {
-                                        // Eliminando responsable con datos
-                                        removeResponsable(index);
-                                      }
-                                    }}
-                                    className="hover:bg-red-700"
-                                  >
-                                    <X className="w-4 h-4 mr-1" />
-                                    Eliminar responsable
-                                  </Button>
-                                );
-                              }
-                            })()}
-                          </div>
+                          <p className="text-sm text-blue-700">
+                            La asignación de curso, grado y sección se realiza
+                            desde la pestaña{' '}
+                            <span className="font-semibold">Inscripciones</span>{' '}
+                            después de registrar al alumno.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="fechaIngreso">Fecha de Ingreso</Label>
+                        <Input
+                          id="fechaIngreso"
+                          type="date"
+                          value={formData.fechaIngreso}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              fechaIngreso: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-6">
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id="repiteGrado"
+                            checked={formData.repiteGrado}
+                            onCheckedChange={(checked) =>
+                              setFormData({
+                                ...formData,
+                                repiteGrado: !!checked,
+                              })
+                            }
+                          />
+                          <Label htmlFor="repiteGrado">Repite Grado</Label>
                         </div>
 
-                        {/* Datos Básicos */}
-                        <div className="space-y-4">
-                          <h5 className="text-sm font-medium text-gray-700 border-b pb-2">
-                            Datos Básicos
-                          </h5>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div>
-                              <Label>Nombre</Label>
-                              <Input
-                                value={
-                                  responsable.datosResponsable?.nombre !==
-                                  undefined
-                                    ? responsable.datosResponsable.nombre
-                                    : responsable.responsable?.nombre || ''
-                                }
-                                onChange={(e) => {
-                                  // Asegurarnos de que se pase el valor exacto, incluso si es vacío
-                                  updateResponsable(
-                                    index,
-                                    'datosResponsable',
-                                    'nombre',
-                                    e.target.value
-                                  );
-                                }}
-                                placeholder="María"
-                              />
-                            </div>
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id="condicionado"
+                            checked={formData.condicionado}
+                            onCheckedChange={(checked) =>
+                              setFormData({
+                                ...formData,
+                                condicionado: !!checked,
+                              })
+                            }
+                          />
+                          <Label htmlFor="condicionado">Condicionado</Label>
+                        </div>
+                      </div>
+                    </div>
+                  </TabsContent>
 
-                            <div>
-                              <Label>Apellido</Label>
-                              <Input
-                                value={
-                                  responsable.datosResponsable?.apellido !==
-                                  undefined
-                                    ? responsable.datosResponsable.apellido
-                                    : responsable.responsable?.apellido || ''
-                                }
-                                onChange={(e) => {
-                                  // Asegurarnos de que se pase el valor exacto, incluso si es vacío
-                                  updateResponsable(
-                                    index,
-                                    'datosResponsable',
-                                    'apellido',
-                                    e.target.value
-                                  );
-                                }}
-                                placeholder="González"
-                              />
-                            </div>
+                  {/* Tab: Detalles Adicionales */}
+                  <TabsContent value="detalles" className="space-y-4 mt-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="viveCon">Vive Con</Label>
+                        <Input
+                          id="viveCon"
+                          value={formData.viveCon}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              viveCon: e.target.value,
+                            })
+                          }
+                          placeholder="Ambos padres"
+                        />
+                      </div>
 
-                            <div>
-                              <Label>DUI</Label>
-                              <Input
-                                value={
-                                  responsable.datosResponsable?.dui !==
-                                  undefined
-                                    ? responsable.datosResponsable.dui
-                                    : responsable.responsable?.dui || ''
-                                }
-                                onChange={(e) => {
-                                  updateResponsable(
-                                    index,
-                                    'datosResponsable',
-                                    'dui',
-                                    e.target.value
-                                  );
-                                }}
-                                placeholder="12345678-9"
-                              />
-                            </div>
+                      <div>
+                        <Label htmlFor="dependenciaEconomica">
+                          Dependencia Económica
+                        </Label>
+                        <Input
+                          id="dependenciaEconomica"
+                          value={formData.dependenciaEconomica}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              dependenciaEconomica: e.target.value,
+                            })
+                          }
+                          placeholder="Padre"
+                        />
+                      </div>
 
-                            <div>
-                              <Label>Teléfono</Label>
-                              <Input
-                                value={
-                                  responsable.datosResponsable?.telefono !==
-                                  undefined
-                                    ? responsable.datosResponsable.telefono
-                                    : responsable.responsable?.telefono || ''
-                                }
-                                onChange={(e) => {
-                                  // Asegurarnos de que se pase el valor exacto, incluso si es vacío
-                                  updateResponsable(
-                                    index,
-                                    'datosResponsable',
-                                    'telefono',
-                                    e.target.value
-                                  );
-                                }}
-                                placeholder="7890-5678"
-                              />
-                            </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="capacidadPago"
+                          checked={formData.capacidadPago}
+                          onCheckedChange={(checked) =>
+                            setFormData({
+                              ...formData,
+                              capacidadPago: !!checked,
+                            })
+                          }
+                        />
+                        <Label htmlFor="capacidadPago">
+                          Tiene Capacidad de Pago
+                        </Label>
+                      </div>
 
-                            <div>
-                              <Label>Correo Electrónico</Label>
-                              <Input
-                                type="email"
-                                value={
-                                  responsable.datosResponsable?.email !==
-                                    undefined &&
-                                  responsable.datosResponsable?.email !== null
-                                    ? String(responsable.datosResponsable.email)
-                                    : responsable.responsable?.email !==
-                                          undefined &&
-                                        responsable.responsable?.email !== null
-                                      ? String(responsable.responsable.email)
-                                      : ''
-                                }
-                                onChange={(e) => {
-                                  // Aseguramos que se pase el valor exacto, incluso si es vacío
-                                  updateResponsable(
-                                    index,
-                                    'datosResponsable',
-                                    'email',
-                                    e.target.value
-                                  );
-                                }}
-                                placeholder="correo@email.com"
-                              />
-                            </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="tieneHermanosEnColegio"
+                          checked={formData.tieneHermanosEnColegio}
+                          onCheckedChange={(checked) =>
+                            setFormData({
+                              ...formData,
+                              tieneHermanosEnColegio: !!checked,
+                            })
+                          }
+                        />
+                        <Label htmlFor="tieneHermanosEnColegio">
+                          Tiene Hermanos en el Colegio
+                        </Label>
+                      </div>
 
-                            <div>
-                              <Label>Parentesco</Label>
-                              <Select
-                                value={
-                                  responsable.relacion?.parentescoId?.toString() ||
-                                  responsable.parentescoId?.toString() ||
-                                  '1'
-                                }
-                                onValueChange={(value) =>
-                                  updateResponsable(
-                                    index,
-                                    'relacion',
-                                    'parentescoId',
-                                    parseInt(value)
-                                  )
-                                }
-                              >
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Seleccionar parentesco" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {parentescos.length > 0 ? (
-                                    // Usamos los parentescos cargados desde la API
-                                    parentescos.map((parentesco) => (
-                                      <SelectItem
-                                        key={parentesco.id_parentesco}
-                                        value={parentesco.id_parentesco.toString()}
-                                      >
-                                        {parentesco.nombre}
-                                      </SelectItem>
-                                    ))
-                                  ) : (
-                                    // Fallback en caso de que no se hayan cargado los parentescos
-                                    <SelectItem value="1">
-                                      Cargando parentescos...
-                                    </SelectItem>
-                                  )}
-                                </SelectContent>
-                              </Select>
-                            </div>
+                      {formData.tieneHermanosEnColegio && (
+                        <div className="md:col-span-2">
+                          <Label htmlFor="hermanos">
+                            Hermanos en el Colegio
+                          </Label>
+                          <div className="space-y-4 mt-2">
+                            {/* Lista de hermanos actuales */}
+                            {formData.hermanosEnColegio &&
+                              JSON.parse(
+                                formData.hermanosEnColegio || '[]'
+                              ).map((hermano: any, index: number) => (
+                                <div key={index} className="flex gap-2">
+                                  <Input
+                                    value={hermano.nombre}
+                                    placeholder="Nombre completo"
+                                    className="flex-1"
+                                    onChange={(e) => {
+                                      const hermanos = JSON.parse(
+                                        formData.hermanosEnColegio || '[]'
+                                      );
+                                      hermanos[index].nombre = e.target.value;
+                                      setFormData({
+                                        ...formData,
+                                        hermanosEnColegio:
+                                          JSON.stringify(hermanos),
+                                      });
+                                    }}
+                                  />
+                                  <Input
+                                    value={hermano.grado}
+                                    placeholder="Grado"
+                                    className="w-20"
+                                    onChange={(e) => {
+                                      const hermanos = JSON.parse(
+                                        formData.hermanosEnColegio || '[]'
+                                      );
+                                      hermanos[index].grado = e.target.value;
+                                      setFormData({
+                                        ...formData,
+                                        hermanosEnColegio:
+                                          JSON.stringify(hermanos),
+                                      });
+                                    }}
+                                  />
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    type="button"
+                                    onClick={() => {
+                                      const hermanos = JSON.parse(
+                                        formData.hermanosEnColegio || '[]'
+                                      );
+                                      hermanos.splice(index, 1);
+                                      setFormData({
+                                        ...formData,
+                                        hermanosEnColegio:
+                                          JSON.stringify(hermanos),
+                                      });
+                                    }}
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              ))}
 
-                            <div className="md:col-span-3">
-                              <Label>Dirección</Label>
-                              <Input
-                                value={
-                                  responsable.datosResponsable?.direccion !==
-                                  undefined
-                                    ? responsable.datosResponsable.direccion
-                                    : responsable.responsable?.direccion || ''
-                                }
-                                onChange={(e) => {
-                                  updateResponsable(
-                                    index,
-                                    'datosResponsable',
-                                    'direccion',
-                                    e.target.value
-                                  );
-                                }}
-                                placeholder="Av. Principal #123, San Salvador"
-                              />
-                            </div>
-                          </div>
-
-                          {/* Datos Profesionales */}
-                          <h5 className="text-sm font-medium text-gray-700 border-b pb-2">
-                            Datos Profesionales
-                          </h5>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                              <Label>Lugar de Trabajo</Label>
-                              <Input
-                                value={
-                                  responsable.datosResponsable?.lugarTrabajo !==
-                                  undefined
-                                    ? responsable.datosResponsable
-                                        .lugarTrabajo || ''
-                                    : responsable.responsable?.lugarTrabajo ||
-                                      ''
-                                }
-                                onChange={(e) => {
-                                  updateResponsable(
-                                    index,
-                                    'datosResponsable',
-                                    'lugarTrabajo',
-                                    e.target.value
-                                  );
-                                }}
-                                placeholder="Empresa XYZ"
-                              />
-                            </div>
-
-                            <div>
-                              <Label>Profesión u Oficio</Label>
-                              <Input
-                                value={
-                                  responsable.datosResponsable
-                                    ?.profesionOficio !== undefined
-                                    ? responsable.datosResponsable
-                                        .profesionOficio
-                                    : responsable.responsable
-                                        ?.profesionOficio || ''
-                                }
-                                onChange={(e) => {
-                                  updateResponsable(
-                                    index,
-                                    'datosResponsable',
-                                    'profesionOficio',
-                                    e.target.value
-                                  );
-                                }}
-                                placeholder="Ingeniero"
-                              />
-                            </div>
-
-                            <div>
-                              <Label>Último Grado Estudiado</Label>
-                              <Select
-                                value={
-                                  responsable.datosResponsable
-                                    ?.ultimoGradoEstudiado ||
-                                  responsable.responsable
-                                    ?.ultimoGradoEstudiado ||
-                                  ''
-                                }
-                                onValueChange={(value) =>
-                                  updateResponsable(
-                                    index,
-                                    'datosResponsable',
-                                    'ultimoGradoEstudiado',
-                                    value
-                                  )
-                                }
-                              >
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Seleccionar grado" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {GRADOS_ESTUDIO.map((grado) => (
-                                    <SelectItem key={grado} value={grado}>
-                                      {grado}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-
-                            <div>
-                              <Label>Ocupación Actual</Label>
-                              <Input
-                                value={
-                                  responsable.datosResponsable?.ocupacion !==
-                                  undefined
-                                    ? responsable.datosResponsable?.ocupacion
-                                    : responsable.responsable?.ocupacion || ''
-                                }
-                                onChange={(e) => {
-                                  // Asegurarnos de que se pase el valor exacto, incluso si es vacío
-                                  const valor = e.target.value;
-                                  console.log(
-                                    'Valor de ocupación:',
-                                    valor,
-                                    typeof valor
-                                  );
-                                  updateResponsable(
-                                    index,
-                                    'datosResponsable',
-                                    'ocupacion',
-                                    valor
-                                  );
-                                }}
-                                placeholder="Gerente de Sistemas"
-                              />
-                            </div>
-                          </div>
-
-                          {/* Datos Personales Adicionales */}
-                          <h5 className="text-sm font-medium text-gray-700 border-b pb-2">
-                            Datos Adicionales
-                          </h5>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div>
-                              <Label>Religión</Label>
-                              <Select
-                                value={
-                                  responsable.datosResponsable?.religion !==
-                                    undefined &&
-                                  responsable.datosResponsable?.religion !==
-                                    null
-                                    ? String(
-                                        responsable.datosResponsable.religion
-                                      )
-                                    : responsable.responsable?.religion !==
-                                          undefined &&
-                                        responsable.responsable?.religion !==
-                                          null
-                                      ? String(responsable.responsable.religion)
-                                      : ''
-                                }
-                                onValueChange={(value) =>
-                                  updateResponsable(
-                                    index,
-                                    'datosResponsable',
-                                    'religion',
-                                    value
-                                  )
-                                }
-                              >
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Seleccionar religión" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {RELIGIONES.map((religion) => (
-                                    <SelectItem key={religion} value={religion}>
-                                      {religion}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-
-                            <div>
-                              <Label>Zona de Residencia</Label>
-                              <Select
-                                value={
-                                  responsable.datosResponsable
-                                    ?.zonaResidencia ||
-                                  responsable.responsable?.zonaResidencia ||
-                                  'Urbana'
-                                }
-                                onValueChange={(value) =>
-                                  updateResponsable(
-                                    index,
-                                    'datosResponsable',
-                                    'zonaResidencia',
-                                    value
-                                  )
-                                }
-                              >
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Seleccionar zona" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="Urbana">Urbana</SelectItem>
-                                  <SelectItem value="Rural">Rural</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-
-                            <div>
-                              <Label>Estado Familiar</Label>
-                              <Select
-                                value={
-                                  responsable.datosResponsable
-                                    ?.estadoFamiliar ||
-                                  responsable.responsable?.estadoFamiliar ||
-                                  ''
-                                }
-                                onValueChange={(value) =>
-                                  updateResponsable(
-                                    index,
-                                    'datosResponsable',
-                                    'estadoFamiliar',
-                                    value
-                                  )
-                                }
-                              >
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Seleccionar estado" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="Soltero/a">
-                                    Soltero/a
-                                  </SelectItem>
-                                  <SelectItem value="Casado/a">
-                                    Casado/a
-                                  </SelectItem>
-                                  <SelectItem value="Divorciado/a">
-                                    Divorciado/a
-                                  </SelectItem>
-                                  <SelectItem value="Viudo/a">
-                                    Viudo/a
-                                  </SelectItem>
-                                  <SelectItem value="Unión Libre">
-                                    Unión Libre
-                                  </SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </div>
-
-                          {/* Datos de Transporte */}
-                          <h5 className="text-sm font-medium text-gray-700 border-b pb-2">
-                            Datos de Transporte (Opcional)
-                          </h5>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div>
-                              <Label>Empresa de Transporte</Label>
-                              <Input
-                                value={
-                                  responsable.datosResponsable
-                                    ?.empresaTransporte ||
-                                  responsable.responsable?.empresaTransporte ||
-                                  ''
-                                }
-                                onChange={(e) =>
-                                  updateResponsable(
-                                    index,
-                                    'datosResponsable',
-                                    'empresaTransporte',
-                                    e.target.value
-                                  )
-                                }
-                                placeholder="Transportes El Sol"
-                              />
-                            </div>
-
-                            <div>
-                              <Label>Placa del Vehículo</Label>
-                              <Input
-                                value={
-                                  responsable.datosResponsable?.placaVehiculo ||
-                                  responsable.responsable?.placaVehiculo ||
-                                  ''
-                                }
-                                onChange={(e) =>
-                                  updateResponsable(
-                                    index,
-                                    'datosResponsable',
-                                    'placaVehiculo',
-                                    e.target.value
-                                  )
-                                }
-                                placeholder="P123456"
-                              />
-                            </div>
-
-                            <div>
-                              <Label>Tipo de Vehículo</Label>
-                              <Input
-                                value={
-                                  responsable.datosResponsable?.tipoVehiculo ||
-                                  responsable.responsable?.tipoVehiculo ||
-                                  ''
-                                }
-                                onChange={(e) =>
-                                  updateResponsable(
-                                    index,
-                                    'datosResponsable',
-                                    'tipoVehiculo',
-                                    e.target.value
-                                  )
-                                }
-                                placeholder="Sedán"
-                              />
-                            </div>
-                          </div>
-
-                          {/* Permisos y Autorizaciones */}
-                          <h5 className="text-sm font-medium text-gray-700 border-b pb-2">
-                            Permisos y Autorizaciones
-                          </h5>
-                          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                            <div className="flex items-center space-x-2">
-                              <Checkbox
-                                id={`principal-${index}`}
-                                checked={
-                                  responsable.relacion?.esPrincipal === true ||
-                                  responsable.esPrincipal === true ||
-                                  false
-                                }
-                                onCheckedChange={(checked) => {
-                                  console.log(
-                                    'Checkbox esPrincipal cambiado a:',
-                                    checked
-                                  );
-                                  updateResponsable(
-                                    index,
-                                    'relacion',
-                                    'esPrincipal',
-                                    checked === true
-                                  );
-                                }}
-                              />
-                              <Label
-                                htmlFor={`principal-${index}`}
-                                className="text-sm"
-                              >
-                                Es principal
-                              </Label>
-                            </div>
-
-                            <div className="flex items-center space-x-2">
-                              <Checkbox
-                                id={`firma-${index}`}
-                                checked={
-                                  responsable.relacion?.firma === true ||
-                                  responsable.firma === true ||
-                                  false
-                                }
-                                onCheckedChange={(checked) => {
-                                  updateResponsable(
-                                    index,
-                                    'relacion',
-                                    'firma',
-                                    checked === true
-                                  );
-                                }}
-                              />
-                              <Label
-                                htmlFor={`firma-${index}`}
-                                className="text-sm"
-                              >
-                                Puede firmar
-                              </Label>
-                            </div>
-
-                            <div className="flex items-center space-x-2">
-                              <Checkbox
-                                id={`traslado-${index}`}
-                                checked={
-                                  responsable.relacion?.permiteTraslado ===
-                                    true ||
-                                  responsable.permiteTraslado === true ||
-                                  false
-                                }
-                                onCheckedChange={(checked) => {
-                                  console.log(
-                                    'Checkbox permiteTraslado cambiado a:',
-                                    checked
-                                  );
-                                  updateResponsable(
-                                    index,
-                                    'relacion',
-                                    'permiteTraslado',
-                                    checked === true
-                                  );
-                                }}
-                              />
-                              <Label
-                                htmlFor={`traslado-${index}`}
-                                className="text-sm"
-                              >
-                                Autoriza traslados
-                              </Label>
-                            </div>
-
-                            <div className="flex items-center space-x-2">
-                              <Checkbox
-                                id={`retirar-${index}`}
-                                checked={
-                                  responsable.relacion?.puedeRetirarAlumno ===
-                                    true ||
-                                  responsable.puedeRetirarAlumno === true ||
-                                  false
-                                }
-                                onCheckedChange={(checked) => {
-                                  console.log(
-                                    'Checkbox puedeRetirarAlumno cambiado a:',
-                                    checked
-                                  );
-                                  updateResponsable(
-                                    index,
-                                    'relacion',
-                                    'puedeRetirarAlumno',
-                                    checked === true
-                                  );
-                                }}
-                              />
-                              <Label
-                                htmlFor={`retirar-${index}`}
-                                className="text-sm"
-                              >
-                                Puede retirar
-                              </Label>
-                            </div>
-
-                            <div className="flex items-center space-x-2">
-                              <Checkbox
-                                id={`emergencia-${index}`}
-                                checked={
-                                  responsable.relacion?.contactoEmergencia ===
-                                    true ||
-                                  responsable.contactoEmergencia === true ||
-                                  false
-                                }
-                                onCheckedChange={(checked) => {
-                                  console.log(
-                                    'Checkbox contactoEmergencia cambiado a:',
-                                    checked
-                                  );
-                                  updateResponsable(
-                                    index,
-                                    'relacion',
-                                    'contactoEmergencia',
-                                    checked === true
-                                  );
-                                }}
-                              />
-                              <Label
-                                htmlFor={`emergencia-${index}`}
-                                className="text-sm"
-                              >
-                                Contacto emergencia
-                              </Label>
-                            </div>
-                          </div>
-
-                          {/* Botón de acción para el responsable */}
-                          <div className="flex justify-end mt-4 pt-4 border-t">
+                            {/* Botón para agregar nuevo hermano */}
                             <Button
                               type="button"
-                              variant="default"
+                              variant="outline"
                               size="sm"
-                              onClick={() =>
-                                actualizarResponsable(index, false)
-                              }
-                              className="bg-blue-600 hover:bg-blue-700"
+                              className="mt-2"
+                              onClick={() => {
+                                const hermanos = JSON.parse(
+                                  formData.hermanosEnColegio || '[]'
+                                );
+                                hermanos.push({ nombre: '', grado: '' });
+                                setFormData({
+                                  ...formData,
+                                  hermanosEnColegio: JSON.stringify(hermanos),
+                                });
+                              }}
                             >
-                              <Save className="w-4 h-4 mr-2" /> Guardar
-                              Responsable
+                              <Plus className="h-4 w-4 mr-2" />
+                              Agregar Hermano
                             </Button>
                           </div>
                         </div>
-                      </Card>
-                    ))}
-                  </div>
-                )}
-              </TabsContent>
-            </Tabs>
-
-            <div className="flex justify-end space-x-2 pt-6">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsDialogOpen(false)}
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="button"
-                className="bg-blue-600 hover:bg-blue-700"
-                onClick={() => {
-                  // Creamos un evento sintético para pasar a handleSubmit
-                  const syntheticEvent = {
-                    preventDefault: () => {},
-                  } as React.FormEvent<HTMLFormElement>;
-                  handleSubmit(syntheticEvent);
-                }}
-              >
-                {editingAlumno ? 'Actualizar' : 'Registrar'}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Dialog para ver información detallada del alumno */}
-      <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
-        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center space-x-2">
-              <User className="w-5 h-5" />
-              <span>Información Completa del Alumno</span>
-            </DialogTitle>
-            <DialogDescription>
-              Información detallada de {selectedAlumno?.nombre}{' '}
-              {selectedAlumno?.apellido}
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedAlumno && (
-            <Tabs defaultValue="general" className="w-full">
-              <TabsList className="grid w-full grid-cols-4">
-                <TabsTrigger value="general">Información General</TabsTrigger>
-                <TabsTrigger value="academico">Académico & Médico</TabsTrigger>
-                <TabsTrigger value="responsables">Responsables</TabsTrigger>
-                <TabsTrigger value="adicional">
-                  Información Adicional
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="general" className="space-y-4 mt-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Datos Personales */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center space-x-2">
-                        <User className="w-4 h-4" />
-                        <span>Datos Personales</span>
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div>
-                        <p className="text-sm text-gray-500">Nombre Completo</p>
-                        <p className="font-medium">
-                          {selectedAlumno.nombre} {selectedAlumno.apellido}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">Género</p>
-                        <p className="font-medium">{selectedAlumno.genero}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">
-                          Fecha de Nacimiento
-                        </p>
-                        <p className="font-medium">
-                          {selectedAlumno.fechaNacimiento}
-                          {selectedAlumno.fechaNacimiento &&
-                            ` (${calcularEdadDisplay(selectedAlumno.fechaNacimiento)} años)`}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">Nacionalidad</p>
-                        <p className="font-medium">
-                          {selectedAlumno.nacionalidad}
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Datos de Nacimiento */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center space-x-2">
-                        <FileText className="w-4 h-4" />
-                        <span>Partida de Nacimiento</span>
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div>
-                        <p className="text-sm text-gray-500">
-                          Número de Partida
-                        </p>
-                        <p className="font-medium">
-                          {selectedAlumno.partidaNumero || 'No registrado'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">Folio - Libro</p>
-                        <p className="font-medium">
-                          {selectedAlumno.folio} - {selectedAlumno.libro}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">Año de Partida</p>
-                        <p className="font-medium">
-                          {selectedAlumno.anioPartida}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">
-                          Lugar de Nacimiento
-                        </p>
-                        <p className="font-medium">
-                          {selectedAlumno.municipioNacimiento},{' '}
-                          {selectedAlumno.departamentoNacimiento}
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                {/* Residencia y Transporte */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center space-x-2">
-                        <MapPin className="w-4 h-4" />
-                        <span>Residencia</span>
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div>
-                        <p className="text-sm text-gray-500">Dirección</p>
-                        <p className="font-medium">
-                          {selectedAlumno.direccion}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">
-                          Municipio - Departamento
-                        </p>
-                        <p className="font-medium">
-                          {selectedAlumno.municipio},{' '}
-                          {selectedAlumno.departamento}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">Zona</p>
-                        <p className="font-medium">
-                          {selectedAlumno.zonaResidencia}
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center space-x-2">
-                        <Car className="w-4 h-4" />
-                        <span>Transporte</span>
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div>
-                        <p className="text-sm text-gray-500">
-                          Medio de Transporte
-                        </p>
-                        <p className="font-medium">
-                          {selectedAlumno.medioTransporte || 'No especificado'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">Distancia</p>
-                        <p className="font-medium">
-                          {selectedAlumno.distanciaKM} km
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">Encargado</p>
-                        <p className="font-medium">
-                          {selectedAlumno.encargadoTransporte || 'No asignado'}
-                        </p>
-                      </div>
-                      {selectedAlumno.encargadoTelefono && (
-                        <div>
-                          <p className="text-sm text-gray-500">
-                            Teléfono del Encargado
-                          </p>
-                          <p className="font-medium">
-                            {selectedAlumno.encargadoTelefono}
-                          </p>
-                        </div>
                       )}
-                    </CardContent>
-                  </Card>
-                </div>
-              </TabsContent>
+                    </div>
+                  </TabsContent>
 
-              <TabsContent value="academico" className="space-y-4 mt-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Información Académica */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center space-x-2">
-                        <GraduationCap className="w-4 h-4" />
-                        <span>Estado Académico</span>
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div>
-                        <p className="text-sm text-gray-500">Nivel Educativo</p>
-                        <p className="font-medium capitalize">
-                          {selectedAlumno.nivel}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">Grado y Sección</p>
-                        <p className="font-medium">
-                          {selectedAlumno.grado}° {selectedAlumno.seccion}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">
-                          Fecha de Ingreso
-                        </p>
-                        <p className="font-medium">
-                          {selectedAlumno.fechaIngreso}
-                        </p>
-                      </div>
-                      <div className="flex space-x-4">
-                        <div className="flex items-center space-x-2">
-                          {selectedAlumno.repiteGrado ? (
-                            <CheckCircle className="w-4 h-4 text-orange-600" />
-                          ) : (
-                            <XCircle className="w-4 h-4 text-green-600" />
-                          )}
-                          <span className="text-sm">Repite Grado</span>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          {selectedAlumno.condicionado ? (
-                            <CheckCircle className="w-4 h-4 text-red-600" />
-                          ) : (
-                            <XCircle className="w-4 h-4 text-green-600" />
-                          )}
-                          <span className="text-sm">Condicionado</span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Información Médica */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center space-x-2">
-                        <Heart className="w-4 h-4" />
-                        <span>Información Médica</span>
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div>
-                        <p className="text-sm text-gray-500">Tipo de Sangre</p>
-                        <p className="font-medium">
-                          {selectedAlumno.tipoSangre || 'No registrado'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">
-                          Problemas Físicos
-                        </p>
-                        <p className="font-medium">
-                          {selectedAlumno.problemaFisico || 'Ninguno'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">
-                          Centro Asistencial
-                        </p>
-                        <p className="font-medium">
-                          {selectedAlumno.centroAsistencial ||
-                            'No especificado'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">
-                          Médico de Cabecera
-                        </p>
-                        <p className="font-medium">
-                          {selectedAlumno.medicoNombre || 'No asignado'}
-                        </p>
-                        {selectedAlumno.medicoTelefono && (
-                          <p className="text-sm text-gray-500">
-                            {selectedAlumno.medicoTelefono}
-                          </p>
-                        )}
-                      </div>
-                      {selectedAlumno.observacionesMedicas && (
-                        <div>
-                          <p className="text-sm text-gray-500">
-                            Observaciones Médicas
-                          </p>
-                          <p className="text-sm bg-gray-50 p-2 rounded">
-                            {selectedAlumno.observacionesMedicas}
-                          </p>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="responsables" className="space-y-4 mt-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center space-x-2">
-                      <Users className="w-4 h-4" />
-                      <span>Responsables Registrados</span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {selectedAlumno.responsables &&
-                    selectedAlumno.responsables.length > 0 ? (
-                      <div className="space-y-4">
-                        {selectedAlumno.responsables.map((responsable) => (
-                          <div
-                            key={responsable.id_responsable}
-                            className={`p-4 border rounded-lg ${responsable.relacion?.esPrincipal || responsable.esPrincipal ? 'border-blue-200 bg-blue-50' : 'border-gray-200'}`}
+                  {/* Tab: Responsables */}
+                  <TabsContent value="responsables" className="space-y-4 mt-4">
+                    {/* Mensaje informativo */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <div className="flex items-start space-x-3">
+                        <div className="flex-shrink-0">
+                          <svg
+                            className="w-5 h-5 text-blue-600 mt-0.5"
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
                           >
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <div className="flex items-center space-x-2 mb-2">
-                                  <h4 className="font-medium">
-                                    {responsable.datosResponsable?.nombre ||
-                                      responsable.responsable?.nombre ||
-                                      ''}{' '}
-                                    {responsable.datosResponsable?.apellido ||
-                                      responsable.responsable?.apellido ||
-                                      ''}
-                                  </h4>
-                                  {(responsable.relacion?.esPrincipal ||
-                                    responsable.esPrincipal) && (
-                                    <Badge
-                                      variant="default"
-                                      className="text-xs"
-                                    >
-                                      Principal
-                                    </Badge>
-                                  )}
-                                  <Badge variant="outline">
-                                    {getParentescoNombre(
-                                      responsable.relacion?.parentescoId ||
-                                        responsable.parentescoId,
-                                      responsable.relacion?.parentescoLibre ||
-                                        responsable.parentescoLibre ||
-                                        ''
-                                    )}
-                                  </Badge>
+                            <path
+                              fillRule="evenodd"
+                              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="text-sm font-medium text-blue-900 mb-1">
+                            Cómo agregar responsables
+                          </h4>
+                          <p className="text-sm text-blue-700">
+                            Complete los datos del responsable y presione{' '}
+                            <span className="font-semibold">
+                              "Guardar Responsable"
+                            </span>{' '}
+                            para agregarlo a la lista. Puede agregar múltiples
+                            responsables. Al finalizar, presione{' '}
+                            <span className="font-semibold">"Registrar"</span>{' '}
+                            para guardar el alumno con todos sus responsables.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center">
+                      <h3 className="text-lg font-medium">
+                        Responsables del Alumno
+                      </h3>
+                      <Button
+                        type="button"
+                        onClick={addResponsable}
+                        variant="outline"
+                        size="sm"
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Agregar Responsable
+                      </Button>
+                    </div>
+
+                    {responsables.length === 0 ? (
+                      <div className="text-center py-8 text-gray-500 border-2 border-dashed border-gray-300 rounded-lg">
+                        <Users className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                        <p>No hay responsables agregados</p>
+                        <Button
+                          type="button"
+                          onClick={addResponsable}
+                          variant="outline"
+                          className="mt-2"
+                        >
+                          <Plus className="w-4 h-4 mr-2" />
+                          Agregar Primer Responsable
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-6">
+                        {responsables.map((responsable, index) => (
+                          <Card
+                            key={responsable.id_responsable}
+                            className="p-4"
+                          >
+                            <div className="flex justify-between items-start mb-4">
+                              <h4 className="text-md font-medium">
+                                Responsable {index + 1}
+                              </h4>
+                              <div className="flex gap-2">
+                                {/* Botón para cancelar formularios vacíos - con depuración */}
+                                {(() => {
+                                  const isEmpty =
+                                    isEmptyResponsable(responsable);
+                                  // Verificación de formulario vacío
+                                  if (isEmpty) {
+                                    return (
+                                      <Button
+                                        type="button"
+                                        variant="secondary"
+                                        size="sm"
+                                        onClick={() => {
+                                          removeResponsable(index);
+                                        }}
+                                        className="bg-gray-200 text-gray-700 hover:bg-gray-300"
+                                        title="Cancelar formulario vacío"
+                                      >
+                                        <X className="w-4 h-4 mr-1" />
+                                        Cancelar formulario
+                                      </Button>
+                                    );
+                                  } else {
+                                    return (
+                                      <Button
+                                        type="button"
+                                        variant="destructive"
+                                        size="sm"
+                                        onClick={() => {
+                                          if (
+                                            window.confirm(
+                                              '¿Está seguro que desea eliminar este responsable?' +
+                                                (responsable.id
+                                                  ? ' Esta acción no se puede deshacer.'
+                                                  : '')
+                                            )
+                                          ) {
+                                            // Eliminando responsable con datos
+                                            removeResponsable(index);
+                                          }
+                                        }}
+                                        className="hover:bg-red-700"
+                                      >
+                                        <X className="w-4 h-4 mr-1" />
+                                        Eliminar responsable
+                                      </Button>
+                                    );
+                                  }
+                                })()}
+                              </div>
+                            </div>
+
+                            {/* Datos Básicos */}
+                            <div className="space-y-4">
+                              <h5 className="text-sm font-medium text-gray-700 border-b pb-2">
+                                Datos Básicos
+                              </h5>
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                  <Label>Nombre</Label>
+                                  <Input
+                                    value={
+                                      responsable.datosResponsable?.nombre !==
+                                      undefined
+                                        ? responsable.datosResponsable.nombre
+                                        : responsable.responsable?.nombre || ''
+                                    }
+                                    onChange={(e) => {
+                                      // Asegurarnos de que se pase el valor exacto, incluso si es vacío
+                                      updateResponsable(
+                                        index,
+                                        'datosResponsable',
+                                        'nombre',
+                                        e.target.value
+                                      );
+                                    }}
+                                    placeholder="María"
+                                  />
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm mb-3">
-                                  <div className="flex items-center space-x-2">
-                                    <IdCard className="w-4 h-4 text-gray-400" />
-                                    <span>
-                                      {responsable.datosResponsable?.dui ||
-                                        responsable.responsable?.dui ||
-                                        ''}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center space-x-2">
-                                    <Phone className="w-4 h-4 text-gray-400" />
-                                    <span>
-                                      {responsable.datosResponsable?.telefono ||
-                                        responsable.responsable?.telefono ||
-                                        ''}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center space-x-2">
-                                    <Mail className="w-4 h-4 text-gray-400" />
-                                    <span>
-                                      {responsable.datosResponsable?.email ||
-                                        responsable.responsable?.email ||
-                                        ''}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center space-x-2">
-                                    <Building className="w-4 h-4 text-gray-400" />
-                                    <span>
-                                      {responsable.datosResponsable
-                                        ?.profesionOficio ||
-                                        responsable.responsable
-                                          ?.profesionOficio ||
-                                        'No especificado'}
-                                    </span>
-                                  </div>
+                                <div>
+                                  <Label>Apellido</Label>
+                                  <Input
+                                    value={
+                                      responsable.datosResponsable?.apellido !==
+                                      undefined
+                                        ? responsable.datosResponsable.apellido
+                                        : responsable.responsable?.apellido ||
+                                          ''
+                                    }
+                                    onChange={(e) => {
+                                      // Asegurarnos de que se pase el valor exacto, incluso si es vacío
+                                      updateResponsable(
+                                        index,
+                                        'datosResponsable',
+                                        'apellido',
+                                        e.target.value
+                                      );
+                                    }}
+                                    placeholder="González"
+                                  />
                                 </div>
 
-                                <div className="text-sm text-gray-600 mb-3">
-                                  <div className="flex items-center space-x-2">
-                                    <MapPin className="w-4 h-4 text-gray-400" />
-                                    <span>
-                                      {responsable.datosResponsable
-                                        ?.direccion ||
-                                        responsable.responsable?.direccion ||
-                                        ''}
-                                    </span>
-                                  </div>
-                                  {(responsable.datosResponsable
-                                    ?.lugarTrabajo ||
-                                    responsable.responsable?.lugarTrabajo) && (
-                                    <div className="flex items-center space-x-2 mt-1">
-                                      <Building className="w-4 h-4 text-gray-400" />
-                                      <span>
-                                        Trabaja en:{' '}
+                                <div>
+                                  <Label>DUI</Label>
+                                  <Input
+                                    value={
+                                      responsable.datosResponsable?.dui !==
+                                      undefined
+                                        ? responsable.datosResponsable.dui
+                                        : responsable.responsable?.dui || ''
+                                    }
+                                    onChange={(e) => {
+                                      updateResponsable(
+                                        index,
+                                        'datosResponsable',
+                                        'dui',
+                                        e.target.value
+                                      );
+                                    }}
+                                    placeholder="12345678-9"
+                                  />
+                                </div>
+
+                                <div>
+                                  <Label>Teléfono</Label>
+                                  <Input
+                                    value={
+                                      responsable.datosResponsable?.telefono !==
+                                      undefined
+                                        ? responsable.datosResponsable.telefono
+                                        : responsable.responsable?.telefono ||
+                                          ''
+                                    }
+                                    onChange={(e) => {
+                                      // Asegurarnos de que se pase el valor exacto, incluso si es vacío
+                                      updateResponsable(
+                                        index,
+                                        'datosResponsable',
+                                        'telefono',
+                                        e.target.value
+                                      );
+                                    }}
+                                    placeholder="7890-5678"
+                                  />
+                                </div>
+
+                                <div>
+                                  <Label>Correo Electrónico</Label>
+                                  <Input
+                                    type="email"
+                                    value={
+                                      responsable.datosResponsable?.email !==
+                                        undefined &&
+                                      responsable.datosResponsable?.email !==
+                                        null
+                                        ? String(
+                                            responsable.datosResponsable.email
+                                          )
+                                        : responsable.responsable?.email !==
+                                              undefined &&
+                                            responsable.responsable?.email !==
+                                              null
+                                          ? String(
+                                              responsable.responsable.email
+                                            )
+                                          : ''
+                                    }
+                                    onChange={(e) => {
+                                      // Aseguramos que se pase el valor exacto, incluso si es vacío
+                                      updateResponsable(
+                                        index,
+                                        'datosResponsable',
+                                        'email',
+                                        e.target.value
+                                      );
+                                    }}
+                                    placeholder="correo@email.com"
+                                  />
+                                </div>
+
+                                <div>
+                                  <Label>Parentesco</Label>
+                                  <Select
+                                    value={
+                                      responsable.relacion?.parentescoId?.toString() ||
+                                      responsable.parentescoId?.toString() ||
+                                      '1'
+                                    }
+                                    onValueChange={(value) =>
+                                      updateResponsable(
+                                        index,
+                                        'relacion',
+                                        'parentescoId',
+                                        parseInt(value)
+                                      )
+                                    }
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Seleccionar parentesco" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {parentescos.length > 0 ? (
+                                        // Usamos los parentescos cargados desde la API
+                                        parentescos.map((parentesco) => (
+                                          <SelectItem
+                                            key={parentesco.id_parentesco}
+                                            value={parentesco.id_parentesco.toString()}
+                                          >
+                                            {parentesco.nombre}
+                                          </SelectItem>
+                                        ))
+                                      ) : (
+                                        // Fallback en caso de que no se hayan cargado los parentescos
+                                        <SelectItem value="1">
+                                          Cargando parentescos...
+                                        </SelectItem>
+                                      )}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+
+                                <div className="md:col-span-3">
+                                  <Label>Dirección</Label>
+                                  <Input
+                                    value={
+                                      responsable.datosResponsable
+                                        ?.direccion !== undefined
+                                        ? responsable.datosResponsable.direccion
+                                        : responsable.responsable?.direccion ||
+                                          ''
+                                    }
+                                    onChange={(e) => {
+                                      updateResponsable(
+                                        index,
+                                        'datosResponsable',
+                                        'direccion',
+                                        e.target.value
+                                      );
+                                    }}
+                                    placeholder="Av. Principal #123, San Salvador"
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Datos Profesionales */}
+                              <h5 className="text-sm font-medium text-gray-700 border-b pb-2">
+                                Datos Profesionales
+                              </h5>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                  <Label>Lugar de Trabajo</Label>
+                                  <Input
+                                    value={
+                                      responsable.datosResponsable
+                                        ?.lugarTrabajo !== undefined
+                                        ? responsable.datosResponsable
+                                            .lugarTrabajo || ''
+                                        : responsable.responsable
+                                            ?.lugarTrabajo || ''
+                                    }
+                                    onChange={(e) => {
+                                      updateResponsable(
+                                        index,
+                                        'datosResponsable',
+                                        'lugarTrabajo',
+                                        e.target.value
+                                      );
+                                    }}
+                                    placeholder="Empresa XYZ"
+                                  />
+                                </div>
+
+                                <div>
+                                  <Label>Profesión u Oficio</Label>
+                                  <Input
+                                    value={
+                                      responsable.datosResponsable
+                                        ?.profesionOficio !== undefined
+                                        ? responsable.datosResponsable
+                                            .profesionOficio
+                                        : responsable.responsable
+                                            ?.profesionOficio || ''
+                                    }
+                                    onChange={(e) => {
+                                      updateResponsable(
+                                        index,
+                                        'datosResponsable',
+                                        'profesionOficio',
+                                        e.target.value
+                                      );
+                                    }}
+                                    placeholder="Ingeniero"
+                                  />
+                                </div>
+
+                                <div>
+                                  <Label>Último Grado Estudiado</Label>
+                                  <Select
+                                    value={
+                                      responsable.datosResponsable
+                                        ?.ultimoGradoEstudiado ||
+                                      responsable.responsable
+                                        ?.ultimoGradoEstudiado ||
+                                      ''
+                                    }
+                                    onValueChange={(value) =>
+                                      updateResponsable(
+                                        index,
+                                        'datosResponsable',
+                                        'ultimoGradoEstudiado',
+                                        value
+                                      )
+                                    }
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Seleccionar grado" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {GRADOS_ESTUDIO.map((grado) => (
+                                        <SelectItem key={grado} value={grado}>
+                                          {grado}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+
+                                <div>
+                                  <Label>Ocupación Actual</Label>
+                                  <Input
+                                    value={
+                                      responsable.datosResponsable
+                                        ?.ocupacion !== undefined
+                                        ? responsable.datosResponsable
+                                            ?.ocupacion
+                                        : responsable.responsable?.ocupacion ||
+                                          ''
+                                    }
+                                    onChange={(e) => {
+                                      // Asegurarnos de que se pase el valor exacto, incluso si es vacío
+                                      const valor = e.target.value;
+                                      updateResponsable(
+                                        index,
+                                        'datosResponsable',
+                                        'ocupacion',
+                                        valor
+                                      );
+                                    }}
+                                    placeholder="Gerente de Sistemas"
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Datos Personales Adicionales */}
+                              <h5 className="text-sm font-medium text-gray-700 border-b pb-2">
+                                Datos Adicionales
+                              </h5>
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                  <Label>Religión</Label>
+                                  <Select
+                                    value={
+                                      responsable.datosResponsable?.religion !==
+                                        undefined &&
+                                      responsable.datosResponsable?.religion !==
+                                        null
+                                        ? String(
+                                            responsable.datosResponsable
+                                              .religion
+                                          )
+                                        : responsable.responsable?.religion !==
+                                              undefined &&
+                                            responsable.responsable
+                                              ?.religion !== null
+                                          ? String(
+                                              responsable.responsable.religion
+                                            )
+                                          : ''
+                                    }
+                                    onValueChange={(value) =>
+                                      updateResponsable(
+                                        index,
+                                        'datosResponsable',
+                                        'religion',
+                                        value
+                                      )
+                                    }
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Seleccionar religión" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {RELIGIONES.map((religion) => (
+                                        <SelectItem
+                                          key={religion}
+                                          value={religion}
+                                        >
+                                          {religion}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+
+                                <div>
+                                  <Label>Zona de Residencia</Label>
+                                  <Select
+                                    value={
+                                      responsable.datosResponsable
+                                        ?.zonaResidencia ||
+                                      responsable.responsable?.zonaResidencia ||
+                                      'Urbana'
+                                    }
+                                    onValueChange={(value) =>
+                                      updateResponsable(
+                                        index,
+                                        'datosResponsable',
+                                        'zonaResidencia',
+                                        value
+                                      )
+                                    }
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Seleccionar zona" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="Urbana">
+                                        Urbana
+                                      </SelectItem>
+                                      <SelectItem value="Rural">
+                                        Rural
+                                      </SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+
+                                <div>
+                                  <Label>Estado Familiar</Label>
+                                  <Select
+                                    value={
+                                      responsable.datosResponsable
+                                        ?.estadoFamiliar ||
+                                      responsable.responsable?.estadoFamiliar ||
+                                      ''
+                                    }
+                                    onValueChange={(value) =>
+                                      updateResponsable(
+                                        index,
+                                        'datosResponsable',
+                                        'estadoFamiliar',
+                                        value
+                                      )
+                                    }
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Seleccionar estado" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="Soltero/a">
+                                        Soltero/a
+                                      </SelectItem>
+                                      <SelectItem value="Casado/a">
+                                        Casado/a
+                                      </SelectItem>
+                                      <SelectItem value="Divorciado/a">
+                                        Divorciado/a
+                                      </SelectItem>
+                                      <SelectItem value="Viudo/a">
+                                        Viudo/a
+                                      </SelectItem>
+                                      <SelectItem value="Unión Libre">
+                                        Unión Libre
+                                      </SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              </div>
+
+                              {/* Datos de Transporte */}
+                              <h5 className="text-sm font-medium text-gray-700 border-b pb-2">
+                                Datos de Transporte (Opcional)
+                              </h5>
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                  <Label>Empresa de Transporte</Label>
+                                  <Input
+                                    value={
+                                      responsable.datosResponsable
+                                        ?.empresaTransporte ||
+                                      responsable.responsable
+                                        ?.empresaTransporte ||
+                                      ''
+                                    }
+                                    onChange={(e) =>
+                                      updateResponsable(
+                                        index,
+                                        'datosResponsable',
+                                        'empresaTransporte',
+                                        e.target.value
+                                      )
+                                    }
+                                    placeholder="Transportes El Sol"
+                                  />
+                                </div>
+
+                                <div>
+                                  <Label>Placa del Vehículo</Label>
+                                  <Input
+                                    value={
+                                      responsable.datosResponsable
+                                        ?.placaVehiculo ||
+                                      responsable.responsable?.placaVehiculo ||
+                                      ''
+                                    }
+                                    onChange={(e) =>
+                                      updateResponsable(
+                                        index,
+                                        'datosResponsable',
+                                        'placaVehiculo',
+                                        e.target.value
+                                      )
+                                    }
+                                    placeholder="P123456"
+                                  />
+                                </div>
+
+                                <div>
+                                  <Label>Tipo de Vehículo</Label>
+                                  <Input
+                                    value={
+                                      responsable.datosResponsable
+                                        ?.tipoVehiculo ||
+                                      responsable.responsable?.tipoVehiculo ||
+                                      ''
+                                    }
+                                    onChange={(e) =>
+                                      updateResponsable(
+                                        index,
+                                        'datosResponsable',
+                                        'tipoVehiculo',
+                                        e.target.value
+                                      )
+                                    }
+                                    placeholder="Sedán"
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Permisos y Autorizaciones */}
+                              <h5 className="text-sm font-medium text-gray-700 border-b pb-2">
+                                Permisos y Autorizaciones
+                              </h5>
+                              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                                <div className="flex items-center space-x-2">
+                                  <Checkbox
+                                    id={`principal-${index}`}
+                                    checked={
+                                      responsable.relacion?.esPrincipal ===
+                                        true ||
+                                      responsable.esPrincipal === true ||
+                                      false
+                                    }
+                                    onCheckedChange={(checked) => {
+                                      updateResponsable(
+                                        index,
+                                        'relacion',
+                                        'esPrincipal',
+                                        checked === true
+                                      );
+                                    }}
+                                  />
+                                  <Label
+                                    htmlFor={`principal-${index}`}
+                                    className="text-sm"
+                                  >
+                                    Es principal
+                                  </Label>
+                                </div>
+
+                                <div className="flex items-center space-x-2">
+                                  <Checkbox
+                                    id={`firma-${index}`}
+                                    checked={
+                                      responsable.relacion?.firma === true ||
+                                      responsable.firma === true ||
+                                      false
+                                    }
+                                    onCheckedChange={(checked) => {
+                                      updateResponsable(
+                                        index,
+                                        'relacion',
+                                        'firma',
+                                        checked === true
+                                      );
+                                    }}
+                                  />
+                                  <Label
+                                    htmlFor={`firma-${index}`}
+                                    className="text-sm"
+                                  >
+                                    Puede firmar
+                                  </Label>
+                                </div>
+
+                                <div className="flex items-center space-x-2">
+                                  <Checkbox
+                                    id={`traslado-${index}`}
+                                    checked={
+                                      responsable.relacion?.permiteTraslado ===
+                                        true ||
+                                      responsable.permiteTraslado === true ||
+                                      false
+                                    }
+                                    onCheckedChange={(checked) => {
+                                      updateResponsable(
+                                        index,
+                                        'relacion',
+                                        'permiteTraslado',
+                                        checked === true
+                                      );
+                                    }}
+                                  />
+                                  <Label
+                                    htmlFor={`traslado-${index}`}
+                                    className="text-sm"
+                                  >
+                                    Autoriza traslados
+                                  </Label>
+                                </div>
+
+                                <div className="flex items-center space-x-2">
+                                  <Checkbox
+                                    id={`retirar-${index}`}
+                                    checked={
+                                      responsable.relacion
+                                        ?.puedeRetirarAlumno === true ||
+                                      responsable.puedeRetirarAlumno === true ||
+                                      false
+                                    }
+                                    onCheckedChange={(checked) => {
+                                      updateResponsable(
+                                        index,
+                                        'relacion',
+                                        'puedeRetirarAlumno',
+                                        checked === true
+                                      );
+                                    }}
+                                  />
+                                  <Label
+                                    htmlFor={`retirar-${index}`}
+                                    className="text-sm"
+                                  >
+                                    Puede retirar
+                                  </Label>
+                                </div>
+
+                                <div className="flex items-center space-x-2">
+                                  <Checkbox
+                                    id={`emergencia-${index}`}
+                                    checked={
+                                      responsable.relacion
+                                        ?.contactoEmergencia === true ||
+                                      responsable.contactoEmergencia === true ||
+                                      false
+                                    }
+                                    onCheckedChange={(checked) => {
+                                      updateResponsable(
+                                        index,
+                                        'relacion',
+                                        'contactoEmergencia',
+                                        checked === true
+                                      );
+                                    }}
+                                  />
+                                  <Label
+                                    htmlFor={`emergencia-${index}`}
+                                    className="text-sm"
+                                  >
+                                    Contacto emergencia
+                                  </Label>
+                                </div>
+                              </div>
+
+                              {/* Botón de acción para el responsable */}
+                              <div className="flex justify-end mt-4 pt-4 border-t">
+                                <Button
+                                  type="button"
+                                  variant="default"
+                                  size="sm"
+                                  onClick={() =>
+                                    actualizarResponsable(index, false)
+                                  }
+                                  className="bg-blue-600 hover:bg-blue-700"
+                                >
+                                  <Save className="w-4 h-4 mr-2" /> Guardar
+                                  Responsable
+                                </Button>
+                              </div>
+                            </div>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+                  </TabsContent>
+                </Tabs>
+
+                <div className="flex justify-end space-x-2 pt-6">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsDialogOpen(false)}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="button"
+                    className="bg-blue-600 hover:bg-blue-700"
+                    onClick={() => {
+                      // Creamos un evento sintético para pasar a handleSubmit
+                      const syntheticEvent = {
+                        preventDefault: () => {},
+                      } as React.FormEvent<HTMLFormElement>;
+                      handleSubmit(syntheticEvent);
+                    }}
+                  >
+                    {editingAlumno ? 'Actualizar' : 'Registrar'}
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+
+          {/* Dialog para ver información detallada del alumno */}
+          <Dialog
+            open={isDetailDialogOpen}
+            onOpenChange={setIsDetailDialogOpen}
+          >
+            <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="flex items-center space-x-2">
+                  <User className="w-5 h-5" />
+                  <span>Información Completa del Alumno</span>
+                </DialogTitle>
+                <DialogDescription>
+                  Información detallada de {selectedAlumno?.nombre}{' '}
+                  {selectedAlumno?.apellido}
+                </DialogDescription>
+              </DialogHeader>
+
+              {selectedAlumno && (
+                <Tabs defaultValue="general" className="w-full">
+                  <TabsList className="grid w-full grid-cols-4">
+                    <TabsTrigger value="general">
+                      Información General
+                    </TabsTrigger>
+                    <TabsTrigger value="academico">
+                      Académico & Médico
+                    </TabsTrigger>
+                    <TabsTrigger value="responsables">Responsables</TabsTrigger>
+                    <TabsTrigger value="adicional">
+                      Información Adicional
+                    </TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="general" className="space-y-4 mt-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Datos Personales */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex items-center space-x-2">
+                            <User className="w-4 h-4" />
+                            <span>Datos Personales</span>
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <div>
+                            <p className="text-sm text-gray-500">
+                              Nombre Completo
+                            </p>
+                            <p className="font-medium">
+                              {selectedAlumno.nombre} {selectedAlumno.apellido}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Género</p>
+                            <p className="font-medium">
+                              {selectedAlumno.genero}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">
+                              Fecha de Nacimiento
+                            </p>
+                            <p className="font-medium">
+                              {selectedAlumno.fechaNacimiento}
+                              {selectedAlumno.fechaNacimiento &&
+                                ` (${calcularEdadDisplay(selectedAlumno.fechaNacimiento)} años)`}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">
+                              Nacionalidad
+                            </p>
+                            <p className="font-medium">
+                              {selectedAlumno.nacionalidad}
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* Datos de Nacimiento */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex items-center space-x-2">
+                            <FileText className="w-4 h-4" />
+                            <span>Partida de Nacimiento</span>
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <div>
+                            <p className="text-sm text-gray-500">
+                              Número de Partida
+                            </p>
+                            <p className="font-medium">
+                              {selectedAlumno.partidaNumero || 'No registrado'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">
+                              Folio - Libro
+                            </p>
+                            <p className="font-medium">
+                              {selectedAlumno.folio} - {selectedAlumno.libro}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">
+                              Año de Partida
+                            </p>
+                            <p className="font-medium">
+                              {selectedAlumno.anioPartida}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">
+                              Lugar de Nacimiento
+                            </p>
+                            <p className="font-medium">
+                              {selectedAlumno.municipioNacimiento},{' '}
+                              {selectedAlumno.departamentoNacimiento}
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    {/* Residencia y Transporte */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex items-center space-x-2">
+                            <MapPin className="w-4 h-4" />
+                            <span>Residencia</span>
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <div>
+                            <p className="text-sm text-gray-500">Dirección</p>
+                            <p className="font-medium">
+                              {selectedAlumno.direccion}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">
+                              Municipio - Departamento
+                            </p>
+                            <p className="font-medium">
+                              {selectedAlumno.municipio},{' '}
+                              {selectedAlumno.departamento}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Zona</p>
+                            <p className="font-medium">
+                              {selectedAlumno.zonaResidencia}
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex items-center space-x-2">
+                            <Car className="w-4 h-4" />
+                            <span>Transporte</span>
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <div>
+                            <p className="text-sm text-gray-500">
+                              Medio de Transporte
+                            </p>
+                            <p className="font-medium">
+                              {selectedAlumno.medioTransporte ||
+                                'No especificado'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Distancia</p>
+                            <p className="font-medium">
+                              {selectedAlumno.distanciaKM} km
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Encargado</p>
+                            <p className="font-medium">
+                              {selectedAlumno.encargadoTransporte ||
+                                'No asignado'}
+                            </p>
+                          </div>
+                          {selectedAlumno.encargadoTelefono && (
+                            <div>
+                              <p className="text-sm text-gray-500">
+                                Teléfono del Encargado
+                              </p>
+                              <p className="font-medium">
+                                {selectedAlumno.encargadoTelefono}
+                              </p>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="academico" className="space-y-4 mt-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Información Académica */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex items-center space-x-2">
+                            <GraduationCap className="w-4 h-4" />
+                            <span>Estado Académico</span>
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <div>
+                            <p className="text-sm text-gray-500">
+                              Grado Académico
+                            </p>
+                            <p className="font-medium capitalize">
+                              {selectedAlumno.inscripcionActiva?.curso
+                                ?.gradoAcademico?.nombre ||
+                                'Sin inscripción activa'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">
+                              Curso / Sección
+                            </p>
+                            <p className="font-medium">
+                              {selectedAlumno.inscripcionActiva?.curso?.nombre
+                                ? `${selectedAlumno.inscripcionActiva.curso.nombre} ${selectedAlumno.inscripcionActiva.curso.seccion || ''}`.trim()
+                                : 'Sin inscripción activa'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">
+                              Año Académico
+                            </p>
+                            <p className="font-medium">
+                              {selectedAlumno.inscripcionActiva
+                                ?.anioAcademico || 'No disponible'}
+                            </p>
+                          </div>
+                          <div className="flex space-x-4">
+                            <div className="flex items-center space-x-2">
+                              {selectedAlumno.repiteGrado ? (
+                                <CheckCircle className="w-4 h-4 text-orange-600" />
+                              ) : (
+                                <XCircle className="w-4 h-4 text-green-600" />
+                              )}
+                              <span className="text-sm">Repite Grado</span>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              {selectedAlumno.condicionado ? (
+                                <CheckCircle className="w-4 h-4 text-red-600" />
+                              ) : (
+                                <XCircle className="w-4 h-4 text-green-600" />
+                              )}
+                              <span className="text-sm">Condicionado</span>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* Información Médica */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex items-center space-x-2">
+                            <Heart className="w-4 h-4" />
+                            <span>Información Médica</span>
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <div>
+                            <p className="text-sm text-gray-500">
+                              Tipo de Sangre
+                            </p>
+                            <p className="font-medium">
+                              {selectedAlumno.tipoSangre || 'No registrado'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">
+                              Problemas Físicos
+                            </p>
+                            <p className="font-medium">
+                              {selectedAlumno.problemaFisico || 'Ninguno'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">
+                              Centro Asistencial
+                            </p>
+                            <p className="font-medium">
+                              {selectedAlumno.centroAsistencial ||
+                                'No especificado'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">
+                              Médico de Cabecera
+                            </p>
+                            <p className="font-medium">
+                              {selectedAlumno.medicoNombre || 'No asignado'}
+                            </p>
+                            {selectedAlumno.medicoTelefono && (
+                              <p className="text-sm text-gray-500">
+                                {selectedAlumno.medicoTelefono}
+                              </p>
+                            )}
+                          </div>
+                          {selectedAlumno.observacionesMedicas && (
+                            <div>
+                              <p className="text-sm text-gray-500">
+                                Observaciones Médicas
+                              </p>
+                              <p className="text-sm bg-gray-50 p-2 rounded">
+                                {selectedAlumno.observacionesMedicas}
+                              </p>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="responsables" className="space-y-4 mt-4">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center space-x-2">
+                          <Users className="w-4 h-4" />
+                          <span>Responsables Registrados</span>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {selectedAlumno.responsables &&
+                        selectedAlumno.responsables.length > 0 ? (
+                          <div className="space-y-4">
+                            {selectedAlumno.responsables.map((responsable) => (
+                              <div
+                                key={responsable.id_responsable}
+                                className={`p-4 border rounded-lg ${responsable.relacion?.esPrincipal || responsable.esPrincipal ? 'border-blue-200 bg-blue-50' : 'border-gray-200'}`}
+                              >
+                                <div className="flex items-start justify-between">
+                                  <div className="flex-1">
+                                    <div className="flex items-center space-x-2 mb-2">
+                                      <h4 className="font-medium">
+                                        {responsable.datosResponsable?.nombre ||
+                                          responsable.responsable?.nombre ||
+                                          ''}{' '}
                                         {responsable.datosResponsable
-                                          ?.lugarTrabajo ||
-                                          responsable.responsable?.lugarTrabajo}
-                                      </span>
+                                          ?.apellido ||
+                                          responsable.responsable?.apellido ||
+                                          ''}
+                                      </h4>
+                                      {(responsable.relacion?.esPrincipal ||
+                                        responsable.esPrincipal) && (
+                                        <Badge
+                                          variant="default"
+                                          className="text-xs"
+                                        >
+                                          Principal
+                                        </Badge>
+                                      )}
+                                      <Badge variant="outline">
+                                        {getParentescoNombre(
+                                          responsable.relacion?.parentescoId ||
+                                            responsable.parentescoId,
+                                          responsable.relacion
+                                            ?.parentescoLibre ||
+                                            responsable.parentescoLibre ||
+                                            ''
+                                        )}
+                                      </Badge>
                                     </div>
-                                  )}
-                                </div>
 
-                                {/* Permisos */}
-                                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-                                  <div className="flex items-center space-x-1">
-                                    {responsable.relacion?.firma ||
-                                    responsable.firma ? (
-                                      <CheckCircle className="w-3 h-3 text-green-600" />
-                                    ) : (
-                                      <XCircle className="w-3 h-3 text-red-600" />
-                                    )}
-                                    <span className="text-xs">Firma</span>
-                                  </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm mb-3">
+                                      <div className="flex items-center space-x-2">
+                                        <IdCard className="w-4 h-4 text-gray-400" />
+                                        <span>
+                                          {responsable.datosResponsable?.dui ||
+                                            responsable.responsable?.dui ||
+                                            ''}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center space-x-2">
+                                        <Phone className="w-4 h-4 text-gray-400" />
+                                        <span>
+                                          {responsable.datosResponsable
+                                            ?.telefono ||
+                                            responsable.responsable?.telefono ||
+                                            ''}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center space-x-2">
+                                        <Mail className="w-4 h-4 text-gray-400" />
+                                        <span>
+                                          {responsable.datosResponsable
+                                            ?.email ||
+                                            responsable.responsable?.email ||
+                                            ''}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center space-x-2">
+                                        <Building className="w-4 h-4 text-gray-400" />
+                                        <span>
+                                          {responsable.datosResponsable
+                                            ?.profesionOficio ||
+                                            responsable.responsable
+                                              ?.profesionOficio ||
+                                            'No especificado'}
+                                        </span>
+                                      </div>
+                                    </div>
 
-                                  <div className="flex items-center space-x-1">
-                                    {responsable.relacion?.permiteTraslado ||
-                                    responsable.permiteTraslado ? (
-                                      <CheckCircle className="w-3 h-3 text-green-600" />
-                                    ) : (
-                                      <XCircle className="w-3 h-3 text-red-600" />
-                                    )}
-                                    <span className="text-xs">Traslado</span>
-                                  </div>
+                                    <div className="text-sm text-gray-600 mb-3">
+                                      <div className="flex items-center space-x-2">
+                                        <MapPin className="w-4 h-4 text-gray-400" />
+                                        <span>
+                                          {responsable.datosResponsable
+                                            ?.direccion ||
+                                            responsable.responsable
+                                              ?.direccion ||
+                                            ''}
+                                        </span>
+                                      </div>
+                                      {(responsable.datosResponsable
+                                        ?.lugarTrabajo ||
+                                        responsable.responsable
+                                          ?.lugarTrabajo) && (
+                                        <div className="flex items-center space-x-2 mt-1">
+                                          <Building className="w-4 h-4 text-gray-400" />
+                                          <span>
+                                            Trabaja en:{' '}
+                                            {responsable.datosResponsable
+                                              ?.lugarTrabajo ||
+                                              responsable.responsable
+                                                ?.lugarTrabajo}
+                                          </span>
+                                        </div>
+                                      )}
+                                    </div>
 
-                                  <div className="flex items-center space-x-1">
-                                    {responsable.relacion?.puedeRetirarAlumno ||
-                                    responsable.puedeRetirarAlumno ? (
-                                      <CheckCircle className="w-3 h-3 text-green-600" />
-                                    ) : (
-                                      <XCircle className="w-3 h-3 text-red-600" />
-                                    )}
-                                    <span className="text-xs">Retiro</span>
-                                  </div>
+                                    {/* Permisos */}
+                                    <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                                      <div className="flex items-center space-x-1">
+                                        {responsable.relacion?.firma ||
+                                        responsable.firma ? (
+                                          <CheckCircle className="w-3 h-3 text-green-600" />
+                                        ) : (
+                                          <XCircle className="w-3 h-3 text-red-600" />
+                                        )}
+                                        <span className="text-xs">Firma</span>
+                                      </div>
 
-                                  <div className="flex items-center space-x-1">
-                                    {responsable.relacion?.contactoEmergencia ||
-                                    responsable.contactoEmergencia ? (
-                                      <CheckCircle className="w-3 h-3 text-green-600" />
-                                    ) : (
-                                      <XCircle className="w-3 h-3 text-red-600" />
-                                    )}
-                                    <span className="text-xs">Emergencia</span>
+                                      <div className="flex items-center space-x-1">
+                                        {responsable.relacion
+                                          ?.permiteTraslado ||
+                                        responsable.permiteTraslado ? (
+                                          <CheckCircle className="w-3 h-3 text-green-600" />
+                                        ) : (
+                                          <XCircle className="w-3 h-3 text-red-600" />
+                                        )}
+                                        <span className="text-xs">
+                                          Traslado
+                                        </span>
+                                      </div>
+
+                                      <div className="flex items-center space-x-1">
+                                        {responsable.relacion
+                                          ?.puedeRetirarAlumno ||
+                                        responsable.puedeRetirarAlumno ? (
+                                          <CheckCircle className="w-3 h-3 text-green-600" />
+                                        ) : (
+                                          <XCircle className="w-3 h-3 text-red-600" />
+                                        )}
+                                        <span className="text-xs">Retiro</span>
+                                      </div>
+
+                                      <div className="flex items-center space-x-1">
+                                        {responsable.relacion
+                                          ?.contactoEmergencia ||
+                                        responsable.contactoEmergencia ? (
+                                          <CheckCircle className="w-3 h-3 text-green-600" />
+                                        ) : (
+                                          <XCircle className="w-3 h-3 text-red-600" />
+                                        )}
+                                        <span className="text-xs">
+                                          Emergencia
+                                        </span>
+                                      </div>
+                                    </div>
                                   </div>
                                 </div>
                               </div>
-                            </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-8 text-gray-500">
-                        <Users className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-                        <p>No hay responsables registrados para este alumno</p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="adicional" className="space-y-4 mt-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center space-x-2">
-                      <FileText className="w-4 h-4" />
-                      <span>Información Adicional</span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-sm text-gray-500">Vive Con</p>
-                        <p className="font-medium">
-                          {selectedAlumno?.detalle?.viveCon ||
-                            'No especificado'}
-                        </p>
-                      </div>
-
-                      <div>
-                        <p className="text-sm text-gray-500">
-                          Dependencia Económica
-                        </p>
-                        <p className="font-medium">
-                          {selectedAlumno?.detalle?.dependenciaEconomica ||
-                            'No especificado'}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center space-x-2">
-                        {selectedAlumno?.detalle?.capacidadPago ? (
-                          <CheckCircle className="w-4 h-4 text-green-600" />
                         ) : (
-                          <XCircle className="w-4 h-4 text-red-600" />
-                        )}
-                        <span className="text-sm">Capacidad de Pago</span>
-                      </div>
-
-                      <div className="flex items-center space-x-2">
-                        {selectedAlumno?.detalle?.tieneHermanosEnColegio ? (
-                          <CheckCircle className="w-4 h-4 text-green-600" />
-                        ) : (
-                          <XCircle className="w-4 h-4 text-red-600" />
-                        )}
-                        <span className="text-sm">
-                          Tiene Hermanos en el Colegio
-                        </span>
-                      </div>
-
-                      {selectedAlumno?.detalle?.tieneHermanosEnColegio &&
-                        (selectedAlumno?.detalle?.hermanosEnColegio?.length ??
-                          0) > 0 && (
-                          <div className="md:col-span-2">
-                            <p className="text-sm text-gray-500 mb-2">
-                              Hermanos en el Colegio
+                          <div className="text-center py-8 text-gray-500">
+                            <Users className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                            <p>
+                              No hay responsables registrados para este alumno
                             </p>
-                            <div className="space-y-1">
-                              {(
-                                selectedAlumno?.detalle?.hermanosEnColegio || []
-                              ).map((hermano, index) => (
-                                <div
-                                  key={index}
-                                  className="flex items-center space-x-2 text-sm"
-                                >
-                                  <GraduationCap className="w-4 h-4 text-gray-400" />
-                                  <span>
-                                    {hermano.nombre} - {hermano.grado}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
                           </div>
                         )}
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            </Tabs>
-          )}
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
 
-          <div className="flex justify-end pt-4">
-            <Button
-              variant="outline"
-              onClick={() => setIsDetailDialogOpen(false)}
-            >
-              Cerrar
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+                  <TabsContent value="adicional" className="space-y-4 mt-4">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center space-x-2">
+                          <FileText className="w-4 h-4" />
+                          <span>Información Adicional</span>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-sm text-gray-500">Vive Con</p>
+                            <p className="font-medium">
+                              {selectedAlumno.detalle.viveCon ||
+                                'No especificado'}
+                            </p>
+                          </div>
+
+                          <div>
+                            <p className="text-sm text-gray-500">
+                              Dependencia Económica
+                            </p>
+                            <p className="font-medium">
+                              {selectedAlumno.detalle.dependenciaEconomica ||
+                                'No especificado'}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center space-x-2">
+                            {selectedAlumno.detalle.capacidadPago ? (
+                              <CheckCircle className="w-4 h-4 text-green-600" />
+                            ) : (
+                              <XCircle className="w-4 h-4 text-red-600" />
+                            )}
+                            <span className="text-sm">Capacidad de Pago</span>
+                          </div>
+
+                          <div className="flex items-center space-x-2">
+                            {selectedAlumno.detalle.tieneHermanosEnColegio ? (
+                              <CheckCircle className="w-4 h-4 text-green-600" />
+                            ) : (
+                              <XCircle className="w-4 h-4 text-red-600" />
+                            )}
+                            <span className="text-sm">
+                              Tiene Hermanos en el Colegio
+                            </span>
+                          </div>
+
+                          {selectedAlumno.detalle.tieneHermanosEnColegio &&
+                            selectedAlumno.detalle.hermanosEnColegio.length >
+                              0 && (
+                              <div className="md:col-span-2">
+                                <p className="text-sm text-gray-500 mb-2">
+                                  Hermanos en el Colegio
+                                </p>
+                                <div className="space-y-1">
+                                  {selectedAlumno.detalle.hermanosEnColegio.map(
+                                    (hermano, index) => (
+                                      <div
+                                        key={index}
+                                        className="flex items-center space-x-2 text-sm"
+                                      >
+                                        <GraduationCap className="w-4 h-4 text-gray-400" />
+                                        <span>
+                                          {hermano.nombre} - {hermano.grado}
+                                        </span>
+                                      </div>
+                                    )
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+                </Tabs>
+              )}
+
+              <div className="flex justify-end pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setIsDetailDialogOpen(false)}
+                >
+                  Cerrar
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </TabsContent>
+
+        <TabsContent value="inscripciones">
+          <InscripcionesTab />
+        </TabsContent>
+
+        <TabsContent value="promociones">
+          <PromocionesModule />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
