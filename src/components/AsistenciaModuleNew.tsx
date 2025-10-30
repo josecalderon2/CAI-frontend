@@ -43,7 +43,6 @@ import {
   BarChart3,
   AlertTriangle,
   Award,
-  TrendingDown,
   Download,
   Plus,
   Edit,
@@ -51,6 +50,8 @@ import {
   Shield,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { generarExcelResumenTrimestral } from '../utils/excelResumenTrimestral';
+import { generarExcelResumenMensual } from '../utils/excelResumenMensual';
 
 // Importar servicios refactorizados
 import {
@@ -196,42 +197,19 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
 
       // ✅ Usar endpoint seguro /cursos/mis-cursos (valida con token JWT)
       try {
-        console.log(`� Obteniendo cursos mediante token JWT autenticado`);
-        console.log(
-          `👤 Usuario: ${user.email || user.name} (ID: ${user.id}, Rol: ${user.role})`
-        );
-
         const cursos = await cursosService.getMisCursos();
         cursosRaw = Array.isArray(cursos) ? cursos : [];
-
-        console.log(
-          `✅ Cursos obtenidos exitosamente: ${cursosRaw.length} curso(s)`
-        );
-        if (cursosRaw.length > 0) {
-          console.log(
-            '📚 Cursos:',
-            cursosRaw.map((c) => ({
-              id: c.id_curso,
-              nombre: c.nombre,
-              asignaturas: c.asignaturas?.length || 0,
-            }))
-          );
-        }
       } catch (err: any) {
-        console.error('❌ Error al obtener cursos:', err);
         const errorMsg =
           err?.response?.data?.message || err.message || 'Error desconocido';
         const statusCode = err?.response?.status;
 
         if (statusCode === 401) {
           toast.error('Sesión expirada. Por favor, inicia sesión nuevamente.');
-          console.error('� Token JWT inválido o expirado');
         } else if (statusCode === 403) {
           toast.error('No tienes permisos para acceder a esta información.');
-          console.error('� Permisos insuficientes');
         } else {
           toast.error(`Error al cargar cursos: ${errorMsg}`);
-          console.error('⚠️ Error del servidor:', err?.response?.data);
         }
 
         setIsLoading(false);
@@ -269,47 +247,18 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                   }
                 : null,
             };
-            console.log(`📚 Curso "${curso.nombre}":`, {
-              asignaturas_recibidas: asignaturasArray.length,
-              primera_asignatura: primeraAsignatura?.nombre || 'N/A',
-              tiene_asignatura: !!primeraAsignatura,
-            });
+
             return cursoMapeado;
           });
 
-        const sinAsignaturas = cursosConAsignaturas.filter(
-          (c) => !c.asignatura
-        );
         const conAsignaturas = cursosConAsignaturas.filter((c) => c.asignatura);
-
-        console.log(
-          `📊 Resumen: ${cursosConAsignaturas.length} cursos totales`
-        );
-        console.log(`   ✅ Con asignaturas: ${conAsignaturas.length}`);
-        console.log(`   ⚠️  Sin asignaturas: ${sinAsignaturas.length}`);
-
-        if (sinAsignaturas.length > 0) {
-          console.warn(
-            '⚠️  Cursos sin asignaturas:',
-            sinAsignaturas.map((c) => c.nombre)
-          );
-        }
-
         cursosResponse = conAsignaturas as CursoResponse[];
       }
 
       if (cursosResponse.length === 0) {
-        console.warn('⚠️  No se encontraron cursos con asignaturas asignadas');
         toast.warning(
-          'No se encontraron cursos con asignaturas. Verifica que:\n' +
-            '1. Tengas cursos asignados como orientador\n' +
-            '2. Los cursos tengan asignaturas creadas\n' +
-            '3. Estés usando el ID de orientador correcto'
+          'No se encontraron cursos con asignaturas asignadas. Verifica que tengas cursos asignados como orientador.'
         );
-        console.log(
-          `💡 Para debug, ejecuta las consultas SQL en: consultas-debug-cursos.sql`
-        );
-        console.log(`   Reemplaza :id_orientador con: ${user.id}`);
       } else {
         toast.success(
           `${cursosResponse.length} curso(s) cargado(s) correctamente`
@@ -334,17 +283,12 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
               apellido: a.apellido,
             }));
           } catch (err) {
-            console.error(
-              `Error al cargar alumnos del curso ${curso.id_curso}:`,
-              err
-            );
             alumnosPorCursoTemp[curso.id_curso.toString()] = [];
           }
         }
       }
       setAlumnosPorCurso(alumnosPorCursoTemp);
     } catch (e) {
-      console.error('Error al cargar datos iniciales:', e);
       toast.error('Error al cargar los datos iniciales');
     } finally {
       setIsLoading(false);
@@ -356,7 +300,6 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
       const catalogo = await conductaService.getAllCatalogo();
       setCatalogoInfracciones(catalogo);
     } catch (e) {
-      console.error('Error al cargar catálogo de infracciones:', e);
       toast.error('Error al cargar el catálogo de infracciones');
     }
   };
@@ -423,9 +366,9 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
       );
       setAsistenciaActual({});
     } catch (e: any) {
-      console.error('Error al guardar asistencias:', e);
-      const errorMsg = e?.response?.data?.message || 'Error desconocido';
-      toast.error(`Error al guardar las asistencias: ${errorMsg}`);
+      const errorMsg =
+        e?.response?.data?.message || 'Error al guardar las asistencias';
+      toast.error(errorMsg);
     } finally {
       setIsLoading(false);
     }
@@ -474,7 +417,6 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
       });
       cargarCatalogoInfracciones();
     } catch (e: any) {
-      console.error('Error al crear infracción:', e);
       toast.error('Error al crear la infracción');
     } finally {
       setIsLoading(false);
@@ -494,63 +436,45 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
 
     setIsLoading(true);
     try {
-      console.log('🔍 Datos antes de procesar:', {
-        id_alumno_raw: nuevaConducta.id_alumno,
-        id_infraccion_raw: nuevaConducta.id_infraccion,
-        user_id_raw: user.id,
-        fecha_raw: nuevaConducta.fecha,
-      });
-
       // Validar que los IDs sean números válidos
       const idAlumno = parseInt(nuevaConducta.id_alumno, 10);
       const idInfraccion = parseInt(nuevaConducta.id_infraccion, 10);
       const idOrientador = parseInt(user.id, 10);
 
-      console.log('🔍 Datos después de parseInt:', {
-        idAlumno,
-        idInfraccion,
-        idOrientador,
-        isNaN_alumno: isNaN(idAlumno),
-        isNaN_infraccion: isNaN(idInfraccion),
-        isNaN_orientador: isNaN(idOrientador),
-      });
-
       if (isNaN(idAlumno) || isNaN(idInfraccion) || isNaN(idOrientador)) {
-        toast.error('Error en los datos: IDs inválidos');
-        console.error('IDs inválidos:', {
-          idAlumno,
-          idInfraccion,
-          idOrientador,
-        });
+        toast.error(
+          'Error al procesar los datos. Por favor, intenta nuevamente.'
+        );
         return;
       }
 
       // Buscar la infracción seleccionada para obtener la descripción
-      console.log('🔍 Buscando infracción:', {
-        id_buscado: nuevaConducta.id_infraccion,
-        tipo_id: typeof nuevaConducta.id_infraccion,
-        primer_catalogo_id: catalogoInfracciones[0]?.id_infraccion,
-        tipo_catalogo: typeof catalogoInfracciones[0]?.id_infraccion,
-        total_infracciones: catalogoInfracciones.length,
-      });
-
       const infraccionSeleccionada = catalogoInfracciones.find(
         (i) => String(i.id_infraccion) === String(nuevaConducta.id_infraccion)
       );
 
       if (!infraccionSeleccionada) {
-        toast.error('Error: Infracción no encontrada');
-        console.error('❌ Infracción no encontrada en catálogo');
+        toast.error(
+          'Infracción no encontrada. Por favor, selecciona una infracción válida.'
+        );
         return;
       }
+
+      // Calcular trimestre y año académico automáticamente
+      const fechaConducta = new Date(nuevaConducta.fecha);
+      const mesConducta = fechaConducta.getMonth() + 1;
+      const trimestreConducta = Math.ceil(mesConducta / 4);
+      const anioAcademicoConducta = fechaConducta.getFullYear().toString();
 
       // Construir el objeto con los campos obligatorios
       const conductaData: any = {
         id_alumno: idAlumno,
-        id_infraccion: idInfraccion, // ✅ Nombre correcto según backend
+        id_infraccion: idInfraccion,
         id_orientador: idOrientador,
         fecha: new Date(nuevaConducta.fecha).toISOString(),
-        descripcion: infraccionSeleccionada.descripcion, // ✅ Obligatorio
+        descripcion: infraccionSeleccionada.descripcion,
+        trimestre: trimestreConducta,
+        anio_academico: anioAcademicoConducta,
       };
 
       // Agregar campos opcionales solo si tienen valor válido
@@ -558,14 +482,6 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
         conductaData.observacion = nuevaConducta.observacion.trim();
       }
 
-      console.log('📝 Enviando conducta:', conductaData);
-      console.log('📝 Tipos:', {
-        id_alumno: typeof conductaData.id_alumno,
-        id_infraccion: typeof conductaData.id_infraccion,
-        id_orientador: typeof conductaData.id_orientador,
-        fecha: typeof conductaData.fecha,
-        descripcion: typeof conductaData.descripcion,
-      });
       await conductaService.create(conductaData);
 
       const alumno = alumnosDelCurso.find(
@@ -588,10 +504,9 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
       });
       setBusquedaAlumnoConducta('');
     } catch (e: any) {
-      console.error('Error al registrar conducta:', e);
-      console.error('RESPUESTA DEL BACKEND:', e?.response?.data);
-      const errorMsg = e?.response?.data?.message || 'Error desconocido';
-      toast.error(`Error al registrar la conducta: ${errorMsg}`);
+      const errorMsg =
+        e?.response?.data?.message || 'Error al registrar la conducta';
+      toast.error(errorMsg);
     } finally {
       setIsLoading(false);
     }
@@ -611,7 +526,6 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
       setResumenMensual(resumen);
       toast.success('Resumen mensual generado correctamente');
     } catch (e: any) {
-      console.error('Error al generar resumen mensual:', e);
       toast.error('Error al generar el resumen mensual');
     } finally {
       setIsLoading(false);
@@ -632,10 +546,10 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
       const resumen = await resumenService.getResumenTrimestral(
         filtroResumenTrimestral
       );
+
       setResumenTrimestral(resumen);
       toast.success('Resumen trimestral generado correctamente');
     } catch (e: any) {
-      console.error('Error al generar resumen trimestral:', e);
       toast.error('Error al generar el resumen trimestral');
     } finally {
       setIsLoading(false);
@@ -760,20 +674,31 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                 disabled={isLoading}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar curso" />
+                  <SelectValue placeholder="Selecciona el curso para tomar asistencia" />
                 </SelectTrigger>
                 <SelectContent>
-                  {cursosAsignados.map((curso) => (
-                    <SelectItem
-                      key={curso.id_curso}
-                      value={curso.id_curso.toString()}
-                    >
-                      {curso.nombre}
-                      {curso.seccion ? ` - ${curso.seccion}` : ''}
-                    </SelectItem>
-                  ))}
+                  {cursosAsignados.length === 0 ? (
+                    <div className="p-2 text-sm text-gray-500 text-center">
+                      No hay cursos disponibles
+                    </div>
+                  ) : (
+                    cursosAsignados.map((curso) => (
+                      <SelectItem
+                        key={curso.id_curso}
+                        value={curso.id_curso.toString()}
+                      >
+                        {curso.nombre}
+                        {curso.seccion ? ` - ${curso.seccion}` : ''}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
+              {!cursoSeleccionado && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Primero selecciona un curso para comenzar
+                </p>
+              )}
             </div>
             <div>
               <Label htmlFor="fecha">Fecha</Label>
@@ -782,7 +707,11 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                 value={fechaSeleccionada}
                 onChange={(e) => setFechaSeleccionada(e.target.value)}
                 disabled={isLoading}
+                max={new Date().toISOString().split('T')[0]}
               />
+              <p className="text-xs text-gray-500 mt-1">
+                El trimestre se calcula automáticamente según la fecha
+              </p>
             </div>
           </div>
         </CardContent>
@@ -1875,10 +1804,16 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <BarChart3 className="w-5 h-5" />
-            <span>Resumen Mensual de Asistencia</span>
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <BarChart3 className="w-5 h-5" />
+              <span>Resumen Mensual de Asistencia</span>
+            </div>
           </CardTitle>
+          <p className="text-sm text-gray-600 mt-2">
+            Consulta las asistencias justificadas, injustificadas y atrasos por
+            alumno en un mes específico
+          </p>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1894,7 +1829,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                 }
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar curso" />
+                  <SelectValue placeholder="Selecciona un curso" />
                 </SelectTrigger>
                 <SelectContent>
                   {cursosAsignados.map((curso) => (
@@ -1955,13 +1890,43 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
             <Download className="w-4 h-4 mr-2" />
             {isLoading ? 'Generando...' : 'Generar Resumen'}
           </Button>
+          {!filtroResumenMensual.cursoId && (
+            <Alert className="bg-blue-50 border-blue-200">
+              <AlertCircle className="h-4 w-4 text-blue-600" />
+              <AlertDescription className="text-blue-800">
+                Selecciona un curso, mes y año para generar el resumen mensual
+                de asistencia
+              </AlertDescription>
+            </Alert>
+          )}
         </CardContent>
       </Card>
 
       {resumenMensual && resumenMensual.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Resultado - Resumen Mensual</CardTitle>
+            <CardTitle className="flex items-center justify-between">
+              <span>Resultado - Resumen Mensual</span>
+              <Button
+                onClick={() => {
+                  generarExcelResumenMensual({
+                    resumen: resumenMensual,
+                    nombreCurso:
+                      cursosAsignados.find(
+                        (c) => c.id_curso === filtroResumenMensual.cursoId
+                      )?.nombre || 'Curso',
+                    mes: filtroResumenMensual.mes,
+                    anio: filtroResumenMensual.anio,
+                  });
+                  toast.success('Excel generado y descargado correctamente');
+                }}
+                variant="outline"
+                size="sm"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Exportar a Excel
+              </Button>
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-gray-500 mb-4">
@@ -1972,28 +1937,57 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
               | Mes: {filtroResumenMensual.mes} | Año:{' '}
               {filtroResumenMensual.anio}
             </p>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Alumno</TableHead>
-                  <TableHead>Justificadas (E)</TableHead>
-                  <TableHead>Injustificadas (SP)</TableHead>
-                  <TableHead>Atrasos (A)</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {resumenMensual.map((est: ResumenMensualResponse) => (
-                  <TableRow key={est.id_alumno}>
-                    <TableCell className="font-medium">
-                      {est.nombre} {est.apellido}
-                    </TableCell>
-                    <TableCell>{est.justificadas}</TableCell>
-                    <TableCell>{est.injustificadas}</TableCell>
-                    <TableCell>{est.atrasos}</TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-gray-100 hover:bg-gray-100">
+                    <TableHead className="font-bold text-gray-900">
+                      Alumno
+                    </TableHead>
+                    <TableHead className="text-center font-bold text-gray-900 bg-green-50">
+                      Justificadas (E)
+                    </TableHead>
+                    <TableHead className="text-center font-bold text-gray-900 bg-orange-50">
+                      Injustificadas (SP)
+                    </TableHead>
+                    <TableHead className="text-center font-bold text-gray-900 bg-red-50">
+                      Atrasos (A)
+                    </TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {resumenMensual.map((est: ResumenMensualResponse, index) => (
+                    <TableRow
+                      key={est.id_alumno}
+                      className={
+                        index % 2 === 0
+                          ? 'bg-white hover:bg-gray-50'
+                          : 'bg-gray-50 hover:bg-gray-100'
+                      }
+                    >
+                      <TableCell className="font-semibold text-gray-900">
+                        {est.nombre} {est.apellido}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <span className="inline-flex items-center justify-center px-3 py-1 rounded-full text-sm font-semibold bg-green-100 text-green-800 border border-green-200">
+                          {est.justificadas}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <span className="inline-flex items-center justify-center px-3 py-1 rounded-full text-sm font-semibold bg-orange-100 text-orange-800 border border-orange-200">
+                          {est.injustificadas}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <span className="inline-flex items-center justify-center px-3 py-1 rounded-full text-sm font-semibold bg-red-100 text-red-800 border border-red-200">
+                          {est.atrasos}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -2004,10 +1998,16 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Award className="w-5 h-5" />
-            <span>Resumen Trimestral con Nota de Conducta</span>
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Award className="w-5 h-5" />
+              <span>Resumen Trimestral con Nota de Conducta</span>
+            </div>
           </CardTitle>
+          <p className="text-sm text-gray-600 mt-2">
+            Consulta el resumen completo de asistencia e infracciones con el
+            cálculo automático de la nota de conducta
+          </p>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -2023,7 +2023,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                 }
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar curso" />
+                  <SelectValue placeholder="Selecciona un curso" />
                 </SelectTrigger>
                 <SelectContent>
                   {cursosAsignados.map((curso) => (
@@ -2084,19 +2084,55 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              La nota de conducta se calcula con la fórmula:{' '}
-              <strong>
-                10 - (ausencias injustificadas × 0.2) - Σ(infracciones × puntos)
-              </strong>
+              <div className="space-y-1">
+                <p>
+                  <strong>Fórmula de conducta:</strong> 10 - (SP × 0.2) - (Menos
+                  Graves × 1) - (Graves × 2) - (Muy Graves × 3)
+                </p>
+                <p className="text-xs text-gray-600 mt-1">
+                  SP = Ausencias Sin Permiso | Infracciones según gravedad:
+                  Menos Grave (-1), Grave (-2), Muy Grave (-3)
+                </p>
+              </div>
             </AlertDescription>
           </Alert>
+          {!filtroResumenTrimestral.cursoId && (
+            <Alert className="bg-blue-50 border-blue-200">
+              <AlertCircle className="h-4 w-4 text-blue-600" />
+              <AlertDescription className="text-blue-800">
+                Selecciona un curso, trimestre y año para generar el resumen con
+                la nota de conducta
+              </AlertDescription>
+            </Alert>
+          )}
         </CardContent>
       </Card>
 
       {resumenTrimestral && resumenTrimestral.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Resultado - Resumen Trimestral</CardTitle>
+            <CardTitle className="flex items-center justify-between">
+              <span>Resultado - Resumen Trimestral</span>
+              <Button
+                onClick={() => {
+                  generarExcelResumenTrimestral({
+                    resumen: resumenTrimestral,
+                    nombreCurso:
+                      cursosAsignados.find(
+                        (c) => c.id_curso === filtroResumenTrimestral.cursoId
+                      )?.nombre || 'Curso',
+                    trimestre: filtroResumenTrimestral.trimestre,
+                    anio: filtroResumenTrimestral.anio,
+                  });
+                  toast.success('Excel generado y descargado correctamente');
+                }}
+                variant="outline"
+                size="sm"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Exportar a Excel
+              </Button>
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-gray-500 mb-4">
@@ -2107,68 +2143,127 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
               | Trimestre: {filtroResumenTrimestral.trimestre} | Año:{' '}
               {filtroResumenTrimestral.anio}
             </p>
+
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Alumno</TableHead>
-                  <TableHead>Justificadas (E)</TableHead>
-                  <TableHead>Injustificadas (SP)</TableHead>
-                  <TableHead>Infracciones</TableHead>
-                  <TableHead>Nota de Conducta</TableHead>
+                  <TableHead className="text-center">
+                    Justificadas (P)
+                  </TableHead>
+                  <TableHead className="text-center">
+                    Injustificadas (SP)
+                  </TableHead>
+                  <TableHead className="text-center">Menos Graves</TableHead>
+                  <TableHead className="text-center">Graves</TableHead>
+                  <TableHead className="text-center">Muy Graves</TableHead>
+                  <TableHead className="text-center">Nota Conducta</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {resumenTrimestral.map((est: ResumenTrimestralResponse) => (
-                  <TableRow key={est.id_alumno}>
-                    <TableCell className="font-medium">
-                      {est.nombre} {est.apellido}
-                    </TableCell>
-                    <TableCell>{est.justificadas}</TableCell>
-                    <TableCell>{est.injustificadas}</TableCell>
-                    <TableCell>
-                      {est.infracciones.length > 0 ? (
-                        <div className="space-y-1">
-                          {est.infracciones.map(
-                            (inf: InfraccionResumen, idx: number) => (
-                              <div key={idx} className="text-xs">
-                                <Badge
-                                  variant="outline"
-                                  className={getBadgeColor(inf.categoria)}
-                                >
-                                  {inf.articulo}: {inf.cantidad}x (-{inf.puntos}{' '}
-                                  pts)
-                                </Badge>
-                              </div>
-                            )
+                {resumenTrimestral.map((est: ResumenTrimestralResponse) => {
+                  // Agrupar infracciones por categoría
+                  const infraccionesPorCategoria: Record<
+                    CategoriaInfraccion,
+                    InfraccionResumen[]
+                  > = {
+                    MENOS_GRAVE: [],
+                    GRAVE: [],
+                    MUY_GRAVE: [],
+                  };
+
+                  est.infracciones.forEach((inf) => {
+                    infraccionesPorCategoria[inf.categoria].push(inf);
+                  });
+
+                  // Construir texto de infracciones con formato legible
+                  const menosGravesTexto =
+                    infraccionesPorCategoria.MENOS_GRAVE.length > 0
+                      ? infraccionesPorCategoria.MENOS_GRAVE.map(
+                          (inf) =>
+                            `${inf.articulo}: ${inf.descripcion} (×${inf.cantidad ?? 1})`
+                        ).join(' | ')
+                      : '-';
+
+                  const gravesTexto =
+                    infraccionesPorCategoria.GRAVE.length > 0
+                      ? infraccionesPorCategoria.GRAVE.map(
+                          (inf) =>
+                            `${inf.articulo}: ${inf.descripcion} (×${inf.cantidad ?? 1})`
+                        ).join(' | ')
+                      : '-';
+
+                  const muyGravesTexto =
+                    infraccionesPorCategoria.MUY_GRAVE.length > 0
+                      ? infraccionesPorCategoria.MUY_GRAVE.map(
+                          (inf) =>
+                            `${inf.articulo}: ${inf.descripcion} (×${inf.cantidad ?? 1})`
+                        ).join(' | ')
+                      : '-';
+
+                  return (
+                    <TableRow key={est.id_alumno}>
+                      <TableCell className="font-medium">
+                        {est.nombre} {est.apellido}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {est.justificadas}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {est.injustificadas}
+                      </TableCell>
+                      <TableCell className="text-left text-sm">
+                        <div className="max-w-md">
+                          {menosGravesTexto === '-' ? (
+                            <span className="text-gray-400">-</span>
+                          ) : (
+                            <span className="text-yellow-700">
+                              {menosGravesTexto}
+                            </span>
                           )}
                         </div>
-                      ) : (
-                        <span className="text-gray-500 text-sm">
-                          Sin infracciones
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
+                      </TableCell>
+                      <TableCell className="text-left text-sm">
+                        <div className="max-w-md">
+                          {gravesTexto === '-' ? (
+                            <span className="text-gray-400">-</span>
+                          ) : (
+                            <span className="text-orange-700">
+                              {gravesTexto}
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-left text-sm">
+                        <div className="max-w-md">
+                          {muyGravesTexto === '-' ? (
+                            <span className="text-gray-400">-</span>
+                          ) : (
+                            <span className="text-red-700">
+                              {muyGravesTexto}
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center">
                         <Badge
                           variant={
-                            est.puntajeConducta >= 6 ? 'default' : 'destructive'
+                            (est.puntajeConducta ?? 10) >= 6
+                              ? 'default'
+                              : 'destructive'
                           }
                           className={
-                            est.puntajeConducta >= 6
-                              ? 'bg-green-600 hover:bg-green-700 text-lg px-3 py-1'
-                              : 'bg-red-600 hover:bg-red-700 text-lg px-3 py-1'
+                            (est.puntajeConducta ?? 10) >= 6
+                              ? 'bg-green-600 hover:bg-green-700'
+                              : 'bg-red-600 hover:bg-red-700'
                           }
                         >
-                          {est.puntajeConducta.toFixed(1)}
+                          {(est.puntajeConducta ?? 10).toFixed(1)}
                         </Badge>
-                        {est.puntajeConducta < 6 && (
-                          <TrendingDown className="w-4 h-4 text-red-600" />
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </CardContent>

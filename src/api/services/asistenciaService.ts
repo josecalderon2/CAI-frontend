@@ -123,6 +123,7 @@ export interface CreateConductaDto {
   id_infraccion: string;
   fecha: string;
   anio_academico: string;
+  trimestre: number; // ✅ AGREGADO: Necesario para filtrar en resumen trimestral (1, 2 o 3)
   observacion?: string;
 }
 
@@ -138,6 +139,7 @@ export interface ConductaResponse {
   id_infraccion: string;
   fecha: string;
   anio_academico: string;
+  trimestre?: number; // ✅ AGREGADO: Trimestre del registro (1, 2 o 3)
   observacion: string | null;
   creadoEn: string;
   infraccion?: InfraccionCatalogoResponse;
@@ -265,7 +267,7 @@ export interface ResumenTrimestralResponse {
   justificadas: number; // Ausencias con permiso (E)
   injustificadas: number; // Ausencias sin permiso (SP)
   infracciones: InfraccionResumen[];
-  puntajeConducta: number; // Calculado: 10 - (SP × 0.2) - (infracciones según categoría)
+  puntajeConducta?: number; // Calculado: 10 - (SP × 0.2) - (infracciones según categoría) | Opcional si backend no lo calcula
 }
 
 // Servicio de resúmenes
@@ -283,10 +285,24 @@ export const resumenService = {
   getResumenTrimestral: async (
     params: ResumenTrimestralDto
   ): Promise<ResumenTrimestralResponse[]> => {
-    const response = await api.get<ResumenTrimestralResponse[]>(
-      '/resumen/trimestral',
-      { params }
-    );
-    return response.data;
+    const response = await api.get<any>('/resumen/trimestral', { params });
+
+    // Mapear los nombres de campos del backend (snake_case) al frontend (camelCase)
+    return response.data.map((item: any) => ({
+      id_alumno: item.id_alumno,
+      nombre: item.nombre,
+      apellido: item.apellido,
+      justificadas: item.total_justificadas ?? item.justificadas ?? 0,
+      injustificadas: item.total_injustificadas ?? item.injustificadas ?? 0,
+      // ✅ Mapear correctamente el array de infracciones
+      infracciones: (item.infracciones ?? []).map((inf: any) => ({
+        categoria: inf.categoria,
+        articulo: inf.articulo,
+        descripcion: inf.descripcion,
+        puntos: inf.puntos,
+        cantidad: inf.cantidad ?? inf.conteo ?? 1, // ⚠️ Probar con ambos nombres posibles
+      })),
+      puntajeConducta: item.puntuacion_conducta ?? item.puntajeConducta ?? 10,
+    }));
   },
 };
