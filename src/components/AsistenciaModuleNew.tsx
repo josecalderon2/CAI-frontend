@@ -176,14 +176,12 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
     });
   const [nuevaConducta, setNuevaConducta] = useState<{
     id_alumno: string;
-    id_infraccion: string;
+    id_infracciones: string[]; // Cambiado a array para selección múltiple
     fecha: string;
-    observacion: string;
   }>({
     id_alumno: '',
-    id_infraccion: '',
+    id_infracciones: [], // Array vacío inicial
     fecha: new Date().toISOString().split('T')[0],
-    observacion: '',
   });
 
   // Estados para Historial
@@ -654,8 +652,11 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
   };
 
   const handleRegistrarConducta = async () => {
-    if (!nuevaConducta.id_alumno || !nuevaConducta.id_infraccion) {
-      toast.error('Debe seleccionar un alumno y una infracción');
+    if (
+      !nuevaConducta.id_alumno ||
+      nuevaConducta.id_infracciones.length === 0
+    ) {
+      toast.error('Debe seleccionar un alumno y al menos una infracción');
       return;
     }
 
@@ -668,24 +669,11 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
     try {
       // Validar que los IDs sean números válidos
       const idAlumno = parseInt(nuevaConducta.id_alumno, 10);
-      const idInfraccion = parseInt(nuevaConducta.id_infraccion, 10);
       const idOrientador = parseInt(user.id, 10);
 
-      if (isNaN(idAlumno) || isNaN(idInfraccion) || isNaN(idOrientador)) {
+      if (isNaN(idAlumno) || isNaN(idOrientador)) {
         toast.error(
           'Error al procesar los datos. Por favor, intenta nuevamente.'
-        );
-        return;
-      }
-
-      // Buscar la infracción seleccionada para obtener la descripción
-      const infraccionSeleccionada = catalogoInfracciones.find(
-        (i) => String(i.id_infraccion) === String(nuevaConducta.id_infraccion)
-      );
-
-      if (!infraccionSeleccionada) {
-        toast.error(
-          'Infracción no encontrada. Por favor, selecciona una infracción válida.'
         );
         return;
       }
@@ -696,46 +684,60 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
       const trimestreConducta = Math.ceil(mesConducta / 4);
       const anioAcademicoConducta = fechaConducta.getFullYear().toString();
 
-      // Construir el objeto con los campos obligatorios
-      const conductaData: any = {
-        id_alumno: idAlumno,
-        id_infraccion: idInfraccion,
-        id_orientador: idOrientador,
-        fecha: new Date(nuevaConducta.fecha).toISOString(),
-        descripcion: infraccionSeleccionada.descripcion,
-        trimestre: trimestreConducta,
-        anio_academico: anioAcademicoConducta,
-      };
+      // Crear un registro de conducta por cada infracción seleccionada
+      const promesas = nuevaConducta.id_infracciones.map(
+        async (idInfraccionStr) => {
+          const idInfraccion = parseInt(idInfraccionStr, 10);
 
-      // Agregar campos opcionales solo si tienen valor válido
-      if (nuevaConducta.observacion && nuevaConducta.observacion.trim()) {
-        conductaData.observacion = nuevaConducta.observacion.trim();
-      }
+          if (isNaN(idInfraccion)) {
+            throw new Error('ID de infracción inválido');
+          }
 
-      await conductaService.create(conductaData);
+          // Buscar la infracción para obtener la descripción
+          const infraccionSeleccionada = catalogoInfracciones.find(
+            (i) => String(i.id_infraccion) === String(idInfraccionStr)
+          );
+
+          if (!infraccionSeleccionada) {
+            throw new Error('Infracción no encontrada');
+          }
+
+          // Construir el objeto con los campos obligatorios
+          const conductaData: any = {
+            id_alumno: idAlumno,
+            id_infraccion: idInfraccion,
+            id_orientador: idOrientador,
+            fecha: new Date(nuevaConducta.fecha).toISOString(),
+            descripcion: infraccionSeleccionada.descripcion,
+            trimestre: trimestreConducta,
+            anio_academico: anioAcademicoConducta,
+          };
+
+          return conductaService.create(conductaData);
+        }
+      );
+
+      // Ejecutar todas las promesas en paralelo
+      await Promise.all(promesas);
 
       const alumno = alumnosDelCurso.find(
         (a) => a.id_alumno.toString() === nuevaConducta.id_alumno
       );
-      const infraccion = catalogoInfracciones.find(
-        (i) => i.id_infraccion === nuevaConducta.id_infraccion
-      );
 
       toast.success(
-        `Conducta registrada: ${alumno?.nombre} ${alumno?.apellido} - ${infraccion?.articulo}`
+        `${nuevaConducta.id_infracciones.length} conducta(s) registrada(s) para ${alumno?.nombre} ${alumno?.apellido}`
       );
 
       setModalConducta(false);
       setNuevaConducta({
         id_alumno: '',
-        id_infraccion: '',
+        id_infracciones: [],
         fecha: new Date().toISOString().split('T')[0],
-        observacion: '',
       });
       setBusquedaAlumnoConducta('');
     } catch (e: any) {
       const errorMsg =
-        e?.response?.data?.message || 'Error al registrar la conducta';
+        e?.response?.data?.message || 'Error al registrar las conductas';
       toast.error(errorMsg);
     } finally {
       setIsLoading(false);
@@ -961,10 +963,29 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
       .includes(busquedaAlumnoConducta.toLowerCase())
   );
 
-  // Obtener infracción seleccionada
-  const infraccionSeleccionada = catalogoInfracciones.find(
-    (inf) => inf.id_infraccion === nuevaConducta.id_infraccion
+  // Obtener infracciones seleccionadas
+  const infraccionesSeleccionadas = catalogoInfracciones.filter((inf) =>
+    nuevaConducta.id_infracciones.includes(String(inf.id_infraccion))
   );
+
+  // Handler para toggle de selección de infracción
+  const toggleInfraccion = (idInfraccion: string) => {
+    const infracciones = [...nuevaConducta.id_infracciones];
+    const index = infracciones.indexOf(idInfraccion);
+
+    if (index > -1) {
+      // Ya está seleccionada, removerla
+      infracciones.splice(index, 1);
+    } else {
+      // No está seleccionada, agregarla
+      infracciones.push(idInfraccion);
+    }
+
+    setNuevaConducta({
+      ...nuevaConducta,
+      id_infracciones: infracciones,
+    });
+  };
 
   // Render tabs
   const renderTomarAsistencia = () => (
@@ -1835,51 +1856,55 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                                 </Badge>
                               </div>
                               <div className="grid grid-cols-4 gap-2">
-                                {infracciones.map((infraccion) => (
-                                  <button
-                                    key={infraccion.id_infraccion}
-                                    type="button"
-                                    onClick={() =>
-                                      setNuevaConducta({
-                                        ...nuevaConducta,
-                                        id_infraccion: String(
-                                          infraccion.id_infraccion
-                                        ),
-                                      })
-                                    }
-                                    className={`w-full text-left p-3 rounded-lg border-2 transition-all hover:shadow-md ${
-                                      nuevaConducta.id_infraccion ===
+                                {infracciones.map((infraccion) => {
+                                  const isSelected =
+                                    nuevaConducta.id_infracciones.includes(
                                       String(infraccion.id_infraccion)
-                                        ? 'border-blue-500 bg-blue-50 shadow-md'
-                                        : 'border-gray-200 hover:border-gray-300 bg-white'
-                                    }`}
-                                  >
-                                    <div className="flex items-start justify-between">
-                                      <div className="flex-1">
-                                        <div className="flex items-center space-x-2 mb-1">
-                                          <Badge
-                                            variant="outline"
-                                            className="text-xs font-mono"
-                                          >
-                                            {infraccion.articulo}
-                                          </Badge>
-                                          <Badge
-                                            className={`text-xs ${getBadgeColor(infraccion.categoria)}`}
-                                          >
-                                            -{infraccion.puntos} pts
-                                          </Badge>
+                                    );
+                                  return (
+                                    <button
+                                      key={infraccion.id_infraccion}
+                                      type="button"
+                                      onClick={() =>
+                                        toggleInfraccion(
+                                          String(infraccion.id_infraccion)
+                                        )
+                                      }
+                                      className={`w-full text-left p-3 rounded-lg border-2 transition-all hover:shadow-md ${
+                                        isSelected
+                                          ? 'border-blue-500 bg-blue-50 shadow-md'
+                                          : 'border-gray-200 hover:border-gray-300 bg-white'
+                                      }`}
+                                    >
+                                      <div className="flex items-start justify-between">
+                                        <div className="flex-1">
+                                          <div className="flex items-center space-x-2 mb-1">
+                                            <Badge
+                                              variant="outline"
+                                              className="text-xs font-mono"
+                                            >
+                                              {infraccion.articulo}
+                                            </Badge>
+                                            <Badge
+                                              className={`text-xs ${getBadgeColor(infraccion.categoria)}`}
+                                            >
+                                              -{infraccion.puntos} pts
+                                            </Badge>
+                                          </div>
+                                          <p className="text-sm text-gray-700">
+                                            {infraccion.descripcion}
+                                          </p>
                                         </div>
-                                        <p className="text-sm text-gray-700">
-                                          {infraccion.descripcion}
-                                        </p>
+                                        <input
+                                          type="checkbox"
+                                          checked={isSelected}
+                                          onChange={() => {}}
+                                          className="w-5 h-5 text-blue-600 flex-shrink-0 ml-2 cursor-pointer"
+                                        />
                                       </div>
-                                      {nuevaConducta.id_infraccion ===
-                                        infraccion.id_infraccion && (
-                                        <CheckCircle className="w-5 h-5 text-blue-600 flex-shrink-0 ml-2" />
-                                      )}
-                                    </div>
-                                  </button>
-                                ))}
+                                    </button>
+                                  );
+                                })}
                               </div>
                             </div>
                           );
@@ -1891,51 +1916,55 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                         {infraccionesPorCategoria[categoriaFiltro].length >
                         0 ? (
                           infraccionesPorCategoria[categoriaFiltro].map(
-                            (infraccion) => (
-                              <button
-                                key={infraccion.id_infraccion}
-                                type="button"
-                                onClick={() =>
-                                  setNuevaConducta({
-                                    ...nuevaConducta,
-                                    id_infraccion: String(
-                                      infraccion.id_infraccion
-                                    ),
-                                  })
-                                }
-                                className={`w-full text-left p-3 rounded-lg border-2 transition-all hover:shadow-md ${
-                                  nuevaConducta.id_infraccion ===
+                            (infraccion) => {
+                              const isSelected =
+                                nuevaConducta.id_infracciones.includes(
                                   String(infraccion.id_infraccion)
-                                    ? 'border-blue-500 bg-blue-50 shadow-md'
-                                    : 'border-gray-200 hover:border-gray-300 bg-white'
-                                }`}
-                              >
-                                <div className="flex items-start justify-between">
-                                  <div className="flex-1">
-                                    <div className="flex items-center space-x-2 mb-1">
-                                      <Badge
-                                        variant="outline"
-                                        className="text-xs font-mono"
-                                      >
-                                        {infraccion.articulo}
-                                      </Badge>
-                                      <Badge
-                                        className={`text-xs ${getBadgeColor(infraccion.categoria)}`}
-                                      >
-                                        -{infraccion.puntos} pts
-                                      </Badge>
+                                );
+                              return (
+                                <button
+                                  key={infraccion.id_infraccion}
+                                  type="button"
+                                  onClick={() =>
+                                    toggleInfraccion(
+                                      String(infraccion.id_infraccion)
+                                    )
+                                  }
+                                  className={`w-full text-left p-3 rounded-lg border-2 transition-all hover:shadow-md ${
+                                    isSelected
+                                      ? 'border-blue-500 bg-blue-50 shadow-md'
+                                      : 'border-gray-200 hover:border-gray-300 bg-white'
+                                  }`}
+                                >
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex-1">
+                                      <div className="flex items-center space-x-2 mb-1">
+                                        <Badge
+                                          variant="outline"
+                                          className="text-xs font-mono"
+                                        >
+                                          {infraccion.articulo}
+                                        </Badge>
+                                        <Badge
+                                          className={`text-xs ${getBadgeColor(infraccion.categoria)}`}
+                                        >
+                                          -{infraccion.puntos} pts
+                                        </Badge>
+                                      </div>
+                                      <p className="text-sm text-gray-700">
+                                        {infraccion.descripcion}
+                                      </p>
                                     </div>
-                                    <p className="text-sm text-gray-700">
-                                      {infraccion.descripcion}
-                                    </p>
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={() => {}}
+                                      className="w-5 h-5 text-blue-600 flex-shrink-0 ml-2 cursor-pointer"
+                                    />
                                   </div>
-                                  {nuevaConducta.id_infraccion ===
-                                    infraccion.id_infraccion && (
-                                    <CheckCircle className="w-5 h-5 text-blue-600 flex-shrink-0 ml-2" />
-                                  )}
-                                </div>
-                              </button>
-                            )
+                                </button>
+                              );
+                            }
                           )
                         ) : (
                           <div className="col-span-2 text-center py-8 text-gray-500">
@@ -1949,34 +1978,85 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                     )}
                   </div>
 
-                  {/* Resumen de infracción seleccionada */}
-                  {infraccionSeleccionada && (
-                    <div className="bg-blue-50 border-2 border-blue-200 rounded-lg py-2 px-3">
-                      <div className="flex items-center gap-2 flex-nowrap">
-                        <AlertCircle className="h-4 w-4 text-blue-600 flex-shrink-0" />
-                        <span className="font-semibold text-sm whitespace-nowrap">
-                          Infracción:
-                        </span>
-                        <Badge
-                          variant="outline"
-                          className="font-mono text-xs whitespace-nowrap"
-                        >
-                          {infraccionSeleccionada.articulo}
-                        </Badge>
-                        <Badge
-                          className={`${getBadgeColor(infraccionSeleccionada.categoria)} text-xs whitespace-nowrap`}
-                        >
-                          {getCategoriaLabel(infraccionSeleccionada.categoria)}{' '}
-                          • -{infraccionSeleccionada.puntos} pts
-                        </Badge>
-                        <span className="text-sm text-gray-700">
-                          {infraccionSeleccionada.descripcion}
-                        </span>
+                  {/* Resumen de infracciones seleccionadas */}
+                  {infraccionesSeleccionadas.length > 0 && (
+                    <div className="bg-blue-50 border-2 border-blue-200 rounded-lg py-3 px-4">
+                      <div className="flex items-start gap-3">
+                        <AlertCircle className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold text-base text-blue-900">
+                              {infraccionesSeleccionadas.length} infracción(es)
+                              seleccionada(s)
+                            </span>
+                            <Badge variant="outline" className="text-sm">
+                              Total: -
+                              {infraccionesSeleccionadas.reduce(
+                                (acc, inf) => acc + inf.puntos,
+                                0
+                              )}{' '}
+                              pts
+                            </Badge>
+                          </div>
+
+                          {/* Vista compacta con scroll si hay muchas */}
+                          {infraccionesSeleccionadas.length <= 3 ? (
+                            // Mostrar todas si son pocas
+                            <div className="flex flex-wrap gap-2">
+                              {infraccionesSeleccionadas.map((infraccion) => (
+                                <div
+                                  key={infraccion.id_infraccion}
+                                  className="flex items-center gap-2 bg-white rounded px-2 py-1 border border-gray-200"
+                                >
+                                  <Badge
+                                    variant="outline"
+                                    className="font-mono text-xs"
+                                  >
+                                    {infraccion.articulo}
+                                  </Badge>
+                                  <span className="text-xs text-gray-700 max-w-[300px] truncate">
+                                    {infraccion.descripcion}
+                                  </span>
+                                  <Badge
+                                    className={`${getBadgeColor(infraccion.categoria)} text-xs ml-auto`}
+                                  >
+                                    -{infraccion.puntos} pts
+                                  </Badge>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            // Vista compacta con scroll si son muchas
+                            <div className="max-h-32 overflow-y-auto space-y-1 pr-2 custom-scrollbar">
+                              {infraccionesSeleccionadas.map((infraccion) => (
+                                <div
+                                  key={infraccion.id_infraccion}
+                                  className="flex items-center gap-2 bg-white rounded px-2 py-1.5 border border-gray-200 text-xs"
+                                >
+                                  <Badge
+                                    variant="outline"
+                                    className="font-mono text-[10px] flex-shrink-0"
+                                  >
+                                    {infraccion.articulo}
+                                  </Badge>
+                                  <span className="text-gray-700 flex-1 truncate">
+                                    {infraccion.descripcion}
+                                  </span>
+                                  <Badge
+                                    className={`${getBadgeColor(infraccion.categoria)} text-[10px] flex-shrink-0`}
+                                  >
+                                    -{infraccion.puntos}
+                                  </Badge>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}
 
-                  {/* Fecha y Observación */}
+                  {/* Fecha del Incidente */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="fecha-conducta">
@@ -2011,24 +2091,6 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="observacion-conducta">
-                      5. Observaciones (opcional)
-                    </Label>
-                    <Textarea
-                      id="observacion-conducta"
-                      placeholder="Detalles adicionales del incidente, contexto, testigos, etc..."
-                      value={nuevaConducta.observacion}
-                      onChange={(e) =>
-                        setNuevaConducta({
-                          ...nuevaConducta,
-                          observacion: e.target.value,
-                        })
-                      }
-                      rows={3}
-                    />
-                  </div>
-
                   {/* Botón de guardar */}
                   <div className="flex space-x-3 pt-4 border-t">
                     <Button
@@ -2037,9 +2099,8 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                         setModalConducta(false);
                         setNuevaConducta({
                           id_alumno: '',
-                          id_infraccion: '',
+                          id_infracciones: [],
                           fecha: new Date().toISOString().split('T')[0],
-                          observacion: '',
                         });
                         setBusquedaAlumnoConducta('');
                       }}
@@ -2052,7 +2113,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                       disabled={
                         isLoading ||
                         !nuevaConducta.id_alumno ||
-                        !nuevaConducta.id_infraccion ||
+                        nuevaConducta.id_infracciones.length === 0 ||
                         !nuevaConducta.fecha
                       }
                       className="flex-1"
