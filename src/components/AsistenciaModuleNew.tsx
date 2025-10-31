@@ -176,13 +176,16 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
     });
   const [nuevaConducta, setNuevaConducta] = useState<{
     id_alumno: string;
-    id_infracciones: string[]; // Cambiado a array para selección múltiple
+    id_infracciones: string[];
     fecha: string;
   }>({
     id_alumno: '',
-    id_infracciones: [], // Array vacío inicial
+    id_infracciones: [],
     fecha: new Date().toISOString().split('T')[0],
   });
+  const [modoEdicionInfraccion, setModoEdicionInfraccion] = useState(false);
+  const [infraccionEditando, setInfraccionEditando] =
+    useState<InfraccionCatalogoResponse | null>(null);
 
   // Estados para Historial
   const [historialAsistencias, setHistorialAsistencias] = useState<any[]>([]);
@@ -634,9 +637,22 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
 
     setIsLoading(true);
     try {
-      await conductaService.createCatalogo(nuevaInfraccion);
-      toast.success('Infracción creada correctamente en el catálogo');
+      if (modoEdicionInfraccion && infraccionEditando) {
+        // MODO EDICIÓN
+        await conductaService.updateCatalogo(
+          infraccionEditando.id_infraccion,
+          nuevaInfraccion
+        );
+        toast.success('Infracción actualizada correctamente');
+      } else {
+        // MODO CREACIÓN
+        await conductaService.createCatalogo(nuevaInfraccion);
+        toast.success('Infracción creada correctamente en el catálogo');
+      }
+
       setModalInfraccion(false);
+      setModoEdicionInfraccion(false);
+      setInfraccionEditando(null);
       setNuevaInfraccion({
         categoria: 'MENOS_GRAVE',
         articulo: '',
@@ -645,7 +661,49 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
       });
       cargarCatalogoInfracciones();
     } catch (e: any) {
-      toast.error('Error al crear la infracción');
+      const errorMsg =
+        e?.response?.data?.message ||
+        `Error al ${modoEdicionInfraccion ? 'actualizar' : 'crear'} la infracción`;
+      toast.error(errorMsg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAbrirEditarInfraccion = (
+    infraccion: InfraccionCatalogoResponse
+  ) => {
+    setNuevaInfraccion({
+      categoria: infraccion.categoria,
+      articulo: infraccion.articulo,
+      descripcion: infraccion.descripcion,
+      puntos: infraccion.puntos,
+    });
+
+    setInfraccionEditando(infraccion);
+    setModoEdicionInfraccion(true);
+    setModalInfraccion(true);
+  };
+
+  const handleEliminarInfraccion = async (idInfraccion: string) => {
+    if (
+      !confirm(
+        '¿Estás seguro de eliminar esta infracción del catálogo?\n\nADVERTENCIA: Si hay registros de conducta asociados a esta infracción, no podrá eliminarse.'
+      )
+    ) {
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await conductaService.deleteCatalogo(idInfraccion);
+      toast.success('Infracción eliminada correctamente del catálogo');
+      await cargarCatalogoInfracciones();
+    } catch (error: any) {
+      const errorMsg =
+        error?.response?.data?.message ||
+        'Error al eliminar la infracción. Puede que existan registros de conducta asociados.';
+      toast.error(errorMsg);
     } finally {
       setIsLoading(false);
     }
@@ -1635,11 +1693,11 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
           <CardTitle className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <FileText className="w-5 h-5" />
-              <span>Registros de Conducta</span>
+              <span>Registrar Conducta a Alumno</span>
             </div>
             <Dialog open={modalConducta} onOpenChange={setModalConducta}>
               <DialogTrigger asChild>
-                <Button size="sm">
+                <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
                   <Plus className="w-4 h-4 mr-2" />
                   Nuevo Registro
                 </Button>
@@ -2137,10 +2195,15 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-gray-500">
-            Los registros de conducta se mostrarán aquí una vez implementado el
-            listado.
-          </p>
+          <Alert className="bg-blue-50 border-blue-200">
+            <AlertCircle className="h-4 w-4 text-blue-600" />
+            <AlertDescription className="text-blue-800">
+              <strong>Registrar Conducta:</strong> Usa el botón "Nuevo Registro"
+              para asignar una o más infracciones del catálogo a un alumno
+              específico. Primero selecciona el curso, luego busca al alumno y
+              finalmente elige las infracciones que aplican.
+            </AlertDescription>
+          </Alert>
         </CardContent>
       </Card>
 
@@ -2162,16 +2225,26 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
               <DialogContent className="max-w-lg">
                 <DialogHeader>
                   <DialogTitle className="flex items-center space-x-2">
-                    <Plus className="w-5 h-5" />
-                    <span>Crear Nueva Infracción en el Catálogo</span>
+                    {modoEdicionInfraccion ? (
+                      <>
+                        <Edit className="w-5 h-5 text-blue-600" />
+                        <span>Editar Infracción del Catálogo</span>
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-5 h-5" />
+                        <span>Crear Nueva Infracción en el Catálogo</span>
+                      </>
+                    )}
                   </DialogTitle>
                 </DialogHeader>
                 <div className="space-y-6">
                   <Alert className="bg-blue-50 border-blue-200">
                     <AlertCircle className="h-4 w-4 text-blue-600" />
                     <AlertDescription>
-                      Las infracciones creadas aquí estarán disponibles para
-                      registrar conductas de alumnos.
+                      {modoEdicionInfraccion
+                        ? 'Modifica los datos de la infracción. Los cambios se aplicarán al catálogo.'
+                        : 'Las infracciones creadas aquí estarán disponibles para registrar conductas de alumnos.'}
                     </AlertDescription>
                   </Alert>
 
@@ -2358,6 +2431,8 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                       variant="outline"
                       onClick={() => {
                         setModalInfraccion(false);
+                        setModoEdicionInfraccion(false);
+                        setInfraccionEditando(null);
                         setNuevaInfraccion({
                           categoria: 'MENOS_GRAVE',
                           articulo: '',
@@ -2382,12 +2457,16 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                       {isLoading ? (
                         <>
                           <Clock className="w-4 h-4 mr-2 animate-spin" />
-                          Creando...
+                          {modoEdicionInfraccion
+                            ? 'Actualizando...'
+                            : 'Creando...'}
                         </>
                       ) : (
                         <>
                           <CheckCircle className="w-4 h-4 mr-2" />
-                          Crear Infracción
+                          {modoEdicionInfraccion
+                            ? 'Actualizar Infracción'
+                            : 'Crear Infracción'}
                         </>
                       )}
                     </Button>
@@ -2429,10 +2508,24 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                     <Badge variant="secondary">-{infraccion.puntos} pts</Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="sm">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleAbrirEditarInfraccion(infraccion)}
+                      disabled={isLoading}
+                      title="Editar infracción"
+                    >
                       <Edit className="w-4 h-4" />
                     </Button>
-                    <Button variant="ghost" size="sm">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        handleEliminarInfraccion(infraccion.id_infraccion)
+                      }
+                      disabled={isLoading}
+                      title="Eliminar infracción"
+                    >
                       <Trash2 className="w-4 h-4 text-red-600" />
                     </Button>
                   </TableCell>
