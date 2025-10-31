@@ -223,7 +223,15 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
   // Cargar asistencias guardadas cuando cambia curso o fecha
   useEffect(() => {
     if (cursoSeleccionado && fechaSeleccionada) {
+      console.log('🔄 Ejecutando carga de asistencias...', {
+        curso: cursoSeleccionado,
+        fecha: fechaSeleccionada,
+      });
       cargarAsistenciasGuardadas();
+    } else {
+      // Si no hay curso o fecha seleccionada, limpiar estados
+      setAsistenciasGuardadas({});
+      setAsistenciaActual({});
     }
   }, [cursoSeleccionado, fechaSeleccionada]);
 
@@ -353,11 +361,18 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
 
       if (!cursoActual?.id_curso) return;
 
+      console.log('🔄 Cargando asistencias para:', {
+        curso: cursoActual.nombre,
+        fecha: fechaSeleccionada,
+      });
+
       // Buscar asistencias del curso en la fecha seleccionada
       const asistencias = await asistenciaService.buscarConFiltros({
         cursoId: cursoActual.id_curso,
         fecha: fechaSeleccionada,
       });
+
+      console.log('📊 Asistencias encontradas:', asistencias);
 
       // Mapear asistencias por id_alumno
       const asistenciasMap: Record<
@@ -379,13 +394,48 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
 
       setAsistenciasGuardadas(asistenciasMap);
 
-      // NO pre-cargar el estado actual - dejar que se muestre solo el guardado
-      // Solo limpiar el estado actual para evitar conflictos
+      // Limpiar cualquier estado actual que pueda interferir
       setAsistenciaActual({});
-    } catch (e) {
-      // Si hay error o no hay asistencias, simplemente no hacer nada
+
+      console.log(
+        '✅ Asistencias guardadas cargadas:',
+        Object.keys(asistenciasMap).length
+      );
+      if (Object.keys(asistenciasMap).length > 0) {
+        console.log('📋 Primer registro:', Object.values(asistenciasMap)[0]);
+      }
+    } catch (e: any) {
+      console.error('❌ Error al cargar asistencias guardadas:', e);
+      console.error('📋 Detalles del error:', {
+        status: e?.response?.status,
+        data: e?.response?.data,
+        message: e?.message,
+      });
+      
+      // Mostrar mensaje específico según el error
+      const errorMsg = e?.response?.data?.message || e.message;
+      const statusCode = e?.response?.status;
+      
+      if (statusCode === 500) {
+        console.error('🔴 Error 500 del servidor. Posibles causas:');
+        console.error('   - El backend no está corriendo');
+        console.error('   - Error en la base de datos');
+        console.error('   - Error en el código del servicio backend');
+        toast.error(
+          'Error del servidor al cargar asistencias guardadas. Puedes marcar asistencia normalmente y guardar.',
+          { duration: 6000 }
+        );
+      } else if (statusCode === 404) {
+        // No hay asistencias guardadas para esta fecha (normal)
+        console.log('ℹ️ No hay asistencias guardadas para esta fecha');
+        toast.info('No hay asistencias previas para esta fecha');
+      } else {
+        toast.warning(`Error al cargar asistencias previas: ${errorMsg}`);
+      }
+      
+      // Limpiar estados pero no bloquear la funcionalidad
       setAsistenciasGuardadas({});
-      setAsistenciaActual({});
+      // NO limpiar asistenciaActual para que se mantengan los cambios del usuario
     }
   };
 
@@ -804,13 +854,36 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
   );
 
   const contarEstados = () => {
-    const estados = Object.values(asistenciaActual);
+    let presentes = 0;
+    let ausentes = 0;
+    let tardes = 0;
+    let marcados = 0;
+
+    alumnosDelCurso.forEach((alumno) => {
+      const idAlumno = alumno.id_alumno.toString();
+      const estadoActual = asistenciaActual[idAlumno];
+      const asistenciaGuardada = asistenciasGuardadas[idAlumno];
+
+      // Determinar el estado a mostrar (prioridad: actual > guardado)
+      const estadoAMostrar = estadoActual || asistenciaGuardada;
+
+      if (estadoAMostrar) {
+        marcados++;
+        if (estadoAMostrar.estado === 'P' || estadoAMostrar.estado === 'E') {
+          presentes++;
+        } else if (estadoAMostrar.estado === 'A') {
+          ausentes++;
+        } else if (estadoAMostrar.estado === 'SP') {
+          tardes++;
+        }
+      }
+    });
+
     return {
-      presentes: estados.filter((a) => a.estado === 'P' || a.estado === 'E')
-        .length,
-      ausentes: estados.filter((a) => a.estado === 'A').length,
-      tardes: estados.filter((a) => a.estado === 'SP').length,
-      sinMarcar: alumnosDelCurso.length - estados.length,
+      presentes,
+      ausentes,
+      tardes,
+      sinMarcar: alumnosDelCurso.length - marcados,
     };
   };
 
@@ -1001,7 +1074,36 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                   <Save className="w-4 h-4 mr-2" />
                   {isLoading
                     ? 'Guardando...'
-                    : `Guardar Asistencia (${Object.entries(asistenciaActual).filter(([id]) => !asistenciasGuardadas[id]).length} nuevo${Object.entries(asistenciaActual).filter(([id]) => !asistenciasGuardadas[id]).length !== 1 ? 's' : ''})`}
+                    : (() => {
+                        const nuevos = Object.entries(asistenciaActual).filter(
+                          ([id]) => !asistenciasGuardadas[id]
+                        ).length;
+                        const modificados = Object.entries(
+                          asistenciaActual
+                        ).filter(([id]) => {
+                          const guardado = asistenciasGuardadas[id];
+                          const actual = asistenciaActual[id];
+                          return (
+                            guardado &&
+                            actual &&
+                            (guardado.estado !== actual.estado ||
+                              (guardado.observacion || '') !==
+                                actual.observacion)
+                          );
+                        }).length;
+
+                        const partes = [];
+                        if (nuevos > 0)
+                          partes.push(
+                            `${nuevos} nuevo${nuevos !== 1 ? 's' : ''}`
+                          );
+                        if (modificados > 0)
+                          partes.push(
+                            `${modificados} modificado${modificados !== 1 ? 's' : ''}`
+                          );
+
+                        return `Guardar (${partes.join(', ')})`;
+                      })()}
                 </Button>
                 <Button
                   onClick={() => setMostrarEstados(!mostrarEstados)}
@@ -1131,16 +1233,24 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                   const estadoActual =
                     asistenciaActual[alumno.id_alumno.toString()];
 
-                  // Determinar el estado a mostrar
-                  // Si hay cambio pendiente (estadoActual), mostrar ese
-                  // Si no hay cambio pero hay guardado, mostrar el guardado
-                  const estadoAMostrar = estadoActual || asistenciaGuardada;
+                  // CORREGIDO: Determinar el estado a mostrar correctamente
+                  // Prioridad: estado temporal > estado guardado > sin estado
+                  const estadoAMostrar = estadoActual
+                    ? estadoActual
+                    : asistenciaGuardada
+                      ? {
+                          estado: asistenciaGuardada.estado,
+                          observacion: asistenciaGuardada.observacion || '',
+                        }
+                      : null;
 
-                  // Detectar si hay un cambio pendiente de guardar
+                  // Detectar tipos de cambios
+                  const esNuevo = estadoActual && !asistenciaGuardada;
                   const hayModificacion =
                     estadoActual &&
                     asistenciaGuardada &&
                     estadoActual.estado !== asistenciaGuardada.estado;
+                  const estaGuardado = asistenciaGuardada && !estadoActual;
 
                   const getEstadoLabel = (estado: EstadoAsistencia) => {
                     switch (estado) {
@@ -1157,46 +1267,86 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                     }
                   };
 
+                  // Función para obtener el color del borde del card según el estado
+                  const getCardBorderColor = () => {
+                    if (hayModificacion) {
+                      return 'bg-yellow-50 border-yellow-400 hover:bg-yellow-100 shadow-md';
+                    }
+                    if (esNuevo) {
+                      return 'bg-blue-50 border-blue-300 hover:bg-blue-100 shadow-md';
+                    }
+                    if (estaGuardado) {
+                      // Colorear según el estado guardado
+                      switch (asistenciaGuardada.estado) {
+                        case 'P':
+                          return 'bg-green-50 border-green-400 hover:bg-green-100 shadow-sm';
+                        case 'A':
+                          return 'bg-orange-50 border-orange-400 hover:bg-orange-100 shadow-sm';
+                        case 'SP':
+                          return 'bg-red-50 border-red-400 hover:bg-red-100 shadow-sm';
+                        case 'E':
+                          return 'bg-blue-50 border-blue-400 hover:bg-blue-100 shadow-sm';
+                        default:
+                          return 'bg-gray-50 border-gray-200 hover:bg-gray-100';
+                      }
+                    }
+                    return 'bg-gray-50 border-gray-200 hover:bg-gray-100';
+                  };
+
                   return (
                     <div
                       key={alumno.id_alumno}
-                      className={`flex items-center justify-between p-4 rounded-lg transition-colors border-2 ${
-                        hayModificacion
-                          ? 'bg-yellow-50 border-yellow-400 hover:bg-yellow-100'
-                          : asistenciaGuardada
-                            ? 'bg-green-50 border-green-200 hover:bg-green-100'
-                            : estadoActual
-                              ? 'bg-blue-50 border-blue-200 hover:bg-blue-100'
-                              : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
-                      }`}
+                      className={`flex items-center justify-between p-4 rounded-lg transition-all duration-300 border-2 ${getCardBorderColor()}`}
                     >
-                      <div className="flex-1 flex items-center gap-2">
-                        <p className="font-medium">
+                      <div className="flex-1 flex items-center gap-3">
+                        <p className="font-medium text-gray-900">
                           {alumno.nombre} {alumno.apellido}
                         </p>
+
+                        {/* Badge prominente del estado actual */}
+                        {estadoAMostrar?.estado && (
+                          <Badge
+                            className={`text-base font-extrabold px-4 py-1.5 shadow-md ${
+                              estadoAMostrar.estado === 'P'
+                                ? 'bg-green-600 hover:bg-green-700 text-white border-2 border-green-800'
+                                : estadoAMostrar.estado === 'A'
+                                  ? 'bg-orange-600 hover:bg-orange-700 text-white border-2 border-orange-800'
+                                  : estadoAMostrar.estado === 'SP'
+                                    ? 'bg-red-600 hover:bg-red-700 text-white border-2 border-red-800'
+                                    : estadoAMostrar.estado === 'E'
+                                      ? 'bg-blue-600 hover:bg-blue-700 text-white border-2 border-blue-800'
+                                      : 'bg-gray-600 text-white'
+                            }`}
+                          >
+                            {estadoAMostrar.estado === 'P' && '✅ PRESENTE'}
+                            {estadoAMostrar.estado === 'A' && '⏰ ATRASO'}
+                            {estadoAMostrar.estado === 'SP' && '❌ SIN PERMISO'}
+                            {estadoAMostrar.estado === 'E' && '📋 CON PERMISO'}
+                          </Badge>
+                        )}
+
                         {hayModificacion && (
                           <Badge
                             variant="outline"
-                            className="bg-yellow-100 text-yellow-800 border-yellow-400 text-xs font-semibold"
+                            className="bg-yellow-100 text-yellow-800 border-yellow-400 text-xs font-semibold animate-pulse"
                           >
-                            ⚠ Modificado - Guardar cambios
+                            ⚠ Modificado
                           </Badge>
                         )}
-                        {asistenciaGuardada && !estadoActual && (
+                        {esNuevo && (
+                          <Badge
+                            variant="outline"
+                            className="bg-blue-100 text-blue-800 border-blue-300 text-xs font-semibold"
+                          >
+                            📝 Nuevo
+                          </Badge>
+                        )}
+                        {estaGuardado && !estadoAMostrar && (
                           <Badge
                             variant="outline"
                             className="bg-green-100 text-green-800 border-green-300 text-xs"
                           >
-                            ✓ Guardado:{' '}
-                            {getEstadoLabel(asistenciaGuardada.estado)}
-                          </Badge>
-                        )}
-                        {estadoActual && !asistenciaGuardada && (
-                          <Badge
-                            variant="outline"
-                            className="bg-blue-100 text-blue-800 border-blue-300 text-xs"
-                          >
-                            📝 Pendiente de guardar
+                            ✓ {getEstadoLabel(asistenciaGuardada.estado)}
                           </Badge>
                         )}
                       </div>
@@ -1213,14 +1363,16 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                             onClick={() =>
                               handleEstadoChange(alumno.id_alumno, 'P')
                             }
-                            className={
+                            className={`transition-all duration-200 ${
                               estadoAMostrar?.estado === 'P'
-                                ? 'bg-green-600 hover:bg-green-700 text-white border-2 border-green-700'
-                                : 'border-green-300 text-green-700 hover:bg-green-50 hover:border-green-400'
-                            }
+                                ? 'bg-green-600 hover:bg-green-700 text-white border-2 border-green-800 shadow-lg scale-105 font-bold'
+                                : 'border-green-300 text-green-700 hover:bg-green-50 hover:border-green-400 hover:scale-105'
+                            }`}
                             title="Presente"
                           >
-                            <CheckCircle className="w-4 h-4" />
+                            <CheckCircle
+                              className={`w-4 h-4 ${estadoAMostrar?.estado === 'P' ? 'animate-pulse' : ''}`}
+                            />
                           </Button>
                           <Button
                             size="sm"
@@ -1232,14 +1384,16 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                             onClick={() =>
                               handleEstadoChange(alumno.id_alumno, 'A')
                             }
-                            className={
+                            className={`transition-all duration-200 ${
                               estadoAMostrar?.estado === 'A'
-                                ? 'bg-orange-600 hover:bg-orange-700 text-white border-2 border-orange-700'
-                                : 'border-orange-300 text-orange-700 hover:bg-orange-50 hover:border-orange-400'
-                            }
+                                ? 'bg-orange-600 hover:bg-orange-700 text-white border-2 border-orange-800 shadow-lg scale-105 font-bold'
+                                : 'border-orange-300 text-orange-700 hover:bg-orange-50 hover:border-orange-400 hover:scale-105'
+                            }`}
                             title="Atraso/Tarde"
                           >
-                            <Clock className="w-4 h-4" />
+                            <Clock
+                              className={`w-4 h-4 ${estadoAMostrar?.estado === 'A' ? 'animate-pulse' : ''}`}
+                            />
                           </Button>
                           <Button
                             size="sm"
@@ -1251,14 +1405,16 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                             onClick={() =>
                               handleEstadoChange(alumno.id_alumno, 'SP')
                             }
-                            className={
+                            className={`transition-all duration-200 ${
                               estadoAMostrar?.estado === 'SP'
-                                ? 'bg-red-600 hover:bg-red-700 text-white border-2 border-red-700'
-                                : 'border-red-300 text-red-700 hover:bg-red-50 hover:border-red-400'
-                            }
+                                ? 'bg-red-600 hover:bg-red-700 text-white border-2 border-red-800 shadow-lg scale-105 font-bold'
+                                : 'border-red-300 text-red-700 hover:bg-red-50 hover:border-red-400 hover:scale-105'
+                            }`}
                             title="Ausente Sin Permiso"
                           >
-                            <XCircle className="w-4 h-4" />
+                            <XCircle
+                              className={`w-4 h-4 ${estadoAMostrar?.estado === 'SP' ? 'animate-pulse' : ''}`}
+                            />
                           </Button>
                           <Button
                             size="sm"
@@ -1270,14 +1426,16 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                             onClick={() =>
                               handleEstadoChange(alumno.id_alumno, 'E')
                             }
-                            className={
+                            className={`transition-all duration-200 ${
                               estadoAMostrar?.estado === 'E'
-                                ? 'bg-blue-600 hover:bg-blue-700 text-white border-2 border-blue-700'
-                                : 'border-blue-300 text-blue-700 hover:bg-blue-50 hover:border-blue-400'
-                            }
+                                ? 'bg-blue-600 hover:bg-blue-700 text-white border-2 border-blue-800 shadow-lg scale-105 font-bold'
+                                : 'border-blue-300 text-blue-700 hover:bg-blue-50 hover:border-blue-400 hover:scale-105'
+                            }`}
                             title="Ausente Justificado/Con Permiso"
                           >
-                            <Shield className="w-4 h-4" />
+                            <Shield
+                              className={`w-4 h-4 ${estadoAMostrar?.estado === 'E' ? 'animate-pulse' : ''}`}
+                            />
                           </Button>
                         </div>
 

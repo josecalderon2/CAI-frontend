@@ -117,7 +117,7 @@ export const asistenciaService = {
     return response.data;
   },
 
-  // 🆕 Obtener historial de un alumno
+  // 🆕 Obtener historial de cambios de un alumno
   getHistorialAlumno: async (
     idAlumno: string,
     fechaDesde?: string,
@@ -131,6 +131,27 @@ export const asistenciaService = {
       `/asistencia/historial/alumno/${idAlumno}?${queryParams.toString()}`
     );
     return response.data;
+  },
+
+  // 🆕 Verificar estado de asistencia de un alumno en una fecha específica
+  verificarEstadoAlumno: async (
+    idAlumno: number,
+    fecha: string
+  ): Promise<{
+    id_asistencia: string;
+    estado: EstadoAsistencia;
+    observacion: string | null;
+  } | null> => {
+    try {
+      const response = await api.get<{
+        id_asistencia: string;
+        estado: EstadoAsistencia;
+        observacion: string | null;
+      } | null>(`/asistencia/verificar/${idAlumno}/${fecha}`);
+      return response.data;
+    } catch (error) {
+      return null;
+    }
   },
 };
 
