@@ -258,6 +258,19 @@ export interface ConductaResponse {
   infraccion?: InfraccionCatalogoResponse;
 }
 
+// Response de conducta con relaciones completas
+export interface ConductaConRelaciones extends ConductaResponse {
+  alumno: {
+    nombre: string;
+    apellido: string;
+  };
+  infraccion: InfraccionCatalogoResponse;
+  orientador?: {
+    nombre: string;
+    apellido: string;
+  };
+}
+
 // Servicio de conducta
 export const conductaService = {
   createCatalogo: async (

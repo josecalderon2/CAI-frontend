@@ -70,6 +70,7 @@ import {
   type InfraccionResumen,
   type CreateInfraccionCatalogoDto,
   type CategoriaInfraccion,
+  type ConductaConRelaciones,
 } from '../api/services/asistenciaService';
 import { cursosService } from '../api/services/cursosService';
 
@@ -187,6 +188,25 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
   const [infraccionEditando, setInfraccionEditando] =
     useState<InfraccionCatalogoResponse | null>(null);
 
+  // Estados para Listado de Registros de Conducta
+  const [registrosConducta, setRegistrosConducta] = useState<any[]>([]);
+  const [modalEditarConducta, setModalEditarConducta] = useState(false);
+  const [conductaEditando, setConductaEditando] = useState<{
+    id_conducta: string;
+    id_alumno: number;
+    nombreAlumno: string;
+    id_infraccion: string;
+    fecha: string;
+    observacion: string;
+  } | null>(null);
+  const [busquedaRegistroConducta, setBusquedaRegistroConducta] = useState('');
+
+  // Estados para Detalle de Alumno con Infracciones
+  const [modalDetalleAlumno, setModalDetalleAlumno] = useState(false);
+  const [alumnoDetalleSeleccionado, setAlumnoDetalleSeleccionado] =
+    useState<AlumnoResponse | null>(null);
+  const [infraccionesAlumno, setInfraccionesAlumno] = useState<any[]>([]);
+
   // Estados para Historial
   const [historialAsistencias, setHistorialAsistencias] = useState<any[]>([]);
   const [filtroHistorial, setFiltroHistorial] = useState({
@@ -222,6 +242,13 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
       cargarCatalogoInfracciones();
     }
   }, [user?.id, activeTab]);
+
+  // Cargar registros de conducta cuando cambie el curso
+  useEffect(() => {
+    if (activeTab === 'conducta' && cursoSeleccionado) {
+      cargarRegistrosConducta();
+    }
+  }, [cursoSeleccionado, activeTab]);
 
   // Cargar asistencias guardadas cuando cambia curso o fecha
   useEffect(() => {
@@ -709,6 +736,135 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
     }
   };
 
+  // Funciones para gestión de registros de conducta
+  const cargarRegistrosConducta = async () => {
+    if (!cursoSeleccionado) return;
+
+    setIsLoading(true);
+    try {
+      const registros = await conductaService.getAll();
+
+      console.log('📋 DEBUG - Registros de conducta del backend:', registros);
+      console.log('📋 DEBUG - Primer registro:', registros[0]);
+
+      // Filtrar registros por los alumnos del curso seleccionado
+      const alumnosIds = alumnosDelCurso.map((a) => a.id_alumno);
+      const registrosFiltrados = registros.filter((r) =>
+        alumnosIds.includes(parseInt(r.id_alumno))
+      );
+
+      console.log(
+        '📋 DEBUG - Registros filtrados por curso:',
+        registrosFiltrados.length
+      );
+      setRegistrosConducta(registrosFiltrados);
+    } catch (e: any) {
+      console.error('Error al cargar registros de conducta:', e);
+      toast.error('Error al cargar registros de conducta');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAbrirEditarConducta = (registro: any) => {
+    const alumno = alumnosDelCurso.find(
+      (a) => a.id_alumno === parseInt(registro.id_alumno)
+    );
+
+    setConductaEditando({
+      id_conducta: registro.id_conducta,
+      id_alumno: parseInt(registro.id_alumno),
+      nombreAlumno: alumno
+        ? `${alumno.nombre} ${alumno.apellido}`
+        : 'Desconocido',
+      id_infraccion: registro.id_infraccion,
+      fecha: registro.fecha,
+      observacion: registro.observacion || '',
+    });
+    setModalEditarConducta(true);
+  };
+
+  const handleGuardarEdicionConducta = async () => {
+    if (!conductaEditando) return;
+
+    if (!conductaEditando.id_infraccion) {
+      toast.error('Por favor selecciona una infracción');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await conductaService.update(conductaEditando.id_conducta, {
+        id_infraccion: conductaEditando.id_infraccion,
+        observacion: conductaEditando.observacion || undefined,
+      });
+
+      toast.success('Registro de conducta actualizado correctamente');
+      setModalEditarConducta(false);
+      setConductaEditando(null);
+      await cargarRegistrosConducta();
+    } catch (e: any) {
+      const errorMsg =
+        e?.response?.data?.message ||
+        'Error al actualizar el registro de conducta';
+      toast.error(errorMsg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEliminarConducta = async (idConducta: string) => {
+    if (
+      !confirm(
+        '¿Estás seguro de eliminar este registro de conducta?\n\nEsta acción no se puede deshacer.'
+      )
+    ) {
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await conductaService.delete(idConducta);
+      toast.success('Registro de conducta eliminado correctamente');
+      await cargarRegistrosConducta();
+
+      // Si estamos viendo el detalle del alumno, recargar sus infracciones
+      if (alumnoDetalleSeleccionado) {
+        await handleVerDetalleAlumno(alumnoDetalleSeleccionado);
+      }
+    } catch (error: any) {
+      const errorMsg =
+        error?.response?.data?.message ||
+        'Error al eliminar el registro de conducta';
+      toast.error(errorMsg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Función para abrir el detalle de un alumno y cargar sus infracciones
+  const handleVerDetalleAlumno = async (alumno: AlumnoResponse) => {
+    setAlumnoDetalleSeleccionado(alumno);
+    setIsLoading(true);
+
+    try {
+      const infracciones = await conductaService.getByAlumno(
+        alumno.id_alumno.toString()
+      );
+      console.log(
+        `📋 Infracciones de ${alumno.nombre} ${alumno.apellido}:`,
+        infracciones
+      );
+      setInfraccionesAlumno(infracciones);
+      setModalDetalleAlumno(true);
+    } catch (e: any) {
+      console.error('Error al cargar infracciones del alumno:', e);
+      toast.error('Error al cargar infracciones del alumno');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleRegistrarConducta = async () => {
     if (
       !nuevaConducta.id_alumno ||
@@ -1043,6 +1199,38 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
       ...nuevaConducta,
       id_infracciones: infracciones,
     });
+  };
+
+  // Helper para obtener resumen de infracciones de un alumno
+  const obtenerResumenInfraccionesAlumno = (idAlumno: number) => {
+    const conductasAlumno = registrosConducta.filter(
+      (r) => parseInt(r.id_alumno) === idAlumno
+    );
+
+    const conteo = {
+      total: conductasAlumno.length,
+      menosGraves: 0,
+      graves: 0,
+      muyGraves: 0,
+    };
+
+    conductasAlumno.forEach((conducta) => {
+      if (conducta.infraccion) {
+        switch (conducta.infraccion.categoria) {
+          case 'MENOS_GRAVE':
+            conteo.menosGraves++;
+            break;
+          case 'GRAVE':
+            conteo.graves++;
+            break;
+          case 'MUY_GRAVE':
+            conteo.muyGraves++;
+            break;
+        }
+      }
+    });
+
+    return conteo;
   };
 
   // Render tabs
@@ -2206,6 +2394,399 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
           </Alert>
         </CardContent>
       </Card>
+
+      {/* Listado de Alumnos con Infracciones */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Users className="w-5 h-5" />
+              <span>Alumnos del Curso - Registro de Infracciones</span>
+            </div>
+            {cursoSeleccionado && alumnosDelCurso.length > 0 && (
+              <Badge variant="outline" className="text-sm">
+                {alumnosDelCurso.length} alumno(s)
+              </Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {!cursoSeleccionado ? (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Selecciona un curso para ver los alumnos y sus infracciones.
+              </AlertDescription>
+            </Alert>
+          ) : alumnosDelCurso.length === 0 ? (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                No hay alumnos inscritos en este curso.
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <>
+              <div className="mb-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <Input
+                    placeholder="Buscar por alumno..."
+                    value={busquedaRegistroConducta}
+                    onChange={(e) =>
+                      setBusquedaRegistroConducta(e.target.value)
+                    }
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Alumno</TableHead>
+                      <TableHead className="text-center">
+                        Total Infracciones
+                      </TableHead>
+                      <TableHead className="text-center">
+                        Menos Graves
+                      </TableHead>
+                      <TableHead className="text-center">Graves</TableHead>
+                      <TableHead className="text-center">Muy Graves</TableHead>
+                      <TableHead className="text-right">Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {alumnosDelCurso
+                      .filter((alumno) => {
+                        if (!busquedaRegistroConducta) return true;
+                        const nombreCompleto =
+                          `${alumno.nombre} ${alumno.apellido}`.toLowerCase();
+                        return nombreCompleto.includes(
+                          busquedaRegistroConducta.toLowerCase()
+                        );
+                      })
+                      .map((alumno) => {
+                        const resumen = obtenerResumenInfraccionesAlumno(
+                          alumno.id_alumno
+                        );
+
+                        return (
+                          <TableRow key={alumno.id_alumno}>
+                            <TableCell className="font-medium">
+                              {alumno.nombre} {alumno.apellido}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {resumen.total > 0 ? (
+                                <Badge variant="destructive">
+                                  {resumen.total}
+                                </Badge>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {resumen.menosGraves > 0 ? (
+                                <Badge className="bg-yellow-500 hover:bg-yellow-600">
+                                  {resumen.menosGraves}
+                                </Badge>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {resumen.graves > 0 ? (
+                                <Badge className="bg-orange-500 hover:bg-orange-600">
+                                  {resumen.graves}
+                                </Badge>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {resumen.muyGraves > 0 ? (
+                                <Badge className="bg-red-600 hover:bg-red-700">
+                                  {resumen.muyGraves}
+                                </Badge>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleVerDetalleAlumno(alumno)}
+                                disabled={isLoading}
+                              >
+                                <FileText className="w-4 h-4 mr-2" />
+                                Ver Detalle
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Modal de Detalle del Alumno con sus Infracciones */}
+      <Dialog open={modalDetalleAlumno} onOpenChange={setModalDetalleAlumno}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center space-x-2">
+              <Users className="w-5 h-5 text-blue-600" />
+              <span>
+                Detalle de Infracciones - {alumnoDetalleSeleccionado?.nombre}{' '}
+                {alumnoDetalleSeleccionado?.apellido}
+              </span>
+            </DialogTitle>
+          </DialogHeader>
+
+          {alumnoDetalleSeleccionado && (
+            <div className="space-y-4">
+              <Alert className="bg-blue-50 border-blue-200">
+                <AlertCircle className="h-4 w-4 text-blue-600" />
+                <AlertDescription className="text-blue-800">
+                  <strong>Total de Infracciones:</strong>{' '}
+                  {infraccionesAlumno.length}
+                  {infraccionesAlumno.length === 0 &&
+                    ' - Este alumno no tiene infracciones registradas.'}
+                </AlertDescription>
+              </Alert>
+
+              {infraccionesAlumno.length > 0 ? (
+                <div className="grid gap-4">
+                  {infraccionesAlumno.map((conducta) => {
+                    const infraccion = conducta.infraccion;
+
+                    return (
+                      <Card
+                        key={conducta.id_conducta}
+                        className="border-l-4"
+                        style={{
+                          borderLeftColor:
+                            infraccion?.categoria === 'MUY_GRAVE'
+                              ? '#dc2626'
+                              : infraccion?.categoria === 'GRAVE'
+                                ? '#ea580c'
+                                : '#eab308',
+                        }}
+                      >
+                        <CardHeader className="pb-3">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-2 mb-2">
+                                {infraccion && (
+                                  <Badge
+                                    className={getBadgeColor(
+                                      infraccion.categoria
+                                    )}
+                                  >
+                                    {getCategoriaIcon(infraccion.categoria)}
+                                    <span className="ml-1">
+                                      {getCategoriaLabel(infraccion.categoria)}
+                                    </span>
+                                  </Badge>
+                                )}
+                                <Badge variant="outline">
+                                  {infraccion?.puntos} puntos
+                                </Badge>
+                              </div>
+                              <h4 className="font-semibold text-lg">
+                                {infraccion?.articulo ||
+                                  'Artículo no disponible'}
+                              </h4>
+                            </div>
+                            <div className="flex space-x-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  handleAbrirEditarConducta(conducta)
+                                }
+                                disabled={isLoading}
+                                title="Editar infracción"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  handleEliminarConducta(conducta.id_conducta)
+                                }
+                                disabled={isLoading}
+                                title="Eliminar infracción"
+                              >
+                                <Trash2 className="w-4 h-4 text-red-600" />
+                              </Button>
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-2">
+                            <div>
+                              <span className="text-sm font-medium text-gray-700">
+                                Descripción:
+                              </span>
+                              <p className="text-sm text-gray-600 mt-1">
+                                {infraccion?.descripcion || 'Sin descripción'}
+                              </p>
+                            </div>
+                            <div className="flex items-center space-x-4 text-sm text-gray-500">
+                              <div className="flex items-center space-x-1">
+                                <Calendar className="w-4 h-4" />
+                                <span>
+                                  {new Date(conducta.fecha).toLocaleDateString(
+                                    'es-ES',
+                                    {
+                                      day: '2-digit',
+                                      month: 'long',
+                                      year: 'numeric',
+                                    }
+                                  )}
+                                </span>
+                              </div>
+                              {conducta.observacion && (
+                                <div className="flex-1">
+                                  <span className="font-medium">
+                                    Observación:
+                                  </span>{' '}
+                                  {conducta.observacion}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                  <p className="text-gray-500">
+                    Este alumno no tiene infracciones registradas
+                  </p>
+                </div>
+              )}
+
+              <div className="flex justify-end pt-4 border-t">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setModalDetalleAlumno(false);
+                    setAlumnoDetalleSeleccionado(null);
+                    setInfraccionesAlumno([]);
+                  }}
+                >
+                  Cerrar
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Edición de Registro de Conducta */}
+      <Dialog open={modalEditarConducta} onOpenChange={setModalEditarConducta}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center space-x-2">
+              <Edit className="w-5 h-5 text-blue-600" />
+              <span>Editar Registro de Conducta</span>
+            </DialogTitle>
+          </DialogHeader>
+          {conductaEditando && (
+            <div className="space-y-4">
+              <Alert className="bg-blue-50 border-blue-200">
+                <AlertCircle className="h-4 w-4 text-blue-600" />
+                <AlertDescription className="text-blue-800">
+                  Editando registro de conducta para{' '}
+                  <strong>{conductaEditando.nombreAlumno}</strong>
+                </AlertDescription>
+              </Alert>
+
+              <div className="space-y-2">
+                <Label>Infracción</Label>
+                <Select
+                  value={conductaEditando.id_infraccion}
+                  onValueChange={(v) =>
+                    setConductaEditando({
+                      ...conductaEditando,
+                      id_infraccion: v,
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar infracción..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {catalogoInfracciones.map((infraccion) => (
+                      <SelectItem
+                        key={infraccion.id_infraccion}
+                        value={infraccion.id_infraccion}
+                      >
+                        <div className="flex items-center space-x-2">
+                          <Badge
+                            className={getBadgeColor(infraccion.categoria)}
+                            variant="outline"
+                          >
+                            {getCategoriaLabel(infraccion.categoria)}
+                          </Badge>
+                          <span className="font-medium">
+                            {infraccion.articulo}
+                          </span>
+                          <span className="text-sm text-gray-500">
+                            - {infraccion.descripcion}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex space-x-3 pt-4 border-t">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setModalEditarConducta(false);
+                    setConductaEditando(null);
+                  }}
+                  className="flex-1"
+                  disabled={isLoading}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleGuardarEdicionConducta}
+                  disabled={isLoading}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700"
+                >
+                  {isLoading ? (
+                    <>
+                      <Clock className="w-4 h-4 mr-2 animate-spin" />
+                      Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      Guardar Cambios
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Catálogo de Infracciones */}
       <Card>
