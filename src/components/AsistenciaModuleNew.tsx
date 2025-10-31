@@ -52,6 +52,8 @@ import {
 import { toast } from 'sonner';
 import { generarExcelResumenTrimestral } from '../utils/excelResumenTrimestral';
 import { generarExcelResumenMensual } from '../utils/excelResumenMensual';
+import { generarPDFResumenMensual } from '../utils/pdfResumenMensual';
+import { generarPDFResumenTrimestral } from '../utils/pdfResumenTrimestral';
 
 // Importar servicios refactorizados
 import {
@@ -2719,25 +2721,48 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
               <span>Resultado - Resumen Mensual</span>
-              <Button
-                onClick={() => {
-                  generarExcelResumenMensual({
-                    resumen: resumenMensual,
-                    nombreCurso:
-                      cursosAsignados.find(
-                        (c) => c.id_curso === filtroResumenMensual.cursoId
-                      )?.nombre || 'Curso',
-                    mes: filtroResumenMensual.mes,
-                    anio: filtroResumenMensual.anio,
-                  });
-                  toast.success('Excel generado y descargado correctamente');
-                }}
-                variant="outline"
-                size="sm"
-              >
-                <Download className="w-4 h-4 mr-2" />
-                Exportar a Excel
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => {
+                    generarPDFResumenMensual({
+                      resumen: resumenMensual,
+                      nombreCurso:
+                        cursosAsignados.find(
+                          (c) => c.id_curso === filtroResumenMensual.cursoId
+                        )?.nombre || 'Curso',
+                      mes: filtroResumenMensual.mes,
+                      anio: filtroResumenMensual.anio,
+                    });
+                    toast.success('PDF generado y descargado correctamente');
+                  }}
+                  variant="outline"
+                  size="sm"
+                  className="bg-red-50 hover:bg-red-100 border-red-300 text-red-700"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Exportar a PDF
+                </Button>
+                <Button
+                  onClick={() => {
+                    generarExcelResumenMensual({
+                      resumen: resumenMensual,
+                      nombreCurso:
+                        cursosAsignados.find(
+                          (c) => c.id_curso === filtroResumenMensual.cursoId
+                        )?.nombre || 'Curso',
+                      mes: filtroResumenMensual.mes,
+                      anio: filtroResumenMensual.anio,
+                    });
+                    toast.success('Excel generado y descargado correctamente');
+                  }}
+                  variant="outline"
+                  size="sm"
+                  className="bg-green-50 hover:bg-green-100 border-green-300 text-green-700"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Exportar a Excel
+                </Button>
+              </div>
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -2942,26 +2967,48 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                   {filtroResumenTrimestral.anio}
                 </p>
               </div>
-              <Button
-                onClick={() => {
-                  generarExcelResumenTrimestral({
-                    resumen: resumenTrimestral,
-                    nombreCurso:
-                      cursosAsignados.find(
-                        (c) => c.id_curso === filtroResumenTrimestral.cursoId
-                      )?.nombre || 'Curso',
-                    trimestre: filtroResumenTrimestral.trimestre,
-                    anio: filtroResumenTrimestral.anio,
-                  });
-                  toast.success('Excel generado y descargado correctamente');
-                }}
-                variant="outline"
-                size="sm"
-                className="bg-white hover:bg-green-50 border-green-300"
-              >
-                <Download className="w-4 h-4 mr-2" />
-                Exportar a Excel
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => {
+                    generarPDFResumenTrimestral({
+                      resumen: resumenTrimestral,
+                      nombreCurso:
+                        cursosAsignados.find(
+                          (c) => c.id_curso === filtroResumenTrimestral.cursoId
+                        )?.nombre || 'Curso',
+                      trimestre: filtroResumenTrimestral.trimestre,
+                      anio: filtroResumenTrimestral.anio,
+                    });
+                    toast.success('PDF generado y descargado correctamente');
+                  }}
+                  variant="outline"
+                  size="sm"
+                  className="bg-white hover:bg-red-50 border-red-300 text-red-700"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Exportar a PDF
+                </Button>
+                <Button
+                  onClick={() => {
+                    generarExcelResumenTrimestral({
+                      resumen: resumenTrimestral,
+                      nombreCurso:
+                        cursosAsignados.find(
+                          (c) => c.id_curso === filtroResumenTrimestral.cursoId
+                        )?.nombre || 'Curso',
+                      trimestre: filtroResumenTrimestral.trimestre,
+                      anio: filtroResumenTrimestral.anio,
+                    });
+                    toast.success('Excel generado y descargado correctamente');
+                  }}
+                  variant="outline"
+                  size="sm"
+                  className="bg-white hover:bg-green-50 border-green-300 text-green-700"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Exportar a Excel
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="p-0">

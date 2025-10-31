@@ -60,7 +60,7 @@ export function generarPDFResumenMensual(data: PDFDataMensual): void {
     alumno.atrasos.toString(),
   ]);
 
-  // Generar tabla con autoTable
+  // Generar tabla con autoTable - Diseño idéntico al componente
   autoTable(doc, {
     startY: 35,
     head: [
@@ -69,26 +69,74 @@ export function generarPDFResumenMensual(data: PDFDataMensual): void {
     body: tableData,
     theme: 'grid',
     headStyles: {
-      fillColor: [146, 208, 80], // Verde similar al Excel
+      fillColor: [229, 229, 229], // Gris claro base
       textColor: [0, 0, 0],
       fontStyle: 'bold',
       halign: 'center',
       fontSize: 10,
+      lineWidth: 0.5,
+      lineColor: [0, 0, 0],
     },
     bodyStyles: {
       fontSize: 9,
       cellPadding: 3,
+      lineWidth: 0.3,
+      lineColor: [200, 200, 200],
     },
     columnStyles: {
-      0: { halign: 'left', cellWidth: 80 }, // Alumno
+      0: { halign: 'left', cellWidth: 80, fontStyle: 'bold' }, // Alumno
       1: { halign: 'center', cellWidth: 35 }, // Justificadas
       2: { halign: 'center', cellWidth: 35 }, // Injustificadas
       3: { halign: 'center', cellWidth: 35 }, // Atrasos
     },
     alternateRowStyles: {
-      fillColor: [245, 245, 245], // Gris claro para filas alternadas
+      fillColor: [249, 250, 251], // Gris muy claro para filas alternadas
     },
     margin: { left: 15, right: 15 },
+    // Colorear headers según el componente
+    didDrawCell: (data) => {
+      if (data.section === 'head' && data.row.index === 0) {
+        const { cell, doc } = data;
+        
+        // Aplicar colores de fondo según columna
+        if (data.column.index === 1) {
+          // Justificadas (E) - Verde
+          doc.setFillColor(220, 252, 231); // bg-green-50
+          doc.rect(cell.x, cell.y, cell.width, cell.height, 'F');
+          doc.setTextColor(0, 0, 0);
+          doc.setFont('helvetica', 'bold');
+          doc.text('Justificadas (E)', cell.x + cell.width / 2, cell.y + cell.height / 2, {
+            align: 'center',
+            baseline: 'middle',
+          });
+        } else if (data.column.index === 2) {
+          // Injustificadas (SP) - Naranja
+          doc.setFillColor(255, 237, 213); // bg-orange-50
+          doc.rect(cell.x, cell.y, cell.width, cell.height, 'F');
+          doc.setTextColor(0, 0, 0);
+          doc.setFont('helvetica', 'bold');
+          doc.text('Injustificadas (SP)', cell.x + cell.width / 2, cell.y + cell.height / 2, {
+            align: 'center',
+            baseline: 'middle',
+          });
+        } else if (data.column.index === 3) {
+          // Atrasos (A) - Rojo
+          doc.setFillColor(254, 226, 226); // bg-red-50
+          doc.rect(cell.x, cell.y, cell.width, cell.height, 'F');
+          doc.setTextColor(0, 0, 0);
+          doc.setFont('helvetica', 'bold');
+          doc.text('Atrasos (A)', cell.x + cell.width / 2, cell.y + cell.height / 2, {
+            align: 'center',
+            baseline: 'middle',
+          });
+        }
+        
+        // Dibujar bordes
+        doc.setDrawColor(0, 0, 0);
+        doc.setLineWidth(0.5);
+        doc.rect(cell.x, cell.y, cell.width, cell.height, 'S');
+      }
+    },
   });
 
   // Pie de página con fecha de generación
