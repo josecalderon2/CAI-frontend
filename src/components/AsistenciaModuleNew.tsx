@@ -2110,9 +2110,26 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
 
       {resumenTrimestral && resumenTrimestral.length > 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <span>Resultado - Resumen Trimestral</span>
+          <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b-2 border-blue-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-xl font-bold text-gray-900 mb-1">
+                  RESUMEN TRIMESTRAL -{' '}
+                  {cursosAsignados
+                    .find((c) => c.id_curso === filtroResumenTrimestral.cursoId)
+                    ?.nombre?.toUpperCase() || 'CURSO'}
+                </CardTitle>
+                <p className="text-sm text-gray-600">
+                  {filtroResumenTrimestral.trimestre === 1 &&
+                    'PRIMER TRIMESTRE (ENERO - ABRIL)'}
+                  {filtroResumenTrimestral.trimestre === 2 &&
+                    'SEGUNDO TRIMESTRE (MAYO - AGOSTO)'}
+                  {filtroResumenTrimestral.trimestre === 3 &&
+                    'TERCER TRIMESTRE (SEPTIEMBRE - DICIEMBRE)'}
+                  {' • AÑO LECTIVO '}
+                  {filtroResumenTrimestral.anio}
+                </p>
+              </div>
               <Button
                 onClick={() => {
                   generarExcelResumenTrimestral({
@@ -2128,144 +2145,270 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                 }}
                 variant="outline"
                 size="sm"
+                className="bg-white hover:bg-green-50 border-green-300"
               >
                 <Download className="w-4 h-4 mr-2" />
                 Exportar a Excel
               </Button>
-            </CardTitle>
+            </div>
           </CardHeader>
-          <CardContent>
-            <p className="text-sm text-gray-500 mb-4">
-              Curso:{' '}
-              {cursosAsignados.find(
-                (c) => c.id_curso === filtroResumenTrimestral.cursoId
-              )?.nombre || filtroResumenTrimestral.cursoId}{' '}
-              | Trimestre: {filtroResumenTrimestral.trimestre} | Año:{' '}
-              {filtroResumenTrimestral.anio}
-            </p>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  {/* Fila 1: Categorías principales */}
+                  <TableRow className="bg-gradient-to-r from-green-100 to-green-50 border-b-2 border-green-300">
+                    <TableHead
+                      rowSpan={2}
+                      className="text-center font-bold text-gray-900 border-r-2 border-green-300 w-12"
+                    >
+                      No
+                    </TableHead>
+                    <TableHead
+                      rowSpan={2}
+                      className="text-center font-bold text-gray-900 border-r-2 border-green-300 min-w-[200px]"
+                    >
+                      NOMBRE
+                    </TableHead>
+                    <TableHead
+                      colSpan={2}
+                      className="text-center font-bold text-gray-900 border-r-2 border-green-300 bg-blue-100"
+                    >
+                      INASISTENCIAS
+                    </TableHead>
+                    <TableHead
+                      colSpan={6}
+                      className="text-center font-bold text-gray-900 border-r-2 border-green-300 bg-yellow-50"
+                    >
+                      FALTAS
+                    </TableHead>
+                    <TableHead
+                      rowSpan={2}
+                      className="text-center font-bold text-gray-900 bg-purple-50 min-w-[100px]"
+                    >
+                      CÁLCULO
+                      <br />
+                      CONDUCTA
+                    </TableHead>
+                  </TableRow>
+                  {/* Fila 2: Subcategorías */}
+                  <TableRow className="bg-gradient-to-r from-green-100 to-green-50 border-b-2 border-green-300">
+                    <TableHead className="text-center font-bold text-gray-900 border-r border-green-200 bg-blue-50 w-16">
+                      P
+                    </TableHead>
+                    <TableHead className="text-center font-bold text-gray-900 border-r-2 border-green-300 bg-blue-50 w-16">
+                      SP
+                    </TableHead>
+                    <TableHead
+                      colSpan={2}
+                      className="text-center font-bold text-gray-900 border-r-2 border-green-300 bg-yellow-100"
+                    >
+                      Menos Graves
+                    </TableHead>
+                    <TableHead
+                      colSpan={2}
+                      className="text-center font-bold text-gray-900 border-r-2 border-green-300 bg-orange-100"
+                    >
+                      Graves
+                    </TableHead>
+                    <TableHead
+                      colSpan={2}
+                      className="text-center font-bold text-gray-900 border-r-2 border-green-300 bg-red-100"
+                    >
+                      Muy Graves
+                    </TableHead>
+                  </TableRow>
+                  {/* Fila 3: Columnas de datos específicos */}
+                  <TableRow className="bg-gray-100 border-b-2 border-gray-300">
+                    <TableHead className="text-center text-xs font-semibold text-gray-700 border-r-2 border-gray-300"></TableHead>
+                    <TableHead className="text-center text-xs font-semibold text-gray-700 border-r-2 border-gray-300"></TableHead>
+                    <TableHead className="text-center text-xs font-semibold text-gray-700 border-r border-gray-200"></TableHead>
+                    <TableHead className="text-center text-xs font-semibold text-gray-700 border-r-2 border-gray-300"></TableHead>
+                    <TableHead className="text-center text-xs font-semibold text-gray-700 border-r border-gray-200 bg-yellow-50 w-16">
+                      Cant.
+                    </TableHead>
+                    <TableHead className="text-center text-xs font-semibold text-gray-700 border-r-2 border-gray-300 bg-yellow-50 min-w-[250px]">
+                      Artículo
+                    </TableHead>
+                    <TableHead className="text-center text-xs font-semibold text-gray-700 border-r border-gray-200 bg-orange-50 w-16">
+                      Cant.
+                    </TableHead>
+                    <TableHead className="text-center text-xs font-semibold text-gray-700 border-r-2 border-gray-300 bg-orange-50 min-w-[250px]">
+                      Artículo
+                    </TableHead>
+                    <TableHead className="text-center text-xs font-semibold text-gray-700 border-r border-gray-200 bg-red-50 w-16">
+                      Cant.
+                    </TableHead>
+                    <TableHead className="text-center text-xs font-semibold text-gray-700 border-r-2 border-gray-300 bg-red-50 min-w-[250px]">
+                      Artículo
+                    </TableHead>
+                    <TableHead className="text-center text-xs font-semibold text-gray-700 bg-purple-50"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {resumenTrimestral.map(
+                    (est: ResumenTrimestralResponse, index) => {
+                      // Agrupar infracciones por categoría
+                      const infraccionesPorCategoria: Record<
+                        CategoriaInfraccion,
+                        InfraccionResumen[]
+                      > = {
+                        MENOS_GRAVE: [],
+                        GRAVE: [],
+                        MUY_GRAVE: [],
+                      };
 
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Alumno</TableHead>
-                  <TableHead className="text-center">
-                    Justificadas (P)
-                  </TableHead>
-                  <TableHead className="text-center">
-                    Injustificadas (SP)
-                  </TableHead>
-                  <TableHead className="text-center">Menos Graves</TableHead>
-                  <TableHead className="text-center">Graves</TableHead>
-                  <TableHead className="text-center">Muy Graves</TableHead>
-                  <TableHead className="text-center">Nota Conducta</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {resumenTrimestral.map((est: ResumenTrimestralResponse) => {
-                  // Agrupar infracciones por categoría
-                  const infraccionesPorCategoria: Record<
-                    CategoriaInfraccion,
-                    InfraccionResumen[]
-                  > = {
-                    MENOS_GRAVE: [],
-                    GRAVE: [],
-                    MUY_GRAVE: [],
-                  };
+                      est.infracciones.forEach((inf) => {
+                        infraccionesPorCategoria[inf.categoria].push(inf);
+                      });
 
-                  est.infracciones.forEach((inf) => {
-                    infraccionesPorCategoria[inf.categoria].push(inf);
-                  });
+                      // Calcular cantidades y formatear artículos con descripción
+                      const menosGravesCount =
+                        infraccionesPorCategoria.MENOS_GRAVE.reduce(
+                          (sum, inf) => sum + (inf.cantidad ?? 1),
+                          0
+                        );
+                      const menosGravesArticulos =
+                        infraccionesPorCategoria.MENOS_GRAVE.map(
+                          (inf) => `${inf.articulo} ${inf.descripcion}`
+                        ).join(' | ') || '-';
 
-                  // Construir texto de infracciones con formato legible
-                  const menosGravesTexto =
-                    infraccionesPorCategoria.MENOS_GRAVE.length > 0
-                      ? infraccionesPorCategoria.MENOS_GRAVE.map(
-                          (inf) =>
-                            `${inf.articulo}: ${inf.descripcion} (×${inf.cantidad ?? 1})`
-                        ).join(' | ')
-                      : '-';
+                      const gravesCount = infraccionesPorCategoria.GRAVE.reduce(
+                        (sum, inf) => sum + (inf.cantidad ?? 1),
+                        0
+                      );
+                      const gravesArticulos =
+                        infraccionesPorCategoria.GRAVE.map(
+                          (inf) => `${inf.articulo} ${inf.descripcion}`
+                        ).join(' | ') || '-';
 
-                  const gravesTexto =
-                    infraccionesPorCategoria.GRAVE.length > 0
-                      ? infraccionesPorCategoria.GRAVE.map(
-                          (inf) =>
-                            `${inf.articulo}: ${inf.descripcion} (×${inf.cantidad ?? 1})`
-                        ).join(' | ')
-                      : '-';
+                      const muyGravesCount =
+                        infraccionesPorCategoria.MUY_GRAVE.reduce(
+                          (sum, inf) => sum + (inf.cantidad ?? 1),
+                          0
+                        );
+                      const muyGravesArticulos =
+                        infraccionesPorCategoria.MUY_GRAVE.map(
+                          (inf) => `${inf.articulo} ${inf.descripcion}`
+                        ).join(' | ') || '-';
 
-                  const muyGravesTexto =
-                    infraccionesPorCategoria.MUY_GRAVE.length > 0
-                      ? infraccionesPorCategoria.MUY_GRAVE.map(
-                          (inf) =>
-                            `${inf.articulo}: ${inf.descripcion} (×${inf.cantidad ?? 1})`
-                        ).join(' | ')
-                      : '-';
+                      const rowBgColor =
+                        index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
 
-                  return (
-                    <TableRow key={est.id_alumno}>
-                      <TableCell className="font-medium">
-                        {est.nombre} {est.apellido}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {est.justificadas}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {est.injustificadas}
-                      </TableCell>
-                      <TableCell className="text-left text-sm">
-                        <div className="max-w-md">
-                          {menosGravesTexto === '-' ? (
-                            <span className="text-gray-400">-</span>
-                          ) : (
-                            <span className="text-yellow-700">
-                              {menosGravesTexto}
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-left text-sm">
-                        <div className="max-w-md">
-                          {gravesTexto === '-' ? (
-                            <span className="text-gray-400">-</span>
-                          ) : (
-                            <span className="text-orange-700">
-                              {gravesTexto}
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-left text-sm">
-                        <div className="max-w-md">
-                          {muyGravesTexto === '-' ? (
-                            <span className="text-gray-400">-</span>
-                          ) : (
-                            <span className="text-red-700">
-                              {muyGravesTexto}
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge
-                          variant={
-                            (est.puntajeConducta ?? 10) >= 6
-                              ? 'default'
-                              : 'destructive'
-                          }
-                          className={
-                            (est.puntajeConducta ?? 10) >= 6
-                              ? 'bg-green-600 hover:bg-green-700'
-                              : 'bg-red-600 hover:bg-red-700'
-                          }
+                      return (
+                        <TableRow
+                          key={est.id_alumno}
+                          className={`${rowBgColor} hover:bg-blue-50 transition-colors border-b border-gray-200`}
                         >
-                          {(est.puntajeConducta ?? 10).toFixed(1)}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                          <TableCell className="text-center font-medium text-gray-900 border-r-2 border-gray-300">
+                            {index + 1}
+                          </TableCell>
+                          <TableCell className="font-semibold text-gray-900 border-r-2 border-gray-300">
+                            {est.nombre} {est.apellido}
+                          </TableCell>
+                          <TableCell className="text-center border-r border-gray-200">
+                            <span className="inline-flex items-center justify-center px-2 py-1 text-sm font-semibold text-green-800">
+                              {est.justificadas}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-center border-r-2 border-gray-300">
+                            <span
+                              className={`inline-flex items-center justify-center px-2 py-1 text-sm font-semibold ${
+                                est.injustificadas > 0
+                                  ? 'text-red-700'
+                                  : 'text-gray-500'
+                              }`}
+                            >
+                              {est.injustificadas}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-center border-r border-gray-200 bg-yellow-50">
+                            {menosGravesCount > 0 ? (
+                              <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-yellow-200 text-yellow-900 font-bold text-sm">
+                                {menosGravesCount}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-left text-xs border-r-2 border-gray-300 bg-yellow-50">
+                            <span
+                              className={
+                                menosGravesArticulos === '-'
+                                  ? 'text-gray-400'
+                                  : 'text-yellow-900 font-medium'
+                              }
+                            >
+                              {menosGravesArticulos}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-center border-r border-gray-200 bg-orange-50">
+                            {gravesCount > 0 ? (
+                              <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-orange-200 text-orange-900 font-bold text-sm">
+                                {gravesCount}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-left text-xs border-r-2 border-gray-300 bg-orange-50">
+                            <span
+                              className={
+                                gravesArticulos === '-'
+                                  ? 'text-gray-400'
+                                  : 'text-orange-900 font-medium'
+                              }
+                            >
+                              {gravesArticulos}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-center border-r border-gray-200 bg-red-50">
+                            {muyGravesCount > 0 ? (
+                              <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-red-200 text-red-900 font-bold text-sm">
+                                {muyGravesCount}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-left text-xs border-r-2 border-gray-300 bg-red-50">
+                            <span
+                              className={
+                                muyGravesArticulos === '-'
+                                  ? 'text-gray-400'
+                                  : 'text-red-900 font-medium'
+                              }
+                            >
+                              {muyGravesArticulos}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-center bg-purple-50">
+                            <Badge
+                              variant={
+                                (est.puntajeConducta ?? 10) >= 8
+                                  ? 'default'
+                                  : (est.puntajeConducta ?? 10) >= 6
+                                    ? 'secondary'
+                                    : 'destructive'
+                              }
+                              className={`text-base font-bold px-3 py-1 ${
+                                (est.puntajeConducta ?? 10) >= 8
+                                  ? 'bg-green-600 hover:bg-green-700'
+                                  : (est.puntajeConducta ?? 10) >= 6
+                                    ? 'bg-yellow-500 hover:bg-yellow-600 text-white'
+                                    : 'bg-red-600 hover:bg-red-700'
+                              }`}
+                            >
+                              {(est.puntajeConducta ?? 10).toFixed(1)}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    }
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       )}

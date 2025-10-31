@@ -76,7 +76,7 @@ export const asistenciaService = {
     id: string,
     data: UpdateAsistenciaDto
   ): Promise<AsistenciaResponse> => {
-    const response = await api.patch<AsistenciaResponse>(
+    const response = await api.put<AsistenciaResponse>(
       `/asistencia/${id}`,
       data
     );
@@ -86,7 +86,94 @@ export const asistenciaService = {
   delete: async (id: string): Promise<void> => {
     await api.delete(`/asistencia/${id}`);
   },
+
+  // 🆕 Buscar asistencias con filtros
+  buscarConFiltros: async (
+    params: BuscarAsistenciaParams
+  ): Promise<AsistenciaConRelaciones[]> => {
+    const queryParams = new URLSearchParams();
+
+    if (params.cursoId)
+      queryParams.append('cursoId', params.cursoId.toString());
+    if (params.alumnoId)
+      queryParams.append('alumnoId', params.alumnoId.toString());
+    if (params.fecha) queryParams.append('fecha', params.fecha);
+    if (params.fechaDesde) queryParams.append('fechaDesde', params.fechaDesde);
+    if (params.fechaHasta) queryParams.append('fechaHasta', params.fechaHasta);
+    if (params.estado) queryParams.append('estado', params.estado);
+
+    const response = await api.get<AsistenciaConRelaciones[]>(
+      `/asistencia/buscar/filtros?${queryParams.toString()}`
+    );
+    return response.data;
+  },
+
+  // 🆕 Obtener historial de un registro específico
+  getHistorial: async (id: string): Promise<HistorialAsistenciaResponse[]> => {
+    const response = await api.get<HistorialAsistenciaResponse[]>(
+      `/asistencia/historial/${id}`
+    );
+    return response.data;
+  },
+
+  // 🆕 Obtener historial de un alumno
+  getHistorialAlumno: async (
+    idAlumno: string,
+    fechaDesde?: string,
+    fechaHasta?: string
+  ): Promise<HistorialAsistenciaResponse[]> => {
+    const queryParams = new URLSearchParams();
+    if (fechaDesde) queryParams.append('fechaDesde', fechaDesde);
+    if (fechaHasta) queryParams.append('fechaHasta', fechaHasta);
+
+    const response = await api.get<HistorialAsistenciaResponse[]>(
+      `/asistencia/historial/alumno/${idAlumno}?${queryParams.toString()}`
+    );
+    return response.data;
+  },
 };
+
+// ============================================
+// NUEVOS TIPOS - HISTORIAL Y BÚSQUEDA
+// ============================================
+
+export interface BuscarAsistenciaParams {
+  cursoId?: number;
+  alumnoId?: number;
+  fecha?: string;
+  fechaDesde?: string;
+  fechaHasta?: string;
+  estado?: EstadoAsistencia;
+}
+
+export interface AsistenciaConRelaciones extends AsistenciaResponse {
+  alumno: {
+    nombre: string;
+    apellido: string;
+  };
+  asignatura: {
+    nombre: string;
+  };
+  orientador: {
+    nombre: string;
+    apellido: string;
+  };
+}
+
+export interface HistorialAsistenciaResponse {
+  id_historial: number;
+  id_asistencia: number | null;
+  id_alumno: number;
+  id_asignatura: number;
+  fecha: string;
+  accion: AccionAsistencia;
+  id_orientador_registro: number;
+  estado_anterior: EstadoAsistencia | null;
+  estado_nuevo: EstadoAsistencia | null;
+  observ_anterior: string | null;
+  observ_nueva: string | null;
+  creadoEn: string;
+}
 
 // ============================================
 // TYPES - CONDUCTA E INFRACCIONES
