@@ -112,7 +112,11 @@ interface CursoResponse {
 export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
   // Estados globales
   const [activeTab, setActiveTab] = useState<
-    'asistencia' | 'conducta' | 'resumen-mensual' | 'resumen-trimestral'
+    | 'asistencia'
+    | 'conducta'
+    | 'historial'
+    | 'resumen-mensual'
+    | 'resumen-trimestral'
   >('asistencia');
   const [isLoading, setIsLoading] = useState(false);
   const [cursosAsignados, setCursosAsignados] = useState<CursoResponse[]>([]);
@@ -130,6 +134,26 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
   >({});
   const [busquedaAlumno, setBusquedaAlumno] = useState('');
   const [mostrarEstados, setMostrarEstados] = useState(false);
+
+  // Estados para edición de asistencia
+  const [asistenciasGuardadas, setAsistenciasGuardadas] = useState<
+    Record<
+      string,
+      {
+        id_asistencia: string;
+        estado: EstadoAsistencia;
+        observacion: string | null;
+      }
+    >
+  >({});
+  const [modalEdicion, setModalEdicion] = useState(false);
+  const [asistenciaEditando, setAsistenciaEditando] = useState<{
+    id_asistencia: string;
+    id_alumno: number;
+    nombreAlumno: string;
+    estadoActual: EstadoAsistencia;
+    observacionActual: string;
+  } | null>(null);
 
   // Estados para Conducta
   const [catalogoInfracciones, setCatalogoInfracciones] = useState<
@@ -160,6 +184,14 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
     observacion: '',
   });
 
+  // Estados para Historial
+  const [historialAsistencias, setHistorialAsistencias] = useState<any[]>([]);
+  const [filtroHistorial, setFiltroHistorial] = useState({
+    cursoId: 0,
+    fechaDesde: '',
+    fechaHasta: '',
+  });
+
   // Estados para Resúmenes
   const [resumenMensual, setResumenMensual] = useState<
     ResumenMensualResponse[] | null
@@ -187,6 +219,13 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
       cargarCatalogoInfracciones();
     }
   }, [user?.id, activeTab]);
+
+  // Cargar asistencias guardadas cuando cambia curso o fecha
+  useEffect(() => {
+    if (cursoSeleccionado && fechaSeleccionada) {
+      cargarAsistenciasGuardadas();
+    }
+  }, [cursoSeleccionado, fechaSeleccionada]);
 
   const cargarDatosIniciales = async () => {
     if (!user?.id) return;
@@ -304,6 +343,125 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
     }
   };
 
+  const cargarAsistenciasGuardadas = async () => {
+    if (!cursoSeleccionado || !fechaSeleccionada) return;
+
+    try {
+      const cursoActual = cursosAsignados.find(
+        (c) => c.id_curso === parseInt(cursoSeleccionado)
+      );
+
+      if (!cursoActual?.id_curso) return;
+
+      // Buscar asistencias del curso en la fecha seleccionada
+      const asistencias = await asistenciaService.buscarConFiltros({
+        cursoId: cursoActual.id_curso,
+        fecha: fechaSeleccionada,
+      });
+
+      // Mapear asistencias por id_alumno
+      const asistenciasMap: Record<
+        string,
+        {
+          id_asistencia: string;
+          estado: EstadoAsistencia;
+          observacion: string | null;
+        }
+      > = {};
+
+      asistencias.forEach((asist) => {
+        asistenciasMap[asist.id_alumno] = {
+          id_asistencia: asist.id_asistencia,
+          estado: asist.estado,
+          observacion: asist.observacion,
+        };
+      });
+
+      setAsistenciasGuardadas(asistenciasMap);
+
+      // NO pre-cargar el estado actual - dejar que se muestre solo el guardado
+      // Solo limpiar el estado actual para evitar conflictos
+      setAsistenciaActual({});
+    } catch (e) {
+      // Si hay error o no hay asistencias, simplemente no hacer nada
+      setAsistenciasGuardadas({});
+      setAsistenciaActual({});
+    }
+  };
+
+  const handleEditarAsistencia = (alumno: AlumnoResponse) => {
+    const asistenciaGuardada =
+      asistenciasGuardadas[alumno.id_alumno.toString()];
+
+    if (!asistenciaGuardada) return;
+
+    // Pre-cargar el estado actual en el modal para que se vea seleccionado
+    setAsistenciaActual((prev) => ({
+      ...prev,
+      [alumno.id_alumno]: {
+        estado: asistenciaGuardada.estado,
+        observacion: asistenciaGuardada.observacion || '',
+      },
+    }));
+
+    setAsistenciaEditando({
+      id_asistencia: asistenciaGuardada.id_asistencia,
+      id_alumno: alumno.id_alumno,
+      nombreAlumno: `${alumno.nombre} ${alumno.apellido}`,
+      estadoActual: asistenciaGuardada.estado,
+      observacionActual: asistenciaGuardada.observacion || '',
+    });
+    setModalEdicion(true);
+  };
+
+  const handleGuardarEdicion = async () => {
+    if (!asistenciaEditando) return;
+
+    const estadoActual = asistenciaActual[asistenciaEditando.id_alumno];
+
+    if (!estadoActual) {
+      toast.error('Debe seleccionar un estado');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await asistenciaService.update(asistenciaEditando.id_asistencia, {
+        estado: estadoActual.estado,
+        observacion: estadoActual.observacion || undefined,
+        id_orientador: parseInt(user.id), // Registrar quién hizo la modificación
+      });
+
+      toast.success('Asistencia actualizada correctamente');
+
+      // Actualizar el registro en memoria
+      setAsistenciasGuardadas((prev) => ({
+        ...prev,
+        [asistenciaEditando.id_alumno]: {
+          id_asistencia: asistenciaEditando.id_asistencia,
+          estado: estadoActual.estado,
+          observacion: estadoActual.observacion || null,
+        },
+      }));
+
+      // Limpiar el estado actual para que no aparezca como "modificado"
+      setAsistenciaActual((prev) => {
+        const nuevo = { ...prev };
+        delete nuevo[asistenciaEditando.id_alumno];
+        return nuevo;
+      });
+
+      setModalEdicion(false);
+      setAsistenciaEditando(null);
+    } catch (e: any) {
+      const errorMsg =
+        e?.response?.data?.message || 'Error al actualizar la asistencia';
+      toast.error(errorMsg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Handlers para Asistencia
   const handleEstadoChange = (alumnoId: number, estado: EstadoAsistencia) => {
     setAsistenciaActual((prev) => ({
@@ -345,8 +503,10 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
       const mes = fecha.getMonth() + 1;
       const trimestre = Math.ceil(mes / 4); // 1-4 = T1, 5-8 = T2, 9-12 = T3
 
-      const registros = Object.entries(asistenciaActual).map(
-        ([alumnoId, datos]) => ({
+      // Separar registros nuevos y modificaciones
+      const registrosNuevos = Object.entries(asistenciaActual)
+        .filter(([alumnoId]) => !asistenciasGuardadas[alumnoId])
+        .map(([alumnoId, datos]) => ({
           id_alumno: parseInt(alumnoId),
           id_asignatura: cursoActual.asignatura!.id_asignatura,
           id_orientador: parseInt(user.id),
@@ -355,15 +515,53 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
           anio_academico: new Date().getFullYear().toString(),
           trimestre: trimestre,
           observacion: datos.observacion || null,
-        })
+        }));
+
+      // Identificar modificaciones (registros que ya existen pero tienen estado diferente)
+      const modificaciones = Object.entries(asistenciaActual).filter(
+        ([alumnoId, datos]) => {
+          const guardado = asistenciasGuardadas[alumnoId];
+          return (
+            guardado &&
+            (guardado.estado !== datos.estado ||
+              (guardado.observacion || '') !== datos.observacion)
+          );
+        }
       );
 
-      const bulkData: BulkAsistenciaDto = { registros };
-      await asistenciaService.createBulk(bulkData);
+      if (registrosNuevos.length === 0 && modificaciones.length === 0) {
+        toast.warning('No hay cambios para guardar');
+        return;
+      }
+
+      // Guardar registros nuevos
+      if (registrosNuevos.length > 0) {
+        const bulkData: BulkAsistenciaDto = { registros: registrosNuevos };
+        await asistenciaService.createBulk(bulkData);
+      }
+
+      // Actualizar modificaciones
+      if (modificaciones.length > 0) {
+        await Promise.all(
+          modificaciones.map(([alumnoId, datos]) => {
+            const guardado = asistenciasGuardadas[alumnoId];
+            return asistenciaService.update(guardado.id_asistencia, {
+              estado: datos.estado,
+              observacion: datos.observacion || undefined,
+              id_orientador: parseInt(user.id), // Registrar quién hizo la modificación
+            });
+          })
+        );
+      }
 
       toast.success(
-        `Asistencia guardada correctamente (${registros.length} alumnos)`
+        `Asistencia guardada correctamente (${registrosNuevos.length} nuevo${registrosNuevos.length !== 1 ? 's' : ''}, ${modificaciones.length} modificado${modificaciones.length !== 1 ? 's' : ''})`
       );
+
+      // Recargar asistencias guardadas
+      await cargarAsistenciasGuardadas();
+
+      // Limpiar estados actuales ya guardados
       setAsistenciaActual({});
     } catch (e: any) {
       const errorMsg =
@@ -507,6 +705,45 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
       const errorMsg =
         e?.response?.data?.message || 'Error al registrar la conducta';
       toast.error(errorMsg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handlers para Historial
+  const handleCargarHistorial = async () => {
+    if (!filtroHistorial.cursoId || filtroHistorial.cursoId === 0) {
+      toast.error('Debe seleccionar un curso');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const cursoActual = cursosAsignados.find(
+        (c) => c.id_curso === filtroHistorial.cursoId
+      );
+
+      if (!cursoActual?.id_curso) {
+        toast.error('Curso no encontrado');
+        return;
+      }
+
+      const params: any = {
+        cursoId: cursoActual.id_curso,
+      };
+
+      if (filtroHistorial.fechaDesde) {
+        params.fechaDesde = filtroHistorial.fechaDesde;
+      }
+      if (filtroHistorial.fechaHasta) {
+        params.fechaHasta = filtroHistorial.fechaHasta;
+      }
+
+      const asistencias = await asistenciaService.buscarConFiltros(params);
+      setHistorialAsistencias(asistencias);
+      toast.success(`${asistencias.length} registro(s) encontrado(s)`);
+    } catch (e: any) {
+      toast.error('Error al cargar el historial de asistencias');
     } finally {
       setIsLoading(false);
     }
@@ -719,6 +956,23 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
 
       {!!cursoSeleccionado && (
         <>
+          {/* Alerta si hay asistencias ya guardadas */}
+          {Object.keys(asistenciasGuardadas).length > 0 && (
+            <Alert className="bg-green-50 border-green-300">
+              <CheckCircle className="h-4 w-4 text-green-600" />
+              <AlertTitle className="text-green-900">
+                Asistencias Guardadas
+              </AlertTitle>
+              <AlertDescription className="text-green-800">
+                Ya hay{' '}
+                <strong>{Object.keys(asistenciasGuardadas).length}</strong>{' '}
+                registro(s) de asistencia guardado(s) para esta fecha. Puedes
+                editarlos haciendo clic en el botón{' '}
+                <Edit className="w-3 h-3 inline mx-1" /> de cada alumno.
+              </AlertDescription>
+            </Alert>
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
@@ -745,7 +999,9 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                   }
                 >
                   <Save className="w-4 h-4 mr-2" />
-                  {isLoading ? 'Guardando...' : 'Guardar Asistencia'}
+                  {isLoading
+                    ? 'Guardando...'
+                    : `Guardar Asistencia (${Object.entries(asistenciaActual).filter(([id]) => !asistenciasGuardadas[id]).length} nuevo${Object.entries(asistenciaActual).filter(([id]) => !asistenciasGuardadas[id]).length !== 1 ? 's' : ''})`}
                 </Button>
                 <Button
                   onClick={() => setMostrarEstados(!mostrarEstados)}
@@ -869,18 +1125,80 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
             <CardContent>
               <div className="space-y-3">
                 {alumnosFiltrados.map((alumno) => {
+                  // Verificar estados
+                  const asistenciaGuardada =
+                    asistenciasGuardadas[alumno.id_alumno.toString()];
                   const estadoActual =
                     asistenciaActual[alumno.id_alumno.toString()];
+
+                  // Determinar el estado a mostrar
+                  // Si hay cambio pendiente (estadoActual), mostrar ese
+                  // Si no hay cambio pero hay guardado, mostrar el guardado
+                  const estadoAMostrar = estadoActual || asistenciaGuardada;
+
+                  // Detectar si hay un cambio pendiente de guardar
+                  const hayModificacion =
+                    estadoActual &&
+                    asistenciaGuardada &&
+                    estadoActual.estado !== asistenciaGuardada.estado;
+
+                  const getEstadoLabel = (estado: EstadoAsistencia) => {
+                    switch (estado) {
+                      case 'P':
+                        return 'Presente';
+                      case 'E':
+                        return 'Con Permiso';
+                      case 'SP':
+                        return 'Sin Permiso';
+                      case 'A':
+                        return 'Atraso';
+                      default:
+                        return '';
+                    }
+                  };
 
                   return (
                     <div
                       key={alumno.id_alumno}
-                      className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                      className={`flex items-center justify-between p-4 rounded-lg transition-colors border-2 ${
+                        hayModificacion
+                          ? 'bg-yellow-50 border-yellow-400 hover:bg-yellow-100'
+                          : asistenciaGuardada
+                            ? 'bg-green-50 border-green-200 hover:bg-green-100'
+                            : estadoActual
+                              ? 'bg-blue-50 border-blue-200 hover:bg-blue-100'
+                              : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                      }`}
                     >
-                      <div className="flex-1">
+                      <div className="flex-1 flex items-center gap-2">
                         <p className="font-medium">
                           {alumno.nombre} {alumno.apellido}
                         </p>
+                        {hayModificacion && (
+                          <Badge
+                            variant="outline"
+                            className="bg-yellow-100 text-yellow-800 border-yellow-400 text-xs font-semibold"
+                          >
+                            ⚠ Modificado - Guardar cambios
+                          </Badge>
+                        )}
+                        {asistenciaGuardada && !estadoActual && (
+                          <Badge
+                            variant="outline"
+                            className="bg-green-100 text-green-800 border-green-300 text-xs"
+                          >
+                            ✓ Guardado:{' '}
+                            {getEstadoLabel(asistenciaGuardada.estado)}
+                          </Badge>
+                        )}
+                        {estadoActual && !asistenciaGuardada && (
+                          <Badge
+                            variant="outline"
+                            className="bg-blue-100 text-blue-800 border-blue-300 text-xs"
+                          >
+                            📝 Pendiente de guardar
+                          </Badge>
+                        )}
                       </div>
 
                       <div className="flex items-center space-x-3">
@@ -888,7 +1206,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                           <Button
                             size="sm"
                             variant={
-                              estadoActual?.estado === 'P'
+                              estadoAMostrar?.estado === 'P'
                                 ? 'default'
                                 : 'outline'
                             }
@@ -896,8 +1214,8 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                               handleEstadoChange(alumno.id_alumno, 'P')
                             }
                             className={
-                              estadoActual?.estado === 'P'
-                                ? 'bg-green-600 hover:bg-green-700 text-white'
+                              estadoAMostrar?.estado === 'P'
+                                ? 'bg-green-600 hover:bg-green-700 text-white border-2 border-green-700'
                                 : 'border-green-300 text-green-700 hover:bg-green-50 hover:border-green-400'
                             }
                             title="Presente"
@@ -907,7 +1225,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                           <Button
                             size="sm"
                             variant={
-                              estadoActual?.estado === 'A'
+                              estadoAMostrar?.estado === 'A'
                                 ? 'default'
                                 : 'outline'
                             }
@@ -915,8 +1233,8 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                               handleEstadoChange(alumno.id_alumno, 'A')
                             }
                             className={
-                              estadoActual?.estado === 'A'
-                                ? 'bg-orange-600 hover:bg-orange-700 text-white'
+                              estadoAMostrar?.estado === 'A'
+                                ? 'bg-orange-600 hover:bg-orange-700 text-white border-2 border-orange-700'
                                 : 'border-orange-300 text-orange-700 hover:bg-orange-50 hover:border-orange-400'
                             }
                             title="Atraso/Tarde"
@@ -926,7 +1244,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                           <Button
                             size="sm"
                             variant={
-                              estadoActual?.estado === 'SP'
+                              estadoAMostrar?.estado === 'SP'
                                 ? 'default'
                                 : 'outline'
                             }
@@ -934,8 +1252,8 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                               handleEstadoChange(alumno.id_alumno, 'SP')
                             }
                             className={
-                              estadoActual?.estado === 'SP'
-                                ? 'bg-red-600 hover:bg-red-700 text-white'
+                              estadoAMostrar?.estado === 'SP'
+                                ? 'bg-red-600 hover:bg-red-700 text-white border-2 border-red-700'
                                 : 'border-red-300 text-red-700 hover:bg-red-50 hover:border-red-400'
                             }
                             title="Ausente Sin Permiso"
@@ -945,7 +1263,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                           <Button
                             size="sm"
                             variant={
-                              estadoActual?.estado === 'E'
+                              estadoAMostrar?.estado === 'E'
                                 ? 'default'
                                 : 'outline'
                             }
@@ -953,8 +1271,8 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                               handleEstadoChange(alumno.id_alumno, 'E')
                             }
                             className={
-                              estadoActual?.estado === 'E'
-                                ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                              estadoAMostrar?.estado === 'E'
+                                ? 'bg-blue-600 hover:bg-blue-700 text-white border-2 border-blue-700'
                                 : 'border-blue-300 text-blue-700 hover:bg-blue-50 hover:border-blue-400'
                             }
                             title="Ausente Justificado/Con Permiso"
@@ -962,6 +1280,19 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                             <Shield className="w-4 h-4" />
                           </Button>
                         </div>
+
+                        {/* Botón de edición - solo aparece si ya hay asistencia guardada */}
+                        {asistenciaGuardada && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleEditarAsistencia(alumno)}
+                            className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                            title="Editar asistencia guardada"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                        )}
 
                         <Dialog>
                           <DialogTrigger asChild>
@@ -984,7 +1315,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                                 <Textarea
                                   id="observaciones"
                                   placeholder="Ingrese observaciones sobre la asistencia..."
-                                  value={estadoActual?.observacion || ''}
+                                  value={estadoAMostrar?.observacion || ''}
                                   onChange={(e) =>
                                     handleObservacionChange(
                                       alumno.id_alumno,
@@ -1012,6 +1343,199 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
           </Card>
         </>
       )}
+
+      {/* Modal de edición de asistencia */}
+      <Dialog open={modalEdicion} onOpenChange={setModalEdicion}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center space-x-2">
+              <Edit className="w-5 h-5 text-blue-600" />
+              <span>Editar Asistencia</span>
+            </DialogTitle>
+          </DialogHeader>
+          {asistenciaEditando && (
+            <div className="space-y-4">
+              <Alert className="bg-blue-50 border-blue-200">
+                <AlertCircle className="h-4 w-4 text-blue-600" />
+                <AlertDescription>
+                  Editando asistencia de{' '}
+                  <strong>{asistenciaEditando.nombreAlumno}</strong>
+                  <br />
+                  <span className="text-xs text-gray-600">
+                    Estado anterior:{' '}
+                    <Badge variant="outline" className="ml-1">
+                      {asistenciaEditando.estadoActual === 'P' && 'Presente'}
+                      {asistenciaEditando.estadoActual === 'E' && 'Con Permiso'}
+                      {asistenciaEditando.estadoActual === 'SP' &&
+                        'Sin Permiso'}
+                      {asistenciaEditando.estadoActual === 'A' && 'Atraso'}
+                    </Badge>
+                  </span>
+                </AlertDescription>
+              </Alert>
+
+              <div className="space-y-2">
+                <Label className="text-base font-semibold">Nuevo Estado</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant={
+                      asistenciaActual[asistenciaEditando.id_alumno]?.estado ===
+                      'P'
+                        ? 'default'
+                        : 'outline'
+                    }
+                    onClick={() =>
+                      handleEstadoChange(asistenciaEditando.id_alumno, 'P')
+                    }
+                    className={
+                      asistenciaActual[asistenciaEditando.id_alumno]?.estado ===
+                      'P'
+                        ? 'bg-green-600 hover:bg-green-700'
+                        : 'border-green-300 text-green-700 hover:bg-green-50'
+                    }
+                  >
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Presente
+                  </Button>
+                  <Button
+                    variant={
+                      asistenciaActual[asistenciaEditando.id_alumno]?.estado ===
+                      'E'
+                        ? 'default'
+                        : 'outline'
+                    }
+                    onClick={() =>
+                      handleEstadoChange(asistenciaEditando.id_alumno, 'E')
+                    }
+                    className={
+                      asistenciaActual[asistenciaEditando.id_alumno]?.estado ===
+                      'E'
+                        ? 'bg-blue-600 hover:bg-blue-700'
+                        : 'border-blue-300 text-blue-700 hover:bg-blue-50'
+                    }
+                  >
+                    <Shield className="w-4 h-4 mr-2" />
+                    Con Permiso
+                  </Button>
+                  <Button
+                    variant={
+                      asistenciaActual[asistenciaEditando.id_alumno]?.estado ===
+                      'SP'
+                        ? 'default'
+                        : 'outline'
+                    }
+                    onClick={() =>
+                      handleEstadoChange(asistenciaEditando.id_alumno, 'SP')
+                    }
+                    className={
+                      asistenciaActual[asistenciaEditando.id_alumno]?.estado ===
+                      'SP'
+                        ? 'bg-red-600 hover:bg-red-700'
+                        : 'border-red-300 text-red-700 hover:bg-red-50'
+                    }
+                  >
+                    <XCircle className="w-4 h-4 mr-2" />
+                    Sin Permiso
+                  </Button>
+                  <Button
+                    variant={
+                      asistenciaActual[asistenciaEditando.id_alumno]?.estado ===
+                      'A'
+                        ? 'default'
+                        : 'outline'
+                    }
+                    onClick={() =>
+                      handleEstadoChange(asistenciaEditando.id_alumno, 'A')
+                    }
+                    className={
+                      asistenciaActual[asistenciaEditando.id_alumno]?.estado ===
+                      'A'
+                        ? 'bg-orange-600 hover:bg-orange-700'
+                        : 'border-orange-300 text-orange-700 hover:bg-orange-50'
+                    }
+                  >
+                    <Clock className="w-4 h-4 mr-2" />
+                    Atraso
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="observacion-edit">
+                  Observaciones (opcional)
+                </Label>
+                <Textarea
+                  id="observacion-edit"
+                  placeholder="Motivo de la corrección, detalles adicionales..."
+                  value={
+                    asistenciaActual[asistenciaEditando.id_alumno]
+                      ?.observacion || ''
+                  }
+                  onChange={(e) =>
+                    handleObservacionChange(
+                      asistenciaEditando.id_alumno,
+                      e.target.value
+                    )
+                  }
+                  rows={3}
+                />
+              </div>
+
+              <div className="flex space-x-3 pt-4 border-t">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setModalEdicion(false);
+                    setAsistenciaEditando(null);
+                    // Restaurar estado anterior
+                    if (
+                      asistenciasGuardadas[
+                        asistenciaEditando.id_alumno.toString()
+                      ]
+                    ) {
+                      const guardada =
+                        asistenciasGuardadas[
+                          asistenciaEditando.id_alumno.toString()
+                        ];
+                      setAsistenciaActual((prev) => ({
+                        ...prev,
+                        [asistenciaEditando.id_alumno]: {
+                          estado: guardada.estado,
+                          observacion: guardada.observacion || '',
+                        },
+                      }));
+                    }
+                  }}
+                  className="flex-1"
+                  disabled={isLoading}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleGuardarEdicion}
+                  disabled={
+                    isLoading ||
+                    !asistenciaActual[asistenciaEditando.id_alumno]?.estado
+                  }
+                  className="flex-1 bg-blue-600 hover:bg-blue-700"
+                >
+                  {isLoading ? (
+                    <>
+                      <Clock className="w-4 h-4 mr-2 animate-spin" />
+                      Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      Guardar Cambios
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 
@@ -1800,6 +2324,180 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
     </div>
   );
 
+  const renderHistorialAsistencias = () => (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center space-x-2">
+            <FileText className="w-5 h-5" />
+            <span>Historial de Asistencias</span>
+          </CardTitle>
+          <p className="text-sm text-gray-600 mt-2">
+            Consulta y revisa todas las asistencias registradas por curso y
+            rango de fechas
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <Label>Curso</Label>
+              <Select
+                value={filtroHistorial.cursoId?.toString() || ''}
+                onValueChange={(v) =>
+                  setFiltroHistorial({
+                    ...filtroHistorial,
+                    cursoId: parseInt(v),
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona un curso" />
+                </SelectTrigger>
+                <SelectContent>
+                  {cursosAsignados.map((curso) => (
+                    <SelectItem
+                      key={curso.id_curso}
+                      value={curso.id_curso.toString()}
+                    >
+                      {curso.nombre}
+                      {curso.seccion ? ` - ${curso.seccion}` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Fecha Desde</Label>
+              <Input
+                type="date"
+                value={filtroHistorial.fechaDesde}
+                onChange={(e) =>
+                  setFiltroHistorial({
+                    ...filtroHistorial,
+                    fechaDesde: e.target.value,
+                  })
+                }
+              />
+            </div>
+            <div>
+              <Label>Fecha Hasta</Label>
+              <Input
+                type="date"
+                value={filtroHistorial.fechaHasta}
+                onChange={(e) =>
+                  setFiltroHistorial({
+                    ...filtroHistorial,
+                    fechaHasta: e.target.value,
+                  })
+                }
+              />
+            </div>
+          </div>
+          <Button
+            onClick={handleCargarHistorial}
+            disabled={isLoading || !filtroHistorial.cursoId}
+          >
+            <Search className="w-4 h-4 mr-2" />
+            {isLoading ? 'Buscando...' : 'Buscar Asistencias'}
+          </Button>
+          {!filtroHistorial.cursoId && (
+            <Alert className="bg-blue-50 border-blue-200">
+              <AlertCircle className="h-4 w-4 text-blue-600" />
+              <AlertDescription className="text-blue-800">
+                Selecciona un curso para ver el historial de asistencias
+              </AlertDescription>
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
+
+      {historialAsistencias.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <span>Registros Encontrados ({historialAsistencias.length})</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-gray-100 hover:bg-gray-100">
+                    <TableHead className="font-bold text-gray-900">
+                      Fecha
+                    </TableHead>
+                    <TableHead className="font-bold text-gray-900">
+                      Alumno
+                    </TableHead>
+                    <TableHead className="text-center font-bold text-gray-900">
+                      Estado
+                    </TableHead>
+                    <TableHead className="font-bold text-gray-900">
+                      Observaciones
+                    </TableHead>
+                    <TableHead className="font-bold text-gray-900">
+                      Registrado por
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {historialAsistencias.map((asist: any, index) => (
+                    <TableRow
+                      key={asist.id_asistencia}
+                      className={
+                        index % 2 === 0
+                          ? 'bg-white hover:bg-gray-50'
+                          : 'bg-gray-50 hover:bg-gray-100'
+                      }
+                    >
+                      <TableCell className="font-medium">
+                        {new Date(asist.fecha).toLocaleDateString('es-ES', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric',
+                        })}
+                      </TableCell>
+                      <TableCell>
+                        {asist.alumno.nombre} {asist.alumno.apellido}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge
+                          variant="outline"
+                          className={
+                            asist.estado === 'P'
+                              ? 'bg-green-100 text-green-800 border-green-300'
+                              : asist.estado === 'E'
+                                ? 'bg-blue-100 text-blue-800 border-blue-300'
+                                : asist.estado === 'SP'
+                                  ? 'bg-red-100 text-red-800 border-red-300'
+                                  : asist.estado === 'A'
+                                    ? 'bg-orange-100 text-orange-800 border-orange-300'
+                                    : 'bg-gray-100 text-gray-800 border-gray-300'
+                          }
+                        >
+                          {asist.estado === 'P' && 'Presente'}
+                          {asist.estado === 'E' && 'Con Permiso'}
+                          {asist.estado === 'SP' && 'Sin Permiso'}
+                          {asist.estado === 'A' && 'Atraso'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="max-w-xs truncate">
+                        {asist.observacion || '-'}
+                      </TableCell>
+                      <TableCell>
+                        {asist.orientador.nombre} {asist.orientador.apellido}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+
   const renderResumenMensual = () => (
     <div className="space-y-6">
       <Card>
@@ -2500,36 +3198,57 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
       </div>
 
       <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)}>
-        <TabsList className="grid w-full grid-cols-4 gap-2">
-          <TabsTrigger value="asistencia" className="flex items-center gap-2">
-            <Calendar className="w-4 h-4" />
-            Tomar Asistencia
-          </TabsTrigger>
-          <TabsTrigger value="conducta" className="flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4" />
-            Conducta
-          </TabsTrigger>
-          <TabsTrigger
-            value="resumen-mensual"
-            className="flex items-center gap-2"
-          >
-            <BarChart3 className="w-4 h-4" />
-            Resumen Mensual
-          </TabsTrigger>
-          <TabsTrigger
-            value="resumen-trimestral"
-            className="flex items-center gap-2"
-          >
-            <Award className="w-4 h-4" />
-            Resumen Trimestral
-          </TabsTrigger>
-        </TabsList>
+        <div className="space-y-2">
+          <TabsList className="grid w-full grid-cols-3 gap-2 h-auto p-2">
+            <TabsTrigger
+              value="asistencia"
+              className="flex items-center gap-2 py-3"
+            >
+              <Calendar className="w-4 h-4" />
+              <span className="font-medium">Tomar Asistencia</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="conducta"
+              className="flex items-center gap-2 py-3"
+            >
+              <AlertTriangle className="w-4 h-4" />
+              <span className="font-medium">Conducta</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="historial"
+              className="flex items-center gap-2 py-3"
+            >
+              <FileText className="w-4 h-4" />
+              <span className="font-medium">Historial</span>
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsList className="grid w-full grid-cols-2 gap-2 h-auto p-2">
+            <TabsTrigger
+              value="resumen-mensual"
+              className="flex items-center gap-2 py-3"
+            >
+              <BarChart3 className="w-4 h-4" />
+              <span className="font-medium">Resumen Mensual</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="resumen-trimestral"
+              className="flex items-center gap-2 py-3"
+            >
+              <Award className="w-4 h-4" />
+              <span className="font-medium">Resumen Trimestral</span>
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         <div className="mt-6">
           <TabsContent value="asistencia">
             {renderTomarAsistencia()}
           </TabsContent>
           <TabsContent value="conducta">{renderConducta()}</TabsContent>
+          <TabsContent value="historial">
+            {renderHistorialAsistencias()}
+          </TabsContent>
           <TabsContent value="resumen-mensual">
             {renderResumenMensual()}
           </TabsContent>

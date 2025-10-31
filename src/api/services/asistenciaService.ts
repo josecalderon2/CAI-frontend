@@ -35,6 +35,7 @@ export interface BulkAsistenciaDto {
 export interface UpdateAsistenciaDto {
   estado?: EstadoAsistencia;
   observacion?: string;
+  id_orientador?: number; // Para registrar quién hizo la modificación
 }
 
 // Response de asistencia
@@ -76,7 +77,7 @@ export const asistenciaService = {
     id: string,
     data: UpdateAsistenciaDto
   ): Promise<AsistenciaResponse> => {
-    const response = await api.put<AsistenciaResponse>(
+    const response = await api.patch<AsistenciaResponse>(
       `/asistencia/${id}`,
       data
     );
