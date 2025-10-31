@@ -411,11 +411,11 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
         data: e?.response?.data,
         message: e?.message,
       });
-      
+
       // Mostrar mensaje específico según el error
       const errorMsg = e?.response?.data?.message || e.message;
       const statusCode = e?.response?.status;
-      
+
       if (statusCode === 500) {
         console.error('🔴 Error 500 del servidor. Posibles causas:');
         console.error('   - El backend no está corriendo');
@@ -432,7 +432,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
       } else {
         toast.warning(`Error al cargar asistencias previas: ${errorMsg}`);
       }
-      
+
       // Limpiar estados pero no bloquear la funcionalidad
       setAsistenciasGuardadas({});
       // NO limpiar asistenciaActual para que se mantengan los cambios del usuario
@@ -1252,21 +1252,6 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                     estadoActual.estado !== asistenciaGuardada.estado;
                   const estaGuardado = asistenciaGuardada && !estadoActual;
 
-                  const getEstadoLabel = (estado: EstadoAsistencia) => {
-                    switch (estado) {
-                      case 'P':
-                        return 'Presente';
-                      case 'E':
-                        return 'Con Permiso';
-                      case 'SP':
-                        return 'Sin Permiso';
-                      case 'A':
-                        return 'Atraso';
-                      default:
-                        return '';
-                    }
-                  };
-
                   // Función para obtener el color del borde del card según el estado
                   const getCardBorderColor = () => {
                     if (hayModificacion) {
@@ -1303,28 +1288,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                           {alumno.nombre} {alumno.apellido}
                         </p>
 
-                        {/* Badge prominente del estado actual */}
-                        {estadoAMostrar?.estado && (
-                          <Badge
-                            className={`text-base font-extrabold px-4 py-1.5 shadow-md ${
-                              estadoAMostrar.estado === 'P'
-                                ? 'bg-green-600 hover:bg-green-700 text-white border-2 border-green-800'
-                                : estadoAMostrar.estado === 'A'
-                                  ? 'bg-orange-600 hover:bg-orange-700 text-white border-2 border-orange-800'
-                                  : estadoAMostrar.estado === 'SP'
-                                    ? 'bg-red-600 hover:bg-red-700 text-white border-2 border-red-800'
-                                    : estadoAMostrar.estado === 'E'
-                                      ? 'bg-blue-600 hover:bg-blue-700 text-white border-2 border-blue-800'
-                                      : 'bg-gray-600 text-white'
-                            }`}
-                          >
-                            {estadoAMostrar.estado === 'P' && '✅ PRESENTE'}
-                            {estadoAMostrar.estado === 'A' && '⏰ ATRASO'}
-                            {estadoAMostrar.estado === 'SP' && '❌ SIN PERMISO'}
-                            {estadoAMostrar.estado === 'E' && '📋 CON PERMISO'}
-                          </Badge>
-                        )}
-
+                        {/* Badges solo para estados de cambio (modificado/nuevo) */}
                         {hayModificacion && (
                           <Badge
                             variant="outline"
@@ -1339,14 +1303,6 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                             className="bg-blue-100 text-blue-800 border-blue-300 text-xs font-semibold"
                           >
                             📝 Nuevo
-                          </Badge>
-                        )}
-                        {estaGuardado && !estadoAMostrar && (
-                          <Badge
-                            variant="outline"
-                            className="bg-green-100 text-green-800 border-green-300 text-xs"
-                          >
-                            ✓ {getEstadoLabel(asistenciaGuardada.estado)}
                           </Badge>
                         )}
                       </div>
