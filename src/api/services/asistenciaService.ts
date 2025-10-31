@@ -15,9 +15,10 @@ export type AccionAsistencia =
   | 'ROLLBACK';
 
 // DTO para crear una asistencia individual
+// ✅ ACTUALIZADO: id_asignatura ahora es OPCIONAL (asistencia por curso)
 export interface CreateAsistenciaDto {
   id_alumno: number;
-  id_asignatura: number;
+  id_asignatura?: number; // ✅ OPCIONAL - Ya no es necesario para asistencia por curso
   id_orientador: number;
   fecha: string;
   estado: EstadoAsistencia;
@@ -168,25 +169,28 @@ export interface BuscarAsistenciaParams {
   estado?: EstadoAsistencia;
 }
 
+// ✅ ACTUALIZADO: asignatura ahora es OPCIONAL
 export interface AsistenciaConRelaciones extends AsistenciaResponse {
   alumno: {
     nombre: string;
     apellido: string;
   };
-  asignatura: {
+  asignatura?: {
+    // ✅ OPCIONAL - Puede ser null para asistencia por curso
     nombre: string;
-  };
+  } | null;
   orientador: {
     nombre: string;
     apellido: string;
   };
 }
 
+// ✅ ACTUALIZADO: id_asignatura ahora es OPCIONAL en historial
 export interface HistorialAsistenciaResponse {
   id_historial: number;
   id_asistencia: number | null;
   id_alumno: number;
-  id_asignatura: number;
+  id_asignatura?: number | null; // ✅ OPCIONAL - Puede ser null para asistencia por curso
   fecha: string;
   accion: AccionAsistencia;
   id_orientador_registro: number;

@@ -132,7 +132,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
     Record<string, AlumnoResponse[]>
   >({});
   const [asistenciaActual, setAsistenciaActual] = useState<
-    Record<string, { estado: EstadoAsistencia; observacion: string }>
+    Record<string, { estado: EstadoAsistencia }>
   >({});
   const [busquedaAlumno, setBusquedaAlumno] = useState('');
   const [mostrarEstados, setMostrarEstados] = useState(false);
@@ -300,13 +300,13 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
             return cursoMapeado;
           });
 
-        const conAsignaturas = cursosConAsignaturas.filter((c) => c.asignatura);
-        cursosResponse = conAsignaturas as CursoResponse[];
+        // ✅ CAMBIO: Ya no filtramos por asignatura - asistencia es por CURSO
+        cursosResponse = cursosConAsignaturas as CursoResponse[];
       }
 
       if (cursosResponse.length === 0) {
         toast.warning(
-          'No se encontraron cursos con asignaturas asignadas. Verifica que tengas cursos asignados como orientador.'
+          'No se encontraron cursos asignados. Verifica que tengas cursos como orientador.'
         );
       } else {
         toast.success(
@@ -386,11 +386,15 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
         }
       > = {};
 
-      asistencias.forEach((asist) => {
-        asistenciasMap[asist.id_alumno] = {
-          id_asistencia: asist.id_asistencia,
+      asistencias.forEach((asist: any) => {
+        // ✅ CORREGIDO: Asegurar que id_alumno sea string para consistencia
+        const alumnoId = String(asist.id_alumno);
+        const asistenciaId = String(asist.id_asistencia);
+
+        asistenciasMap[alumnoId] = {
+          id_asistencia: asistenciaId,
           estado: asist.estado,
-          observacion: asist.observacion,
+          observacion: asist.observacion || null,
         };
       });
 
@@ -398,14 +402,6 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
 
       // Limpiar cualquier estado actual que pueda interferir
       setAsistenciaActual({});
-
-      console.log(
-        '✅ Asistencias guardadas cargadas:',
-        Object.keys(asistenciasMap).length
-      );
-      if (Object.keys(asistenciasMap).length > 0) {
-        console.log('📋 Primer registro:', Object.values(asistenciasMap)[0]);
-      }
     } catch (e: any) {
       console.error('❌ Error al cargar asistencias guardadas:', e);
       console.error('📋 Detalles del error:', {
@@ -452,7 +448,6 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
       ...prev,
       [alumno.id_alumno]: {
         estado: asistenciaGuardada.estado,
-        observacion: asistenciaGuardada.observacion || '',
       },
     }));
 
@@ -480,7 +475,6 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
     try {
       await asistenciaService.update(asistenciaEditando.id_asistencia, {
         estado: estadoActual.estado,
-        observacion: estadoActual.observacion || undefined,
         id_orientador: parseInt(user.id), // Registrar quién hizo la modificación
       });
 
@@ -492,7 +486,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
         [asistenciaEditando.id_alumno]: {
           id_asistencia: asistenciaEditando.id_asistencia,
           estado: estadoActual.estado,
-          observacion: estadoActual.observacion || null,
+          observacion: null,
         },
       }));
 
@@ -518,14 +512,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
   const handleEstadoChange = (alumnoId: number, estado: EstadoAsistencia) => {
     setAsistenciaActual((prev) => ({
       ...prev,
-      [alumnoId]: { estado, observacion: prev[alumnoId]?.observacion || '' },
-    }));
-  };
-
-  const handleObservacionChange = (alumnoId: number, observacion: string) => {
-    setAsistenciaActual((prev) => ({
-      ...prev,
-      [alumnoId]: { estado: prev[alumnoId]?.estado || 'P', observacion },
+      [alumnoId]: { estado },
     }));
   };
 
@@ -538,8 +525,10 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
     const cursoActual = cursosAsignados.find(
       (c) => c.id_curso === parseInt(cursoSeleccionado)
     );
-    if (!cursoActual?.asignatura?.id_asignatura) {
-      toast.error('El curso seleccionado no tiene asignatura asignada');
+
+    // ✅ CAMBIO: Ya no validamos asignatura - ahora la asistencia es por CURSO
+    if (!cursoActual) {
+      toast.error('El curso seleccionado no es válido');
       return;
     }
 
@@ -560,24 +549,20 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
         .filter(([alumnoId]) => !asistenciasGuardadas[alumnoId])
         .map(([alumnoId, datos]) => ({
           id_alumno: parseInt(alumnoId),
-          id_asignatura: cursoActual.asignatura!.id_asignatura,
+          // ✅ CAMBIO: id_asignatura ahora es OPCIONAL - se omite para asistencia por curso
+          // id_asignatura: cursoActual.asignatura!.id_asignatura, // ❌ YA NO SE ENVIA
           id_orientador: parseInt(user.id),
           fecha: fechaSeleccionada,
           estado: datos.estado,
           anio_academico: new Date().getFullYear().toString(),
           trimestre: trimestre,
-          observacion: datos.observacion || null,
         }));
 
       // Identificar modificaciones (registros que ya existen pero tienen estado diferente)
       const modificaciones = Object.entries(asistenciaActual).filter(
         ([alumnoId, datos]) => {
           const guardado = asistenciasGuardadas[alumnoId];
-          return (
-            guardado &&
-            (guardado.estado !== datos.estado ||
-              (guardado.observacion || '') !== datos.observacion)
-          );
+          return guardado && guardado.estado !== datos.estado;
         }
       );
 
@@ -599,7 +584,6 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
             const guardado = asistenciasGuardadas[alumnoId];
             return asistenciaService.update(guardado.id_asistencia, {
               estado: datos.estado,
-              observacion: datos.observacion || undefined,
               id_orientador: parseInt(user.id), // Registrar quién hizo la modificación
             });
           })
@@ -628,14 +612,10 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
     const alumnosDelCurso = cursoSeleccionado
       ? alumnosPorCurso[cursoSeleccionado] || []
       : [];
-    const nuevaAsistencia: Record<
-      string,
-      { estado: EstadoAsistencia; observacion: string }
-    > = {};
+    const nuevaAsistencia: Record<string, { estado: EstadoAsistencia }> = {};
     alumnosDelCurso.forEach((alumno) => {
       nuevaAsistencia[alumno.id_alumno.toString()] = {
         estado: 'P',
-        observacion: '',
       };
     });
     setAsistenciaActual(nuevaAsistencia);
@@ -861,13 +841,33 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
     let tardes = 0;
     let marcados = 0;
 
-    alumnosDelCurso.forEach((alumno) => {
+    console.log('📊 DEBUG contarEstados:');
+    console.log('   - Total alumnos del curso:', alumnosDelCurso.length);
+    console.log(
+      '   - Total asistencias guardadas:',
+      Object.keys(asistenciasGuardadas).length
+    );
+    console.log(
+      '   - Total asistencias actuales:',
+      Object.keys(asistenciaActual).length
+    );
+
+    alumnosDelCurso.forEach((alumno, index) => {
       const idAlumno = alumno.id_alumno.toString();
       const estadoActual = asistenciaActual[idAlumno];
       const asistenciaGuardada = asistenciasGuardadas[idAlumno];
 
       // Determinar el estado a mostrar (prioridad: actual > guardado)
       const estadoAMostrar = estadoActual || asistenciaGuardada;
+
+      if (index < 3) {
+        console.log(`   👤 Alumno ${index + 1}:`, {
+          id: idAlumno,
+          estadoActual,
+          asistenciaGuardada,
+          estadoAMostrar,
+        });
+      }
 
       if (estadoAMostrar) {
         marcados++;
@@ -1031,23 +1031,6 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
 
       {!!cursoSeleccionado && (
         <>
-          {/* Alerta si hay asistencias ya guardadas */}
-          {Object.keys(asistenciasGuardadas).length > 0 && (
-            <Alert className="bg-green-50 border-green-300">
-              <CheckCircle className="h-4 w-4 text-green-600" />
-              <AlertTitle className="text-green-900">
-                Asistencias Guardadas
-              </AlertTitle>
-              <AlertDescription className="text-green-800">
-                Ya hay{' '}
-                <strong>{Object.keys(asistenciasGuardadas).length}</strong>{' '}
-                registro(s) de asistencia guardado(s) para esta fecha. Puedes
-                editarlos haciendo clic en el botón{' '}
-                <Edit className="w-3 h-3 inline mx-1" /> de cada alumno.
-              </AlertDescription>
-            </Alert>
-          )}
-
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
@@ -1088,9 +1071,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                           return (
                             guardado &&
                             actual &&
-                            (guardado.estado !== actual.estado ||
-                              (guardado.observacion || '') !==
-                                actual.observacion)
+                            guardado.estado !== actual.estado
                           );
                         }).length;
 
@@ -1230,10 +1211,9 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
               <div className="space-y-3">
                 {alumnosFiltrados.map((alumno) => {
                   // Verificar estados
-                  const asistenciaGuardada =
-                    asistenciasGuardadas[alumno.id_alumno.toString()];
-                  const estadoActual =
-                    asistenciaActual[alumno.id_alumno.toString()];
+                  const alumnoIdStr = alumno.id_alumno.toString();
+                  const asistenciaGuardada = asistenciasGuardadas[alumnoIdStr];
+                  const estadoActual = asistenciaActual[alumnoIdStr];
 
                   // CORREGIDO: Determinar el estado a mostrar correctamente
                   // Prioridad: estado temporal > estado guardado > sin estado
@@ -1254,40 +1234,50 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                     estadoActual.estado !== asistenciaGuardada.estado;
                   const estaGuardado = asistenciaGuardada && !estadoActual;
 
-                  // Función para obtener el color del borde del card según el estado
+                  // ✅ NUEVO: Determinar si los botones deben estar bloqueados
+                  const botonesBloqueados = !!asistenciaGuardada;
+
+                  // Función para obtener el color del borde y fondo del card según el estado
                   const getCardBorderColor = () => {
                     if (hayModificacion) {
-                      return 'bg-yellow-50 border-yellow-400 hover:bg-yellow-100 shadow-md';
+                      return 'bg-yellow-50 border-yellow-300 hover:bg-yellow-100 shadow-sm';
                     }
                     if (esNuevo) {
-                      return 'bg-blue-50 border-blue-300 hover:bg-blue-100 shadow-md';
+                      return 'bg-blue-50 border-blue-200 hover:bg-blue-100 shadow-sm';
                     }
                     if (estaGuardado) {
-                      // Colorear según el estado guardado
+                      // ✅ Colorear toda la fila según el estado guardado (más visible)
                       switch (asistenciaGuardada.estado) {
                         case 'P':
-                          return 'bg-green-50 border-green-400 hover:bg-green-100 shadow-sm';
+                          return 'bg-green-100 border-green-300 hover:bg-green-200 shadow-sm';
                         case 'A':
-                          return 'bg-orange-50 border-orange-400 hover:bg-orange-100 shadow-sm';
+                          return 'bg-orange-100 border-orange-300 hover:bg-orange-200 shadow-sm';
                         case 'SP':
-                          return 'bg-red-50 border-red-400 hover:bg-red-100 shadow-sm';
+                          return 'bg-red-100 border-red-300 hover:bg-red-200 shadow-sm';
                         case 'E':
-                          return 'bg-blue-50 border-blue-400 hover:bg-blue-100 shadow-sm';
+                          return 'bg-blue-100 border-blue-300 hover:bg-blue-200 shadow-sm';
                         default:
                           return 'bg-gray-50 border-gray-200 hover:bg-gray-100';
                       }
                     }
-                    return 'bg-gray-50 border-gray-200 hover:bg-gray-100';
+                    return 'bg-white border-gray-200 hover:bg-gray-50';
                   };
-
                   return (
                     <div
                       key={alumno.id_alumno}
                       className={`flex items-center justify-between p-4 rounded-lg transition-all duration-300 border-2 ${getCardBorderColor()}`}
                     >
                       <div className="flex-1 flex items-center gap-3">
-                        <p className="font-medium text-gray-900">
+                        <p className="font-medium text-gray-900 flex items-center gap-2">
                           {alumno.nombre} {alumno.apellido}
+                          {botonesBloqueados && (
+                            <span
+                              className="text-gray-500 text-sm"
+                              title="Registro guardado - Usa 'Editar' para modificar"
+                            >
+                              🔒
+                            </span>
+                          )}
                         </p>
 
                         {/* Badges solo para estados de cambio (modificado/nuevo) */}
@@ -1319,14 +1309,20 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                                 : 'outline'
                             }
                             onClick={() =>
+                              !botonesBloqueados &&
                               handleEstadoChange(alumno.id_alumno, 'P')
                             }
+                            disabled={botonesBloqueados}
                             className={`transition-all duration-200 ${
                               estadoAMostrar?.estado === 'P'
                                 ? 'bg-green-600 hover:bg-green-700 text-white border-2 border-green-800 shadow-lg scale-105 font-bold'
                                 : 'border-green-300 text-green-700 hover:bg-green-50 hover:border-green-400 hover:scale-105'
-                            }`}
-                            title="Presente"
+                            } ${botonesBloqueados ? 'opacity-95 cursor-not-allowed hover:scale-100' : ''}`}
+                            title={
+                              botonesBloqueados
+                                ? 'Usa el botón "Editar" para modificar'
+                                : 'Presente'
+                            }
                           >
                             <CheckCircle
                               className={`w-4 h-4 ${estadoAMostrar?.estado === 'P' ? 'animate-pulse' : ''}`}
@@ -1340,14 +1336,20 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                                 : 'outline'
                             }
                             onClick={() =>
+                              !botonesBloqueados &&
                               handleEstadoChange(alumno.id_alumno, 'A')
                             }
+                            disabled={botonesBloqueados}
                             className={`transition-all duration-200 ${
                               estadoAMostrar?.estado === 'A'
                                 ? 'bg-orange-600 hover:bg-orange-700 text-white border-2 border-orange-800 shadow-lg scale-105 font-bold'
                                 : 'border-orange-300 text-orange-700 hover:bg-orange-50 hover:border-orange-400 hover:scale-105'
-                            }`}
-                            title="Atraso/Tarde"
+                            } ${botonesBloqueados ? 'opacity-95 cursor-not-allowed hover:scale-100' : ''}`}
+                            title={
+                              botonesBloqueados
+                                ? 'Usa el botón "Editar" para modificar'
+                                : 'Atraso/Tarde'
+                            }
                           >
                             <Clock
                               className={`w-4 h-4 ${estadoAMostrar?.estado === 'A' ? 'animate-pulse' : ''}`}
@@ -1361,14 +1363,20 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                                 : 'outline'
                             }
                             onClick={() =>
+                              !botonesBloqueados &&
                               handleEstadoChange(alumno.id_alumno, 'SP')
                             }
+                            disabled={botonesBloqueados}
                             className={`transition-all duration-200 ${
                               estadoAMostrar?.estado === 'SP'
                                 ? 'bg-red-600 hover:bg-red-700 text-white border-2 border-red-800 shadow-lg scale-105 font-bold'
                                 : 'border-red-300 text-red-700 hover:bg-red-50 hover:border-red-400 hover:scale-105'
-                            }`}
-                            title="Ausente Sin Permiso"
+                            } ${botonesBloqueados ? 'opacity-95 cursor-not-allowed hover:scale-100' : ''}`}
+                            title={
+                              botonesBloqueados
+                                ? 'Usa el botón "Editar" para modificar'
+                                : 'Ausente Sin Permiso'
+                            }
                           >
                             <XCircle
                               className={`w-4 h-4 ${estadoAMostrar?.estado === 'SP' ? 'animate-pulse' : ''}`}
@@ -1382,14 +1390,20 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                                 : 'outline'
                             }
                             onClick={() =>
+                              !botonesBloqueados &&
                               handleEstadoChange(alumno.id_alumno, 'E')
                             }
+                            disabled={botonesBloqueados}
                             className={`transition-all duration-200 ${
                               estadoAMostrar?.estado === 'E'
                                 ? 'bg-blue-600 hover:bg-blue-700 text-white border-2 border-blue-800 shadow-lg scale-105 font-bold'
                                 : 'border-blue-300 text-blue-700 hover:bg-blue-50 hover:border-blue-400 hover:scale-105'
-                            }`}
-                            title="Ausente Justificado/Con Permiso"
+                            } ${botonesBloqueados ? 'opacity-95 cursor-not-allowed hover:scale-100' : ''}`}
+                            title={
+                              botonesBloqueados
+                                ? 'Usa el botón "Editar" para modificar'
+                                : 'Ausente Justificado/Con Permiso'
+                            }
                           >
                             <Shield
                               className={`w-4 h-4 ${estadoAMostrar?.estado === 'E' ? 'animate-pulse' : ''}`}
@@ -1409,47 +1423,6 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                             <Edit className="w-4 h-4" />
                           </Button>
                         )}
-
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              <FileText className="w-4 h-4" />
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle>
-                                Observaciones - {alumno.nombre}{' '}
-                                {alumno.apellido}
-                              </DialogTitle>
-                            </DialogHeader>
-                            <div className="space-y-4">
-                              <div>
-                                <Label htmlFor="observaciones">
-                                  Observaciones
-                                </Label>
-                                <Textarea
-                                  id="observaciones"
-                                  placeholder="Ingrese observaciones sobre la asistencia..."
-                                  value={estadoAMostrar?.observacion || ''}
-                                  onChange={(e) =>
-                                    handleObservacionChange(
-                                      alumno.id_alumno,
-                                      e.target.value
-                                    )
-                                  }
-                                />
-                              </div>
-                              <Button
-                                onClick={() =>
-                                  toast.success('Observaciones guardadas')
-                                }
-                              >
-                                Guardar Observaciones
-                              </Button>
-                            </div>
-                          </DialogContent>
-                        </Dialog>
                       </div>
                     </div>
                   );
@@ -1576,27 +1549,6 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="observacion-edit">
-                  Observaciones (opcional)
-                </Label>
-                <Textarea
-                  id="observacion-edit"
-                  placeholder="Motivo de la corrección, detalles adicionales..."
-                  value={
-                    asistenciaActual[asistenciaEditando.id_alumno]
-                      ?.observacion || ''
-                  }
-                  onChange={(e) =>
-                    handleObservacionChange(
-                      asistenciaEditando.id_alumno,
-                      e.target.value
-                    )
-                  }
-                  rows={3}
-                />
-              </div>
-
               <div className="flex space-x-3 pt-4 border-t">
                 <Button
                   variant="outline"
@@ -1617,7 +1569,6 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                         ...prev,
                         [asistenciaEditando.id_alumno]: {
                           estado: guardada.estado,
-                          observacion: guardada.observacion || '',
                         },
                       }));
                     }
