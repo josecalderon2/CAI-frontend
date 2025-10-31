@@ -97,7 +97,7 @@ export function generarPDFResumenMensual(data: PDFDataMensual): void {
     didDrawCell: (data) => {
       if (data.section === 'head' && data.row.index === 0) {
         const { cell, doc } = data;
-        
+
         // Aplicar colores de fondo según columna
         if (data.column.index === 1) {
           // Justificadas (E) - Verde
@@ -105,32 +105,47 @@ export function generarPDFResumenMensual(data: PDFDataMensual): void {
           doc.rect(cell.x, cell.y, cell.width, cell.height, 'F');
           doc.setTextColor(0, 0, 0);
           doc.setFont('helvetica', 'bold');
-          doc.text('Justificadas (E)', cell.x + cell.width / 2, cell.y + cell.height / 2, {
-            align: 'center',
-            baseline: 'middle',
-          });
+          doc.text(
+            'Justificadas (E)',
+            cell.x + cell.width / 2,
+            cell.y + cell.height / 2,
+            {
+              align: 'center',
+              baseline: 'middle',
+            }
+          );
         } else if (data.column.index === 2) {
           // Injustificadas (SP) - Naranja
           doc.setFillColor(255, 237, 213); // bg-orange-50
           doc.rect(cell.x, cell.y, cell.width, cell.height, 'F');
           doc.setTextColor(0, 0, 0);
           doc.setFont('helvetica', 'bold');
-          doc.text('Injustificadas (SP)', cell.x + cell.width / 2, cell.y + cell.height / 2, {
-            align: 'center',
-            baseline: 'middle',
-          });
+          doc.text(
+            'Injustificadas (SP)',
+            cell.x + cell.width / 2,
+            cell.y + cell.height / 2,
+            {
+              align: 'center',
+              baseline: 'middle',
+            }
+          );
         } else if (data.column.index === 3) {
           // Atrasos (A) - Rojo
           doc.setFillColor(254, 226, 226); // bg-red-50
           doc.rect(cell.x, cell.y, cell.width, cell.height, 'F');
           doc.setTextColor(0, 0, 0);
           doc.setFont('helvetica', 'bold');
-          doc.text('Atrasos (A)', cell.x + cell.width / 2, cell.y + cell.height / 2, {
-            align: 'center',
-            baseline: 'middle',
-          });
+          doc.text(
+            'Atrasos (A)',
+            cell.x + cell.width / 2,
+            cell.y + cell.height / 2,
+            {
+              align: 'center',
+              baseline: 'middle',
+            }
+          );
         }
-        
+
         // Dibujar bordes
         doc.setDrawColor(0, 0, 0);
         doc.setLineWidth(0.5);

@@ -1,8 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import type {
-  ResumenTrimestralResponse,
-} from '../api/services/asistenciaService';
+import type { ResumenTrimestralResponse } from '../api/services/asistenciaService';
 
 interface PDFDataTrimestral {
   resumen: ResumenTrimestralResponse[];
@@ -55,9 +53,13 @@ export function generarPDFResumenTrimestral(data: PDFDataTrimestral): void {
   const tableData = resumen.map((alumno, index) => {
     // Agrupar infracciones por categoría con detalle de artículos
     const infraccionesPorCategoria = {
-      MENOS_GRAVE: alumno.infracciones.filter((inf) => inf.categoria === 'MENOS_GRAVE'),
+      MENOS_GRAVE: alumno.infracciones.filter(
+        (inf) => inf.categoria === 'MENOS_GRAVE'
+      ),
       GRAVE: alumno.infracciones.filter((inf) => inf.categoria === 'GRAVE'),
-      MUY_GRAVE: alumno.infracciones.filter((inf) => inf.categoria === 'MUY_GRAVE'),
+      MUY_GRAVE: alumno.infracciones.filter(
+        (inf) => inf.categoria === 'MUY_GRAVE'
+      ),
     };
 
     // Calcular cantidades
@@ -75,15 +77,15 @@ export function generarPDFResumenTrimestral(data: PDFDataTrimestral): void {
     );
 
     // Obtener artículos (descripción completa)
-    const menosGravesArticulos = infraccionesPorCategoria.MENOS_GRAVE
-      .map((inf) => `${inf.articulo}: ${inf.descripcion} (${inf.cantidad ?? 1})`)
-      .join('\n');
-    const gravesArticulos = infraccionesPorCategoria.GRAVE
-      .map((inf) => `${inf.articulo}: ${inf.descripcion} (${inf.cantidad ?? 1})`)
-      .join('\n');
-    const muyGravesArticulos = infraccionesPorCategoria.MUY_GRAVE
-      .map((inf) => `${inf.articulo}: ${inf.descripcion} (${inf.cantidad ?? 1})`)
-      .join('\n');
+    const menosGravesArticulos = infraccionesPorCategoria.MENOS_GRAVE.map(
+      (inf) => `${inf.articulo}: ${inf.descripcion} (${inf.cantidad ?? 1})`
+    ).join('\n');
+    const gravesArticulos = infraccionesPorCategoria.GRAVE.map(
+      (inf) => `${inf.articulo}: ${inf.descripcion} (${inf.cantidad ?? 1})`
+    ).join('\n');
+    const muyGravesArticulos = infraccionesPorCategoria.MUY_GRAVE.map(
+      (inf) => `${inf.articulo}: ${inf.descripcion} (${inf.cantidad ?? 1})`
+    ).join('\n');
 
     return [
       (index + 1).toString(), // No
@@ -106,19 +108,61 @@ export function generarPDFResumenTrimestral(data: PDFDataTrimestral): void {
     head: [
       // Fila 1: Categorías principales
       [
-        { content: 'No', rowSpan: 2, styles: { halign: 'center', valign: 'middle' } },
-        { content: 'NOMBRE', rowSpan: 2, styles: { halign: 'center', valign: 'middle' } },
-        { content: 'INASISTENCIAS', colSpan: 2, styles: { halign: 'center', fillColor: [219, 234, 254] } }, // bg-blue-100
-        { content: 'FALTAS', colSpan: 6, styles: { halign: 'center', fillColor: [254, 252, 232] } }, // bg-yellow-50
-        { content: 'CÁLCULO\nCONDUCTA', rowSpan: 2, styles: { halign: 'center', valign: 'middle', fillColor: [250, 245, 255] } }, // bg-purple-50
+        {
+          content: 'No',
+          rowSpan: 2,
+          styles: { halign: 'center', valign: 'middle' },
+        },
+        {
+          content: 'NOMBRE',
+          rowSpan: 2,
+          styles: { halign: 'center', valign: 'middle' },
+        },
+        {
+          content: 'INASISTENCIAS',
+          colSpan: 2,
+          styles: { halign: 'center', fillColor: [219, 234, 254] },
+        }, // bg-blue-100
+        {
+          content: 'FALTAS',
+          colSpan: 6,
+          styles: { halign: 'center', fillColor: [254, 252, 232] },
+        }, // bg-yellow-50
+        {
+          content: 'CÁLCULO\nCONDUCTA',
+          rowSpan: 2,
+          styles: {
+            halign: 'center',
+            valign: 'middle',
+            fillColor: [250, 245, 255],
+          },
+        }, // bg-purple-50
       ],
       // Fila 2: Subcategorías
       [
-        { content: 'P', styles: { halign: 'center', fillColor: [239, 246, 255] } }, // bg-blue-50
-        { content: 'SP', styles: { halign: 'center', fillColor: [239, 246, 255] } }, // bg-blue-50
-        { content: 'Menos Graves', colSpan: 2, styles: { halign: 'center', fillColor: [254, 249, 195] } }, // bg-yellow-100
-        { content: 'Graves', colSpan: 2, styles: { halign: 'center', fillColor: [255, 237, 213] } }, // bg-orange-100
-        { content: 'Muy Graves', colSpan: 2, styles: { halign: 'center', fillColor: [254, 226, 226] } }, // bg-red-100
+        {
+          content: 'P',
+          styles: { halign: 'center', fillColor: [239, 246, 255] },
+        }, // bg-blue-50
+        {
+          content: 'SP',
+          styles: { halign: 'center', fillColor: [239, 246, 255] },
+        }, // bg-blue-50
+        {
+          content: 'Menos Graves',
+          colSpan: 2,
+          styles: { halign: 'center', fillColor: [254, 249, 195] },
+        }, // bg-yellow-100
+        {
+          content: 'Graves',
+          colSpan: 2,
+          styles: { halign: 'center', fillColor: [255, 237, 213] },
+        }, // bg-orange-100
+        {
+          content: 'Muy Graves',
+          colSpan: 2,
+          styles: { halign: 'center', fillColor: [254, 226, 226] },
+        }, // bg-red-100
       ],
       // Fila 3: Columnas específicas
       [
@@ -126,12 +170,30 @@ export function generarPDFResumenTrimestral(data: PDFDataTrimestral): void {
         { content: '', styles: { fillColor: [243, 244, 246] } }, // vacío NOMBRE
         { content: '', styles: { fillColor: [243, 244, 246] } }, // vacío P
         { content: '', styles: { fillColor: [243, 244, 246] } }, // vacío SP
-        { content: 'Cant.', styles: { halign: 'center', fillColor: [254, 252, 232], fontSize: 7 } },
-        { content: 'Artículo', styles: { halign: 'center', fillColor: [254, 252, 232], fontSize: 7 } },
-        { content: 'Cant.', styles: { halign: 'center', fillColor: [255, 237, 213], fontSize: 7 } },
-        { content: 'Artículo', styles: { halign: 'center', fillColor: [255, 237, 213], fontSize: 7 } },
-        { content: 'Cant.', styles: { halign: 'center', fillColor: [254, 226, 226], fontSize: 7 } },
-        { content: 'Artículo', styles: { halign: 'center', fillColor: [254, 226, 226], fontSize: 7 } },
+        {
+          content: 'Cant.',
+          styles: { halign: 'center', fillColor: [254, 252, 232], fontSize: 7 },
+        },
+        {
+          content: 'Artículo',
+          styles: { halign: 'center', fillColor: [254, 252, 232], fontSize: 7 },
+        },
+        {
+          content: 'Cant.',
+          styles: { halign: 'center', fillColor: [255, 237, 213], fontSize: 7 },
+        },
+        {
+          content: 'Artículo',
+          styles: { halign: 'center', fillColor: [255, 237, 213], fontSize: 7 },
+        },
+        {
+          content: 'Cant.',
+          styles: { halign: 'center', fillColor: [254, 226, 226], fontSize: 7 },
+        },
+        {
+          content: 'Artículo',
+          styles: { halign: 'center', fillColor: [254, 226, 226], fontSize: 7 },
+        },
         { content: '', styles: { fillColor: [250, 245, 255] } }, // vacío CÁLCULO
       ],
     ],
