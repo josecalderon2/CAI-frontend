@@ -643,14 +643,28 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
     const alumnosDelCurso = cursoSeleccionado
       ? alumnosPorCurso[cursoSeleccionado] || []
       : [];
-    const nuevaAsistencia: Record<string, { estado: EstadoAsistencia }> = {};
-    alumnosDelCurso.forEach((alumno) => {
-      nuevaAsistencia[alumno.id_alumno.toString()] = {
-        estado: 'P',
-      };
+
+    // Verificar si todos los alumnos ya están marcados (guardados o en estado actual)
+    const todosEstanMarcados = alumnosDelCurso.every((alumno) => {
+      const idAlumno = alumno.id_alumno.toString();
+      return asistenciaActual[idAlumno] || asistenciasGuardadas[idAlumno];
     });
-    setAsistenciaActual(nuevaAsistencia);
-    toast.success('Todos los alumnos marcados como presentes');
+
+    if (todosEstanMarcados) {
+      // Si todos están marcados, desmarcar todos (limpiar estado actual)
+      setAsistenciaActual({});
+      toast.success('Asistencias desmarcadas');
+    } else {
+      // Si no todos están marcados, marcar todos como presentes
+      const nuevaAsistencia: Record<string, { estado: EstadoAsistencia }> = {};
+      alumnosDelCurso.forEach((alumno) => {
+        nuevaAsistencia[alumno.id_alumno.toString()] = {
+          estado: 'P',
+        };
+      });
+      setAsistenciaActual(nuevaAsistencia);
+      toast.success('Todos los alumnos marcados como presentes');
+    }
   };
 
   // Handlers para Conducta
@@ -1390,8 +1404,29 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                   size="sm"
                   disabled={isLoading}
                 >
-                  <CheckCircle className="w-4 h-4 mr-2" />
-                  Marcar Todos Presentes
+                  {(() => {
+                    const todosEstanMarcados = alumnosDelCurso.every(
+                      (alumno) => {
+                        const idAlumno = alumno.id_alumno.toString();
+                        return (
+                          asistenciaActual[idAlumno] ||
+                          asistenciasGuardadas[idAlumno]
+                        );
+                      }
+                    );
+
+                    return todosEstanMarcados ? (
+                      <>
+                        <XCircle className="w-4 h-4 mr-2" />
+                        Desmarcar Todos
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Marcar Todos Presentes
+                      </>
+                    );
+                  })()}
                 </Button>
                 <Button
                   onClick={handleGuardarAsistencia}
@@ -2482,7 +2517,15 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
             </div>
             {cursoSeleccionado && alumnosDelCurso.length > 0 && (
               <Badge variant="outline" className="text-sm">
-                {alumnosDelCurso.length} alumno(s)
+                {
+                  alumnosDelCurso.filter((alumno) => {
+                    const resumen = obtenerResumenInfraccionesAlumno(
+                      alumno.id_alumno
+                    );
+                    return resumen.total > 0;
+                  }).length
+                }{' '}
+                alumno(s) con infracciones
               </Badge>
             )}
           </CardTitle>
@@ -2537,12 +2580,24 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                   <TableBody>
                     {alumnosDelCurso
                       .filter((alumno) => {
-                        if (!busquedaRegistroConducta) return true;
-                        const nombreCompleto =
-                          `${alumno.nombre} ${alumno.apellido}`.toLowerCase();
-                        return nombreCompleto.includes(
-                          busquedaRegistroConducta.toLowerCase()
+                        // Primero filtrar por búsqueda
+                        if (busquedaRegistroConducta) {
+                          const nombreCompleto =
+                            `${alumno.nombre} ${alumno.apellido}`.toLowerCase();
+                          if (
+                            !nombreCompleto.includes(
+                              busquedaRegistroConducta.toLowerCase()
+                            )
+                          ) {
+                            return false;
+                          }
+                        }
+
+                        // Luego filtrar solo alumnos con infracciones
+                        const resumen = obtenerResumenInfraccionesAlumno(
+                          alumno.id_alumno
                         );
+                        return resumen.total > 0;
                       })
                       .map((alumno) => {
                         const resumen = obtenerResumenInfraccionesAlumno(
@@ -2604,6 +2659,43 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                           </TableRow>
                         );
                       })}
+                    {alumnosDelCurso.filter((alumno) => {
+                      // Filtrar por búsqueda
+                      if (busquedaRegistroConducta) {
+                        const nombreCompleto =
+                          `${alumno.nombre} ${alumno.apellido}`.toLowerCase();
+                        if (
+                          !nombreCompleto.includes(
+                            busquedaRegistroConducta.toLowerCase()
+                          )
+                        ) {
+                          return false;
+                        }
+                      }
+
+                      // Filtrar solo alumnos con infracciones
+                      const resumen = obtenerResumenInfraccionesAlumno(
+                        alumno.id_alumno
+                      );
+                      return resumen.total > 0;
+                    }).length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8">
+                          <div className="flex flex-col items-center gap-2 text-gray-500">
+                            <AlertCircle className="w-8 h-8" />
+                            <p className="font-medium">
+                              {busquedaRegistroConducta
+                                ? 'No se encontraron alumnos con infracciones que coincidan con la búsqueda'
+                                : 'No hay alumnos con infracciones registradas en este curso'}
+                            </p>
+                            <p className="text-sm">
+                              Los alumnos sin infracciones no se muestran en
+                              esta lista
+                            </p>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
               </div>
@@ -3362,9 +3454,6 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                       Estado
                     </TableHead>
                     <TableHead className="font-bold text-gray-900">
-                      Observaciones
-                    </TableHead>
-                    <TableHead className="font-bold text-gray-900">
                       Registrado por
                     </TableHead>
                   </TableRow>
@@ -3409,9 +3498,6 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                           {asist.estado === 'SP' && 'Sin Permiso'}
                           {asist.estado === 'A' && 'Atraso'}
                         </Badge>
-                      </TableCell>
-                      <TableCell className="max-w-xs truncate">
-                        {asist.observacion || '-'}
                       </TableCell>
                       <TableCell>
                         {asist.orientador.nombre} {asist.orientador.apellido}
@@ -4098,78 +4184,80 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
         </p>
       </div>
 
-      {/* Tarjetas informativas */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <Card className="border-l-4 border-l-blue-500">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Total</p>
-                <p className="text-2xl font-bold text-blue-600">
-                  {alumnosDelCurso.length}
-                </p>
+      {/* Tarjetas informativas - Solo en tab de asistencia con curso seleccionado */}
+      {activeTab === 'asistencia' && cursoSeleccionado && (
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <Card className="border-l-4 border-l-blue-500">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Total</p>
+                  <p className="text-2xl font-bold text-blue-600">
+                    {alumnosDelCurso.length}
+                  </p>
+                </div>
+                <Users className="w-8 h-8 text-blue-600" />
               </div>
-              <Users className="w-8 h-8 text-blue-600" />
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        <Card className="border-l-4 border-l-green-500">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Presentes</p>
-                <p className="text-2xl font-bold text-green-600">
-                  {estadosCount.presentes}
-                </p>
+          <Card className="border-l-4 border-l-green-500">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Presentes</p>
+                  <p className="text-2xl font-bold text-green-600">
+                    {estadosCount.presentes}
+                  </p>
+                </div>
+                <CheckCircle className="w-8 h-8 text-green-600" />
               </div>
-              <CheckCircle className="w-8 h-8 text-green-600" />
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        <Card className="border-l-4 border-l-red-500">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Ausentes</p>
-                <p className="text-2xl font-bold text-red-600">
-                  {estadosCount.ausentes}
-                </p>
+          <Card className="border-l-4 border-l-red-500">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Ausentes</p>
+                  <p className="text-2xl font-bold text-red-600">
+                    {estadosCount.ausentes}
+                  </p>
+                </div>
+                <XCircle className="w-8 h-8 text-red-600" />
               </div>
-              <XCircle className="w-8 h-8 text-red-600" />
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        <Card className="border-l-4 border-l-orange-500">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Tardes</p>
-                <p className="text-2xl font-bold text-orange-600">
-                  {estadosCount.tardes}
-                </p>
+          <Card className="border-l-4 border-l-orange-500">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Atrasos</p>
+                  <p className="text-2xl font-bold text-orange-600">
+                    {estadosCount.tardes}
+                  </p>
+                </div>
+                <Clock className="w-8 h-8 text-orange-600" />
               </div>
-              <Clock className="w-8 h-8 text-orange-600" />
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        <Card className="border-l-4 border-l-gray-500">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Sin marcar</p>
-                <p className="text-2xl font-bold text-gray-600">
-                  {estadosCount.sinMarcar}
-                </p>
+          <Card className="border-l-4 border-l-gray-500">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Sin marcar</p>
+                  <p className="text-2xl font-bold text-gray-600">
+                    {estadosCount.sinMarcar}
+                  </p>
+                </div>
+                <AlertCircle className="w-8 h-8 text-gray-600" />
               </div>
-              <AlertCircle className="w-8 h-8 text-gray-600" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)}>
         <div className="space-y-2">
@@ -4203,7 +4291,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
               className="flex items-center gap-2 py-3"
             >
               <BarChart3 className="w-4 h-4" />
-              <span className="font-medium">Resumen Mensual</span>
+              <span className="font-medium">Resumen Conductual</span>
             </TabsTrigger>
             <TabsTrigger
               value="resumen-trimestral"
