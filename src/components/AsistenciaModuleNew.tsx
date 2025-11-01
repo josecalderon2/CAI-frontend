@@ -48,6 +48,8 @@ import {
   Edit,
   Trash2,
   Shield,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { generarExcelResumenTrimestral } from '../utils/excelResumenTrimestral';
@@ -164,6 +166,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
   >([]);
   const [modalInfraccion, setModalInfraccion] = useState(false);
   const [modalConducta, setModalConducta] = useState(false);
+  const [catalogoColapsado, setCatalogoColapsado] = useState(true); // Colapsado por defecto
   const [categoriaFiltro, setCategoriaFiltro] = useState<
     CategoriaInfraccion | 'TODAS'
   >('TODAS');
@@ -796,13 +799,19 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
     try {
       await conductaService.update(conductaEditando.id_conducta, {
         id_infraccion: conductaEditando.id_infraccion,
-        observacion: conductaEditando.observacion || undefined,
       });
 
       toast.success('Registro de conducta actualizado correctamente');
       setModalEditarConducta(false);
       setConductaEditando(null);
+
+      // Recargar la lista general de registros de conducta
       await cargarRegistrosConducta();
+
+      // Si estamos viendo el detalle del alumno, recargar sus infracciones
+      if (alumnoDetalleSeleccionado) {
+        await handleVerDetalleAlumno(alumnoDetalleSeleccionado);
+      }
     } catch (e: any) {
       const errorMsg =
         e?.response?.data?.message ||
@@ -826,17 +835,47 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
     try {
       await conductaService.delete(idConducta);
       toast.success('Registro de conducta eliminado correctamente');
+
+      // Actualizar inmediatamente el estado local del modal de detalle
+      if (modalDetalleAlumno && infraccionesAlumno.length > 0) {
+        // Filtrar la infracción eliminada del estado local
+        setInfraccionesAlumno((prev) =>
+          prev.filter((inf) => inf.id_conducta !== idConducta)
+        );
+      }
+
+      // Recargar la lista general de registros de conducta
       await cargarRegistrosConducta();
 
-      // Si estamos viendo el detalle del alumno, recargar sus infracciones
+      // Si estamos viendo el detalle del alumno, recargar sus infracciones desde el servidor
       if (alumnoDetalleSeleccionado) {
-        await handleVerDetalleAlumno(alumnoDetalleSeleccionado);
+        try {
+          const infraccionesActualizadas = await conductaService.getByAlumno(
+            alumnoDetalleSeleccionado.id_alumno.toString()
+          );
+          setInfraccionesAlumno(infraccionesActualizadas);
+        } catch (e) {
+          console.error('Error al recargar infracciones del alumno:', e);
+          // Si hay error, al menos mantener el estado filtrado localmente
+        }
       }
     } catch (error: any) {
       const errorMsg =
         error?.response?.data?.message ||
         'Error al eliminar el registro de conducta';
       toast.error(errorMsg);
+
+      // Si hay error, recargar el modal para mostrar el estado correcto
+      if (alumnoDetalleSeleccionado) {
+        try {
+          const infraccionesActualizadas = await conductaService.getByAlumno(
+            alumnoDetalleSeleccionado.id_alumno.toString()
+          );
+          setInfraccionesAlumno(infraccionesActualizadas);
+        } catch (e) {
+          console.error('Error al recargar infracciones después de error:', e);
+        }
+      }
     } finally {
       setIsLoading(false);
     }
@@ -1028,14 +1067,52 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
 
     setIsLoading(true);
     try {
+      console.log('📊 === RESUMEN TRIMESTRAL - DEBUG ===');
+      console.log('📊 Filtros enviados:', filtroResumenTrimestral);
+
       const resumen = await resumenService.getResumenTrimestral(
         filtroResumenTrimestral
       );
 
+      console.log('📊 Resumen recibido del backend:', resumen);
+      console.log('📊 Total de alumnos:', resumen.length);
+
+      if (resumen.length > 0) {
+        console.log('📊 Primer alumno completo:', resumen[0]);
+        console.log('📊 Estructura del primer alumno:', {
+          id_alumno: resumen[0].id_alumno,
+          nombre: resumen[0].nombre,
+          apellido: resumen[0].apellido,
+          justificadas: resumen[0].justificadas,
+          injustificadas: resumen[0].injustificadas,
+          infracciones: resumen[0].infracciones,
+          puntajeConducta: resumen[0].puntajeConducta,
+        });
+
+        if (resumen[0].infracciones && resumen[0].infracciones.length > 0) {
+          console.log('📊 Primera infracción:', resumen[0].infracciones[0]);
+        }
+      }
+
       setResumenTrimestral(resumen);
-      toast.success('Resumen trimestral generado correctamente');
+
+      if (resumen.length === 0) {
+        toast.warning('No se encontraron registros para este trimestre');
+      } else {
+        toast.success(
+          `Resumen trimestral generado: ${resumen.length} alumno(s)`
+        );
+      }
     } catch (e: any) {
-      toast.error('Error al generar el resumen trimestral');
+      console.error('❌ Error al generar resumen trimestral:', e);
+      console.error('❌ Detalles del error:', {
+        message: e.message,
+        response: e.response?.data,
+        status: e.response?.status,
+      });
+      toast.error(
+        `Error al generar el resumen trimestral: ${e.message || 'Error desconocido'}`
+      );
     } finally {
       setIsLoading(false);
     }
@@ -2788,340 +2865,390 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Catálogo de Infracciones */}
-      <Card>
-        <CardHeader>
+      {/* Catálogo de Infracciones - Colapsable */}
+      <Card className="border-2">
+        <CardHeader
+          className="cursor-pointer hover:bg-gray-50 transition-colors select-none"
+          onClick={() => setCatalogoColapsado(!catalogoColapsado)}
+          title={
+            catalogoColapsado ? 'Click para expandir' : 'Click para colapsar'
+          }
+        >
           <CardTitle className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <AlertTriangle className="w-5 h-5" />
               <span>Catálogo de Infracciones</span>
+              <Badge variant="secondary" className="ml-2">
+                {catalogoInfracciones.length}
+              </Badge>
             </div>
-            <Dialog open={modalInfraccion} onOpenChange={setModalInfraccion}>
-              <DialogTrigger asChild>
-                <Button size="sm">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Nueva Infracción
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-lg">
-                <DialogHeader>
-                  <DialogTitle className="flex items-center space-x-2">
-                    {modoEdicionInfraccion ? (
-                      <>
-                        <Edit className="w-5 h-5 text-blue-600" />
-                        <span>Editar Infracción del Catálogo</span>
-                      </>
-                    ) : (
-                      <>
-                        <Plus className="w-5 h-5" />
-                        <span>Crear Nueva Infracción en el Catálogo</span>
-                      </>
-                    )}
-                  </DialogTitle>
-                </DialogHeader>
-                <div className="space-y-6">
-                  <Alert className="bg-blue-50 border-blue-200">
-                    <AlertCircle className="h-4 w-4 text-blue-600" />
-                    <AlertDescription>
-                      {modoEdicionInfraccion
-                        ? 'Modifica los datos de la infracción. Los cambios se aplicarán al catálogo.'
-                        : 'Las infracciones creadas aquí estarán disponibles para registrar conductas de alumnos.'}
-                    </AlertDescription>
-                  </Alert>
+            <div className="flex items-center space-x-2">
+              {user.role === 'admin' && !catalogoColapsado && (
+                <Dialog
+                  open={modalInfraccion}
+                  onOpenChange={setModalInfraccion}
+                >
+                  <DialogTrigger asChild>
+                    <Button size="sm" onClick={(e) => e.stopPropagation()}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Nueva Infracción
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-lg">
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center space-x-2">
+                        {modoEdicionInfraccion ? (
+                          <>
+                            <Edit className="w-5 h-5 text-blue-600" />
+                            <span>Editar Infracción del Catálogo</span>
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="w-5 h-5" />
+                            <span>Crear Nueva Infracción en el Catálogo</span>
+                          </>
+                        )}
+                      </DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-6">
+                      <Alert className="bg-blue-50 border-blue-200">
+                        <AlertCircle className="h-4 w-4 text-blue-600" />
+                        <AlertDescription>
+                          {modoEdicionInfraccion
+                            ? 'Modifica los datos de la infracción. Los cambios se aplicarán al catálogo.'
+                            : 'Las infracciones creadas aquí estarán disponibles para registrar conductas de alumnos.'}
+                        </AlertDescription>
+                      </Alert>
 
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="categoria"
-                      className="text-base font-semibold"
-                    >
-                      1. Categoría de la Infracción
-                    </Label>
-                    <Select
-                      value={nuevaInfraccion.categoria}
-                      onValueChange={(v: CategoriaInfraccion) => {
-                        const puntosDefault = getPuntosPorCategoria(v);
-                        setNuevaInfraccion({
-                          ...nuevaInfraccion,
-                          categoria: v,
-                          puntos: puntosDefault,
-                        });
-                      }}
-                    >
-                      <SelectTrigger className="h-11">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="MENOS_GRAVE">
-                          <div className="flex items-center space-x-2">
-                            <AlertCircle className="w-4 h-4 text-yellow-600" />
-                            <span>Menos Grave</span>
-                            <Badge
-                              variant="outline"
-                              className="ml-2 bg-yellow-100 text-yellow-800"
-                            >
-                              -1 pt
-                            </Badge>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="GRAVE">
-                          <div className="flex items-center space-x-2">
-                            <AlertTriangle className="w-4 h-4 text-orange-600" />
-                            <span>Grave</span>
-                            <Badge
-                              variant="outline"
-                              className="ml-2 bg-orange-100 text-orange-800"
-                            >
-                              -2 pts
-                            </Badge>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="MUY_GRAVE">
-                          <div className="flex items-center space-x-2">
-                            <XCircle className="w-4 h-4 text-red-600" />
-                            <span>Muy Grave</span>
-                            <Badge
-                              variant="outline"
-                              className="ml-2 bg-red-100 text-red-800"
-                            >
-                              -3 pts
-                            </Badge>
-                          </div>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-gray-500">
-                      {nuevaInfraccion.categoria === 'MENOS_GRAVE' &&
-                        'Faltas leves que afectan mínimamente la conducta'}
-                      {nuevaInfraccion.categoria === 'GRAVE' &&
-                        'Faltas que requieren atención y seguimiento'}
-                      {nuevaInfraccion.categoria === 'MUY_GRAVE' &&
-                        'Faltas graves que requieren intervención inmediata'}
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="articulo"
-                      className="text-base font-semibold"
-                    >
-                      2. Artículo o Código
-                    </Label>
-                    <Input
-                      id="articulo"
-                      placeholder="Ej: Art. 10, Código 3.1, etc."
-                      value={nuevaInfraccion.articulo}
-                      onChange={(e) =>
-                        setNuevaInfraccion({
-                          ...nuevaInfraccion,
-                          articulo: e.target.value,
-                        })
-                      }
-                      className="h-11 font-mono"
-                    />
-                    <p className="text-xs text-gray-500">
-                      Identificador del reglamento interno
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="descripcion"
-                      className="text-base font-semibold"
-                    >
-                      3. Descripción de la Infracción
-                    </Label>
-                    <Textarea
-                      id="descripcion"
-                      placeholder="Ej: Uso de celular en clase sin autorización, no traer materiales, falta de respeto a compañeros..."
-                      value={nuevaInfraccion.descripcion}
-                      onChange={(e) =>
-                        setNuevaInfraccion({
-                          ...nuevaInfraccion,
-                          descripcion: e.target.value,
-                        })
-                      }
-                      rows={4}
-                    />
-                    <p className="text-xs text-gray-500">
-                      Describe claramente la falta que comete el alumno
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="puntos" className="text-base font-semibold">
-                      4. Puntos Negativos
-                    </Label>
-                    <div className="flex items-center space-x-3">
-                      <Input
-                        id="puntos"
-                        type="number"
-                        min="0"
-                        max="10"
-                        step="0.5"
-                        value={nuevaInfraccion.puntos}
-                        onChange={(e) =>
-                          setNuevaInfraccion({
-                            ...nuevaInfraccion,
-                            puntos: parseFloat(e.target.value) || 0,
-                          })
-                        }
-                        className="h-11"
-                      />
-                      <Badge
-                        className={`${getBadgeColor(nuevaInfraccion.categoria)} px-4 py-2`}
-                      >
-                        -{nuevaInfraccion.puntos} pts
-                      </Badge>
-                    </div>
-                    <Alert className="bg-yellow-50 border-yellow-200">
-                      <AlertTriangle className="h-4 w-4 text-yellow-600" />
-                      <AlertDescription className="text-xs">
-                        <strong>Recomendado:</strong> Menos Grave (1 pt), Grave
-                        (2 pts), Muy Grave (3 pts)
-                      </AlertDescription>
-                    </Alert>
-                  </div>
-
-                  {/* Preview */}
-                  <div className="border rounded-lg p-4 bg-gray-50">
-                    <p className="text-sm font-medium text-gray-700 mb-2">
-                      Vista previa:
-                    </p>
-                    <div className="space-y-2">
-                      <div className="flex items-center space-x-2">
-                        <Badge variant="outline" className="font-mono">
-                          {nuevaInfraccion.articulo || 'Art. XX'}
-                        </Badge>
-                        <Badge
-                          className={`${getBadgeColor(nuevaInfraccion.categoria)} flex items-center gap-1`}
+                      <div className="space-y-2">
+                        <Label
+                          htmlFor="categoria"
+                          className="text-base font-semibold"
                         >
-                          {getCategoriaIcon(nuevaInfraccion.categoria)}
-                          {getCategoriaLabel(nuevaInfraccion.categoria)} • -
-                          {nuevaInfraccion.puntos} pts
-                        </Badge>
+                          1. Categoría de la Infracción
+                        </Label>
+                        <Select
+                          value={nuevaInfraccion.categoria}
+                          onValueChange={(v: CategoriaInfraccion) => {
+                            const puntosDefault = getPuntosPorCategoria(v);
+                            setNuevaInfraccion({
+                              ...nuevaInfraccion,
+                              categoria: v,
+                              puntos: puntosDefault,
+                            });
+                          }}
+                        >
+                          <SelectTrigger className="h-11">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="MENOS_GRAVE">
+                              <div className="flex items-center space-x-2">
+                                <AlertCircle className="w-4 h-4 text-yellow-600" />
+                                <span>Menos Grave</span>
+                                <Badge
+                                  variant="outline"
+                                  className="ml-2 bg-yellow-100 text-yellow-800"
+                                >
+                                  -1 pt
+                                </Badge>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="GRAVE">
+                              <div className="flex items-center space-x-2">
+                                <AlertTriangle className="w-4 h-4 text-orange-600" />
+                                <span>Grave</span>
+                                <Badge
+                                  variant="outline"
+                                  className="ml-2 bg-orange-100 text-orange-800"
+                                >
+                                  -2 pts
+                                </Badge>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="MUY_GRAVE">
+                              <div className="flex items-center space-x-2">
+                                <XCircle className="w-4 h-4 text-red-600" />
+                                <span>Muy Grave</span>
+                                <Badge
+                                  variant="outline"
+                                  className="ml-2 bg-red-100 text-red-800"
+                                >
+                                  -3 pts
+                                </Badge>
+                              </div>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-gray-500">
+                          {nuevaInfraccion.categoria === 'MENOS_GRAVE' &&
+                            'Faltas leves que afectan mínimamente la conducta'}
+                          {nuevaInfraccion.categoria === 'GRAVE' &&
+                            'Faltas que requieren atención y seguimiento'}
+                          {nuevaInfraccion.categoria === 'MUY_GRAVE' &&
+                            'Faltas graves que requieren intervención inmediata'}
+                        </p>
                       </div>
-                      <p className="text-sm text-gray-600">
-                        {nuevaInfraccion.descripcion ||
-                          'Descripción de la infracción...'}
-                      </p>
-                    </div>
-                  </div>
 
-                  <div className="flex space-x-3 pt-4 border-t">
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setModalInfraccion(false);
-                        setModoEdicionInfraccion(false);
-                        setInfraccionEditando(null);
-                        setNuevaInfraccion({
-                          categoria: 'MENOS_GRAVE',
-                          articulo: '',
-                          descripcion: '',
-                          puntos: 0,
-                        });
-                      }}
-                      className="flex-1"
-                    >
-                      Cancelar
-                    </Button>
-                    <Button
-                      onClick={handleCrearInfraccion}
-                      disabled={
-                        isLoading ||
-                        !nuevaInfraccion.articulo ||
-                        !nuevaInfraccion.descripcion ||
-                        nuevaInfraccion.puntos <= 0
-                      }
-                      className="flex-1"
-                    >
-                      {isLoading ? (
-                        <>
-                          <Clock className="w-4 h-4 mr-2 animate-spin" />
-                          {modoEdicionInfraccion
-                            ? 'Actualizando...'
-                            : 'Creando...'}
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle className="w-4 h-4 mr-2" />
-                          {modoEdicionInfraccion
-                            ? 'Actualizar Infracción'
-                            : 'Crear Infracción'}
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
+                      <div className="space-y-2">
+                        <Label
+                          htmlFor="articulo"
+                          className="text-base font-semibold"
+                        >
+                          2. Artículo o Código
+                        </Label>
+                        <Input
+                          id="articulo"
+                          placeholder="Ej: Art. 10, Código 3.1, etc."
+                          value={nuevaInfraccion.articulo}
+                          onChange={(e) =>
+                            setNuevaInfraccion({
+                              ...nuevaInfraccion,
+                              articulo: e.target.value,
+                            })
+                          }
+                          className="h-11 font-mono"
+                        />
+                        <p className="text-xs text-gray-500">
+                          Identificador del reglamento interno
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label
+                          htmlFor="descripcion"
+                          className="text-base font-semibold"
+                        >
+                          3. Descripción de la Infracción
+                        </Label>
+                        <Textarea
+                          id="descripcion"
+                          placeholder="Ej: Uso de celular en clase sin autorización, no traer materiales, falta de respeto a compañeros..."
+                          value={nuevaInfraccion.descripcion}
+                          onChange={(e) =>
+                            setNuevaInfraccion({
+                              ...nuevaInfraccion,
+                              descripcion: e.target.value,
+                            })
+                          }
+                          rows={4}
+                        />
+                        <p className="text-xs text-gray-500">
+                          Describe claramente la falta que comete el alumno
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label
+                          htmlFor="puntos"
+                          className="text-base font-semibold"
+                        >
+                          4. Puntos Negativos
+                        </Label>
+                        <div className="flex items-center space-x-3">
+                          <Input
+                            id="puntos"
+                            type="number"
+                            min="0"
+                            max="10"
+                            step="0.5"
+                            value={nuevaInfraccion.puntos}
+                            onChange={(e) =>
+                              setNuevaInfraccion({
+                                ...nuevaInfraccion,
+                                puntos: parseFloat(e.target.value) || 0,
+                              })
+                            }
+                            className="h-11"
+                          />
+                          <Badge
+                            className={`${getBadgeColor(nuevaInfraccion.categoria)} px-4 py-2`}
+                          >
+                            -{nuevaInfraccion.puntos} pts
+                          </Badge>
+                        </div>
+                        <Alert className="bg-yellow-50 border-yellow-200">
+                          <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                          <AlertDescription className="text-xs">
+                            <strong>Recomendado:</strong> Menos Grave (1 pt),
+                            Grave (2 pts), Muy Grave (3 pts)
+                          </AlertDescription>
+                        </Alert>
+                      </div>
+
+                      {/* Preview */}
+                      <div className="border rounded-lg p-4 bg-gray-50">
+                        <p className="text-sm font-medium text-gray-700 mb-2">
+                          Vista previa:
+                        </p>
+                        <div className="space-y-2">
+                          <div className="flex items-center space-x-2">
+                            <Badge variant="outline" className="font-mono">
+                              {nuevaInfraccion.articulo || 'Art. XX'}
+                            </Badge>
+                            <Badge
+                              className={`${getBadgeColor(nuevaInfraccion.categoria)} flex items-center gap-1`}
+                            >
+                              {getCategoriaIcon(nuevaInfraccion.categoria)}
+                              {getCategoriaLabel(nuevaInfraccion.categoria)} • -
+                              {nuevaInfraccion.puntos} pts
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-gray-600">
+                            {nuevaInfraccion.descripcion ||
+                              'Descripción de la infracción...'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex space-x-3 pt-4 border-t">
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setModalInfraccion(false);
+                            setModoEdicionInfraccion(false);
+                            setInfraccionEditando(null);
+                            setNuevaInfraccion({
+                              categoria: 'MENOS_GRAVE',
+                              articulo: '',
+                              descripcion: '',
+                              puntos: 0,
+                            });
+                          }}
+                          className="flex-1"
+                        >
+                          Cancelar
+                        </Button>
+                        <Button
+                          onClick={handleCrearInfraccion}
+                          disabled={
+                            isLoading ||
+                            !nuevaInfraccion.articulo ||
+                            !nuevaInfraccion.descripcion ||
+                            nuevaInfraccion.puntos <= 0
+                          }
+                          className="flex-1"
+                        >
+                          {isLoading ? (
+                            <>
+                              <Clock className="w-4 h-4 mr-2 animate-spin" />
+                              {modoEdicionInfraccion
+                                ? 'Actualizando...'
+                                : 'Creando...'}
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle className="w-4 h-4 mr-2" />
+                              {modoEdicionInfraccion
+                                ? 'Actualizar Infracción'
+                                : 'Crear Infracción'}
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCatalogoColapsado(!catalogoColapsado);
+                }}
+                className="ml-2"
+              >
+                {catalogoColapsado ? (
+                  <ChevronDown className="w-5 h-5" />
+                ) : (
+                  <ChevronUp className="w-5 h-5" />
+                )}
+              </Button>
+            </div>
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Categoría</TableHead>
-                <TableHead>Artículo</TableHead>
-                <TableHead>Descripción</TableHead>
-                <TableHead>Puntos</TableHead>
-                <TableHead className="text-right">Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {catalogoInfracciones.map((infraccion) => (
-                <TableRow key={infraccion.id_infraccion}>
-                  <TableCell>
-                    <Badge
-                      variant="outline"
-                      className={getBadgeColor(infraccion.categoria)}
-                    >
-                      {infraccion.categoria.replace('_', ' ')}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="font-medium">
-                    {infraccion.articulo}
-                  </TableCell>
-                  <TableCell className="max-w-md truncate">
-                    {infraccion.descripcion}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">-{infraccion.puntos} pts</Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleAbrirEditarInfraccion(infraccion)}
-                      disabled={isLoading}
-                      title="Editar infracción"
-                    >
-                      <Edit className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        handleEliminarInfraccion(infraccion.id_infraccion)
-                      }
-                      disabled={isLoading}
-                      title="Eliminar infracción"
-                    >
-                      <Trash2 className="w-4 h-4 text-red-600" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {catalogoInfracciones.length === 0 && (
+
+        {!catalogoColapsado && (
+          <CardContent>
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-gray-500">
-                    No hay infracciones registradas
-                  </TableCell>
+                  <TableHead>Categoría</TableHead>
+                  <TableHead>Artículo</TableHead>
+                  <TableHead>Descripción</TableHead>
+                  <TableHead>Puntos</TableHead>
+                  {user.role === 'admin' && (
+                    <TableHead className="text-right">Acciones</TableHead>
+                  )}
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
+              </TableHeader>
+              <TableBody>
+                {catalogoInfracciones.map((infraccion) => (
+                  <TableRow key={infraccion.id_infraccion}>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={getBadgeColor(infraccion.categoria)}
+                      >
+                        {infraccion.categoria.replace('_', ' ')}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {infraccion.articulo}
+                    </TableCell>
+                    <TableCell className="max-w-md truncate">
+                      {infraccion.descripcion}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">
+                        -{infraccion.puntos} pts
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {user.role === 'admin' && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              handleAbrirEditarInfraccion(infraccion)
+                            }
+                            disabled={isLoading}
+                            title="Editar infracción"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              handleEliminarInfraccion(infraccion.id_infraccion)
+                            }
+                            disabled={isLoading}
+                            title="Eliminar infracción"
+                          >
+                            <Trash2 className="w-4 h-4 text-red-600" />
+                          </Button>
+                        </>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {catalogoInfracciones.length === 0 && (
+                  <TableRow>
+                    <TableCell
+                      colSpan={5}
+                      className="text-center text-gray-500"
+                    >
+                      No hay infracciones registradas
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        )}
       </Card>
     </div>
   );

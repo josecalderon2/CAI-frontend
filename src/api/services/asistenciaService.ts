@@ -411,24 +411,47 @@ export const resumenService = {
   getResumenTrimestral: async (
     params: ResumenTrimestralDto
   ): Promise<ResumenTrimestralResponse[]> => {
+    console.log('🔧 [Service] Llamando al backend con params:', params);
     const response = await api.get<any>('/resumen/trimestral', { params });
 
+    console.log('🔧 [Service] Respuesta raw del backend:', response.data);
+    console.log(
+      '🔧 [Service] Total de alumnos recibidos:',
+      response.data.length
+    );
+
+    if (response.data.length > 0) {
+      console.log('🔧 [Service] Primer alumno sin mapear:', response.data[0]);
+      console.log(
+        '🔧 [Service] Campos disponibles:',
+        Object.keys(response.data[0])
+      );
+    }
+
     // Mapear los nombres de campos del backend (snake_case) al frontend (camelCase)
-    return response.data.map((item: any) => ({
-      id_alumno: item.id_alumno,
-      nombre: item.nombre,
-      apellido: item.apellido,
-      justificadas: item.total_justificadas ?? item.justificadas ?? 0,
-      injustificadas: item.total_injustificadas ?? item.injustificadas ?? 0,
-      // ✅ Mapear correctamente el array de infracciones
-      infracciones: (item.infracciones ?? []).map((inf: any) => ({
-        categoria: inf.categoria,
-        articulo: inf.articulo,
-        descripcion: inf.descripcion,
-        puntos: inf.puntos,
-        cantidad: inf.cantidad ?? inf.conteo ?? 1, // ⚠️ Probar con ambos nombres posibles
-      })),
-      puntajeConducta: item.puntuacion_conducta ?? item.puntajeConducta ?? 10,
-    }));
+    const mapped = response.data.map((item: any) => {
+      const alumno = {
+        id_alumno: item.id_alumno,
+        nombre: item.nombre,
+        apellido: item.apellido,
+        justificadas: item.total_justificadas ?? item.justificadas ?? 0,
+        injustificadas: item.total_injustificadas ?? item.injustificadas ?? 0,
+        // ✅ Mapear correctamente el array de infracciones
+        infracciones: (item.infracciones ?? []).map((inf: any) => ({
+          categoria: inf.categoria,
+          articulo: inf.articulo,
+          descripcion: inf.descripcion,
+          puntos: inf.puntos,
+          cantidad: inf.cantidad ?? inf.conteo ?? 1, // ⚠️ Probar con ambos nombres posibles
+        })),
+        puntajeConducta: item.puntuacion_conducta ?? item.puntajeConducta ?? 10,
+      };
+
+      console.log(`🔧 [Service] Alumno ${item.nombre} mapeado:`, alumno);
+      return alumno;
+    });
+
+    console.log('🔧 [Service] Datos finales mapeados:', mapped);
+    return mapped;
   },
 };
