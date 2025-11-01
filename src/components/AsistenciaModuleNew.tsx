@@ -28,7 +28,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from './ui/dialog';
-import { Alert, AlertDescription, AlertTitle } from './ui/alert';
+import { Alert, AlertDescription } from './ui/alert';
 import {
   Calendar,
   Users,
@@ -75,6 +75,40 @@ import {
   type ConductaConRelaciones,
 } from '../api/services/asistenciaService';
 import { cursosService } from '../api/services/cursosService';
+
+// ✅ Helpers para manejar fechas en zona horaria de El Salvador (UTC-6)
+const formatearFechaElSalvador = (fechaUTC: string | Date): string => {
+  const fecha = new Date(fechaUTC);
+  // Convertir a zona horaria de El Salvador (UTC-6)
+  const opciones: Intl.DateTimeFormatOptions = {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    timeZone: 'America/El_Salvador',
+  };
+  return fecha.toLocaleDateString('es-SV', opciones);
+};
+
+const obtenerFechaSoloElSalvador = (fechaUTC: string | Date): string => {
+  const fecha = new Date(fechaUTC);
+  // Ajustar a zona horaria de El Salvador
+  const fechaSV = new Date(
+    fecha.toLocaleString('en-US', { timeZone: 'America/El_Salvador' })
+  );
+  const year = fechaSV.getFullYear();
+  const month = String(fechaSV.getMonth() + 1).padStart(2, '0');
+  const day = String(fechaSV.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+// ✅ Helper para obtener año actual en El Salvador
+const obtenerAnioActualElSalvador = (): number => {
+  const ahora = new Date();
+  const fechaSV = new Date(
+    ahora.toLocaleString('en-US', { timeZone: 'America/El_Salvador' })
+  );
+  return fechaSV.getFullYear();
+};
 
 // Interfaces
 interface User {
@@ -189,7 +223,17 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
   }>({
     id_alumno: '',
     id_infracciones: [],
-    fecha: new Date().toISOString().split('T')[0],
+    fecha: (() => {
+      // ✅ Obtener fecha actual en zona horaria de El Salvador
+      const ahora = new Date();
+      const fechaSV = new Date(
+        ahora.toLocaleString('en-US', { timeZone: 'America/El_Salvador' })
+      );
+      const year = fechaSV.getFullYear();
+      const month = String(fechaSV.getMonth() + 1).padStart(2, '0');
+      const day = String(fechaSV.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    })(),
   });
   const [modoEdicionInfraccion, setModoEdicionInfraccion] = useState(false);
   const [infraccionEditando, setInfraccionEditando] =
@@ -241,14 +285,28 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
   const [filtroResumenMensual, setFiltroResumenMensual] =
     useState<ResumenMensualDto>({
       cursoId: 0,
-      mes: new Date().getMonth() + 1,
-      anio: new Date().getFullYear(),
+      mes: (() => {
+        const fechaSV = new Date(
+          new Date().toLocaleString('en-US', {
+            timeZone: 'America/El_Salvador',
+          })
+        );
+        return fechaSV.getMonth() + 1;
+      })(),
+      anio: obtenerAnioActualElSalvador(),
     });
   const [filtroResumenTrimestral, setFiltroResumenTrimestral] =
     useState<ResumenTrimestralDto>({
       cursoId: 0,
-      trimestre: Math.floor(new Date().getMonth() / 4) + 1,
-      anio: new Date().getFullYear(),
+      trimestre: (() => {
+        const fechaSV = new Date(
+          new Date().toLocaleString('en-US', {
+            timeZone: 'America/El_Salvador',
+          })
+        );
+        return Math.ceil((fechaSV.getMonth() + 1) / 4);
+      })(),
+      anio: obtenerAnioActualElSalvador(),
     });
 
   // Cargar datos iniciales
@@ -357,8 +415,6 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
 
       if (cursosResponse.length === 0) {
         toast.warning('No tienes cursos asignados');
-      } else {
-        toast.success(`${cursosResponse.length} curso(s) cargado(s)`);
       }
 
       setCursosAsignados(cursosResponse);
@@ -403,6 +459,11 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
   const cargarAsistenciasGuardadas = async () => {
     if (!cursoSeleccionado || !fechaSeleccionada) return;
 
+    console.log('🔍 DEBUG - Cargando asistencias guardadas:', {
+      cursoSeleccionado,
+      fechaSeleccionada,
+    });
+
     try {
       const cursoActual = cursosAsignados.find(
         (c) => c.id_curso === parseInt(cursoSeleccionado)
@@ -414,6 +475,11 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
       const asistencias = await asistenciaService.buscarConFiltros({
         cursoId: cursoActual.id_curso,
         fecha: fechaSeleccionada,
+      });
+
+      console.log('📡 DEBUG - Asistencias recibidas del servidor:', {
+        cantidad: asistencias.length,
+        asistencias,
       });
 
       // Mapear asistencias por id_alumno
@@ -431,6 +497,13 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
         const alumnoId = String(asist.id_alumno);
         const asistenciaId = String(asist.id_asistencia);
 
+        console.log('🔗 DEBUG - Mapeando asistencia:', {
+          alumnoId,
+          asistenciaId,
+          estado: asist.estado,
+          observacion: asist.observacion,
+        });
+
         asistenciasMap[alumnoId] = {
           id_asistencia: asistenciaId,
           estado: asist.estado,
@@ -438,7 +511,17 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
         };
       });
 
+      console.log(
+        '📋 DEBUG - Map de asistencias guardadas final:',
+        asistenciasMap
+      );
+
       setAsistenciasGuardadas(asistenciasMap);
+
+      console.log(
+        '✅ DEBUG - Estado actualizado. Asistencias guardadas:',
+        Object.keys(asistenciasMap).length
+      );
 
       // Limpiar cualquier estado actual que pueda interferir
       setAsistenciaActual({});
@@ -522,6 +605,33 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
         return nuevo;
       });
 
+      // ✅ Sincronización: Si el historial está cargado, actualizarlo también
+      if (historialAsistencias.length > 0) {
+        // Verificar si el historial contiene la asistencia editada
+        const asistenciaEnHistorial = historialAsistencias.find(
+          (a: any) => a.id_asistencia === asistenciaEditando.id_asistencia
+        );
+
+        if (asistenciaEnHistorial) {
+          // Recargar el historial para reflejar los cambios
+          await handleCargarHistorial();
+        }
+      }
+
+      // ✅ Limpiar resúmenes para que el usuario sepa que debe regenerarlos
+      if (resumenMensual && resumenMensual.length > 0) {
+        setResumenMensual(null);
+        toast.info(
+          'Los resúmenes se han invalidado. Por favor, regenera el resumen mensual.'
+        );
+      }
+      if (resumenTrimestral && resumenTrimestral.length > 0) {
+        setResumenTrimestral(null);
+        toast.info(
+          'Los resúmenes se han invalidado. Por favor, regenera el resumen trimestral.'
+        );
+      }
+
       setModalEdicion(false);
       setAsistenciaEditando(null);
     } catch (e: any) {
@@ -564,9 +674,12 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
 
     setIsLoading(true);
     try {
-      // Calcular trimestre basado en la fecha
-      const fecha = new Date(fechaSeleccionada);
-      const mes = fecha.getMonth() + 1;
+      // ✅ Calcular trimestre basado en la fecha en zona horaria de El Salvador
+      const fecha = new Date(fechaSeleccionada + 'T12:00:00'); // Usar mediodía para evitar problemas de zona horaria
+      const fechaSV = new Date(
+        fecha.toLocaleString('en-US', { timeZone: 'America/El_Salvador' })
+      );
+      const mes = fechaSV.getMonth() + 1;
       const trimestre = Math.ceil(mes / 4); // 1-4 = T1, 5-8 = T2, 9-12 = T3
 
       // Separar registros nuevos y modificaciones
@@ -579,7 +692,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
           id_orientador: parseInt(user.id),
           fecha: fechaSeleccionada,
           estado: datos.estado,
-          anio_academico: new Date().getFullYear().toString(),
+          anio_academico: obtenerAnioActualElSalvador().toString(),
           trimestre: trimestre,
         }));
 
@@ -620,6 +733,22 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
 
       // Recargar asistencias guardadas
       await cargarAsistenciasGuardadas();
+
+      // ✅ Sincronización: Si el historial está cargado y es del mismo curso, actualizarlo
+      if (
+        historialAsistencias.length > 0 &&
+        filtroHistorial.cursoId === parseInt(cursoSeleccionado)
+      ) {
+        await handleCargarHistorial();
+      }
+
+      // ✅ Limpiar resúmenes para que el usuario sepa que debe regenerarlos
+      if (resumenMensual && resumenMensual.length > 0) {
+        setResumenMensual(null);
+      }
+      if (resumenTrimestral && resumenTrimestral.length > 0) {
+        setResumenTrimestral(null);
+      }
 
       // Limpiar estados actuales ya guardados
       setAsistenciaActual({});
@@ -687,6 +816,9 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
         toast.success('Infracción creada correctamente en el catálogo');
       }
 
+      // ✅ Recargar catálogo para que se vea actualizado en el modal de conducta
+      await cargarCatalogoInfracciones();
+
       setModalInfraccion(false);
       setModoEdicionInfraccion(false);
       setInfraccionEditando(null);
@@ -696,7 +828,6 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
         descripcion: '',
         puntos: 1,
       });
-      cargarCatalogoInfracciones();
     } catch (e: any) {
       const errorMsg =
         e?.response?.data?.message ||
@@ -811,6 +942,11 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
       if (alumnoDetalleSeleccionado) {
         await handleVerDetalleAlumno(alumnoDetalleSeleccionado);
       }
+
+      // ✅ Limpiar resúmenes trimestrales ya que las conductas afectan la nota de conducta
+      if (resumenTrimestral && resumenTrimestral.length > 0) {
+        setResumenTrimestral(null);
+      }
     } catch (e: any) {
       const errorMsg =
         e?.response?.data?.message ||
@@ -856,6 +992,11 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
         } catch (e) {
           // Si hay error, al menos mantener el estado filtrado localmente
         }
+      }
+
+      // ✅ Limpiar resúmenes trimestrales ya que las conductas afectan la nota de conducta
+      if (resumenTrimestral && resumenTrimestral.length > 0) {
+        setResumenTrimestral(null);
       }
     } catch (error: any) {
       const errorMsg =
@@ -924,11 +1065,16 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
         return;
       }
 
-      // Calcular trimestre y año académico automáticamente
-      const fechaConducta = new Date(nuevaConducta.fecha);
-      const mesConducta = fechaConducta.getMonth() + 1;
+      // ✅ Calcular trimestre y año académico automáticamente en zona horaria de El Salvador
+      const fechaConducta = new Date(nuevaConducta.fecha + 'T12:00:00'); // Usar mediodía para evitar problemas
+      const fechaSV = new Date(
+        fechaConducta.toLocaleString('en-US', {
+          timeZone: 'America/El_Salvador',
+        })
+      );
+      const mesConducta = fechaSV.getMonth() + 1;
       const trimestreConducta = Math.ceil(mesConducta / 4);
-      const anioAcademicoConducta = fechaConducta.getFullYear().toString();
+      const anioAcademicoConducta = fechaSV.getFullYear().toString();
 
       // Crear un registro de conducta por cada infracción seleccionada
       const promesas = nuevaConducta.id_infracciones.map(
@@ -948,12 +1094,13 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
             throw new Error('Infracción no encontrada');
           }
 
-          // Construir el objeto con los campos obligatorios
+          // ✅ Construir el objeto con los campos obligatorios y fecha correcta
+          const fechaParaEnviar = new Date(nuevaConducta.fecha + 'T12:00:00');
           const conductaData: any = {
             id_alumno: idAlumno,
             id_infraccion: idInfraccion,
             id_orientador: idOrientador,
-            fecha: new Date(nuevaConducta.fecha).toISOString(),
+            fecha: fechaParaEnviar.toISOString(),
             descripcion: infraccionSeleccionada.descripcion,
             trimestre: trimestreConducta,
             anio_academico: anioAcademicoConducta,
@@ -970,11 +1117,24 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
         `${nuevaConducta.id_infracciones.length} infracción(es) registrada(s)`
       );
 
+      // ✅ Recargar la lista de registros de conducta para mostrar los nuevos registros
+      await cargarRegistrosConducta();
+
       setModalConducta(false);
       setNuevaConducta({
         id_alumno: '',
         id_infracciones: [],
-        fecha: new Date().toISOString().split('T')[0],
+        fecha: (() => {
+          // ✅ Obtener fecha actual en zona horaria de El Salvador
+          const ahora = new Date();
+          const fechaSV = new Date(
+            ahora.toLocaleString('en-US', { timeZone: 'America/El_Salvador' })
+          );
+          const year = fechaSV.getFullYear();
+          const month = String(fechaSV.getMonth() + 1).padStart(2, '0');
+          const day = String(fechaSV.getDate()).padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        })(),
       });
       setBusquedaAlumnoConducta('');
     } catch (e: any) {
@@ -1034,14 +1194,21 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
   };
 
   const handleEditarAsistenciaHistorial = (asist: any) => {
+    // ✅ CORREGIDO: Convertir fecha UTC a fecha local de El Salvador (UTC-6)
+    const fechaUTC = new Date(asist.fecha);
+    const fechaLocal = new Date(
+      fechaUTC.getTime() + fechaUTC.getTimezoneOffset() * 60000
+    );
+
     setAsistenciaHistorialEditando({
       id_asistencia: asist.id_asistencia,
       id_alumno: asist.id_alumno,
       nombreAlumno: `${asist.alumno.nombre} ${asist.alumno.apellido}`,
-      fecha: new Date(asist.fecha).toLocaleDateString('es-ES', {
+      fecha: fechaLocal.toLocaleDateString('es-SV', {
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',
+        timeZone: 'America/El_Salvador',
       }),
       estadoActual: asist.estado,
     });
@@ -1084,6 +1251,19 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
 
       // Recargar el historial
       await handleCargarHistorial();
+
+      // ✅ Sincronización: Si estamos en el mismo curso y fecha, actualizar asistencias guardadas
+      if (cursoSeleccionado === filtroHistorial.cursoId.toString()) {
+        await cargarAsistenciasGuardadas();
+      }
+
+      // ✅ Limpiar resúmenes
+      if (resumenMensual && resumenMensual.length > 0) {
+        setResumenMensual(null);
+      }
+      if (resumenTrimestral && resumenTrimestral.length > 0) {
+        setResumenTrimestral(null);
+      }
 
       // Cerrar modal y limpiar estados
       setModalEdicionHistorial(false);
@@ -1594,11 +1774,37 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
+                {(() => {
+                  console.log('👥 DEBUG - Alumnos filtrados a renderizar:', {
+                    total: alumnosFiltrados.length,
+                    alumnos: alumnosFiltrados.map((a) => ({
+                      id: a.id_alumno,
+                      nombre: `${a.nombre} ${a.apellido}`,
+                    })),
+                  });
+                  return null;
+                })()}
                 {alumnosFiltrados.map((alumno) => {
                   // Verificar estados
                   const alumnoIdStr = alumno.id_alumno.toString();
                   const asistenciaGuardada = asistenciasGuardadas[alumnoIdStr];
                   const estadoActual = asistenciaActual[alumnoIdStr];
+
+                  // Solo mostrar debug para el primer alumno (evitar spam en consola)
+                  if (alumno.id_alumno === alumnosFiltrados[0]?.id_alumno) {
+                    console.log(
+                      `🎓 DEBUG - PRIMER ALUMNO ${alumno.nombre} ${alumno.apellido}:`,
+                      {
+                        alumnoIdStr,
+                        asistenciaGuardada,
+                        estadoActual,
+                        keysEnMap: Object.keys(asistenciasGuardadas),
+                        cantidadAsistenciasGuardadas:
+                          Object.keys(asistenciasGuardadas).length,
+                        mapaCompleto: asistenciasGuardadas,
+                      }
+                    );
+                  }
 
                   // CORREGIDO: Determinar el estado a mostrar correctamente
                   // Prioridad: estado temporal > estado guardado > sin estado
@@ -1619,32 +1825,60 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                     estadoActual.estado !== asistenciaGuardada.estado;
                   const estaGuardado = asistenciaGuardada && !estadoActual;
 
+                  console.log(`🔍 DEBUG - Flags para ${alumno.nombre}:`, {
+                    esNuevo,
+                    hayModificacion,
+                    estaGuardado,
+                    tieneAsistenciaGuardada: !!asistenciaGuardada,
+                    tieneEstadoActual: !!estadoActual,
+                  });
+
                   // ✅ NUEVO: Determinar si los botones deben estar bloqueados
                   const botonesBloqueados = !!asistenciaGuardada;
 
                   // Función para obtener el color del borde y fondo del card según el estado
                   const getCardBorderColor = () => {
                     if (hayModificacion) {
+                      console.log(
+                        `🎨 DEBUG - Color para ${alumno.nombre}: MODIFICADO (amarillo)`
+                      );
                       return 'bg-yellow-50 border-yellow-300 hover:bg-yellow-100 shadow-sm';
                     }
                     if (esNuevo) {
+                      console.log(
+                        `🎨 DEBUG - Color para ${alumno.nombre}: NUEVO (azul claro)`
+                      );
                       return 'bg-blue-50 border-blue-200 hover:bg-blue-100 shadow-sm';
                     }
                     if (estaGuardado) {
                       // ✅ Colorear toda la fila según el estado guardado (más visible)
-                      switch (asistenciaGuardada.estado) {
+                      const estado = asistenciaGuardada.estado;
+                      console.log(
+                        `🎨 DEBUG - Color para ${alumno.nombre}: GUARDADO con estado ${estado}`
+                      );
+                      switch (estado) {
                         case 'P':
+                          console.log(`  ✅ Devolviendo: VERDE (Presente)`);
                           return 'bg-green-100 border-green-300 hover:bg-green-200 shadow-sm';
                         case 'A':
+                          console.log(`  ⏰ Devolviendo: NARANJA (Atraso)`);
                           return 'bg-orange-100 border-orange-300 hover:bg-orange-200 shadow-sm';
                         case 'SP':
+                          console.log(`  ❌ Devolviendo: ROJO (Sin Permiso)`);
                           return 'bg-red-100 border-red-300 hover:bg-red-200 shadow-sm';
                         case 'E':
+                          console.log(`  🛡️ Devolviendo: AZUL (Con Permiso)`);
                           return 'bg-blue-100 border-blue-300 hover:bg-blue-200 shadow-sm';
                         default:
+                          console.log(
+                            `  ⚠️ Estado desconocido: ${estado}, usando gris`
+                          );
                           return 'bg-gray-50 border-gray-200 hover:bg-gray-100';
                       }
                     }
+                    console.log(
+                      `🎨 DEBUG - Color para ${alumno.nombre}: SIN MARCAR (blanco)`
+                    );
                     return 'bg-white border-gray-200 hover:bg-gray-50';
                   };
                   return (
@@ -1829,22 +2063,18 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
           </DialogHeader>
           {asistenciaEditando && (
             <div className="space-y-4">
-              <Alert className="bg-blue-50 border-blue-200">
-                <AlertCircle className="h-4 w-4 text-blue-600" />
-                <AlertDescription>
-                  Editando asistencia de{' '}
-                  <strong>{asistenciaEditando.nombreAlumno}</strong>
-                  <br />
-                  <span className="text-xs text-gray-600">
-                    Estado anterior:{' '}
-                    <Badge variant="outline" className="ml-1">
-                      {asistenciaEditando.estadoActual === 'P' && 'Presente'}
-                      {asistenciaEditando.estadoActual === 'E' && 'Con Permiso'}
-                      {asistenciaEditando.estadoActual === 'SP' &&
-                        'Sin Permiso'}
-                      {asistenciaEditando.estadoActual === 'A' && 'Atraso'}
-                    </Badge>
-                  </span>
+              <Alert className="bg-blue-50 border-blue-200 py-2">
+                <AlertCircle className="h-3 w-3 text-blue-600" />
+                <AlertDescription className="text-xs text-blue-700">
+                  ✏️ Editando:{' '}
+                  <strong>{asistenciaEditando.nombreAlumno}</strong> • Estado
+                  anterior:{' '}
+                  <Badge variant="outline" className="ml-1 text-xs">
+                    {asistenciaEditando.estadoActual === 'P' && 'Presente'}
+                    {asistenciaEditando.estadoActual === 'E' && 'Con Permiso'}
+                    {asistenciaEditando.estadoActual === 'SP' && 'Sin Permiso'}
+                    {asistenciaEditando.estadoActual === 'A' && 'Atraso'}
+                  </Badge>
                 </AlertDescription>
               </Alert>
 
@@ -2110,12 +2340,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                           </SelectContent>
                         </Select>
                       </>
-                    ) : (
-                      <Alert className="bg-blue-50 border-blue-200">
-                        <AlertCircle className="h-4 w-4 text-blue-600" />
-                        <AlertTitle>Primero selecciona un curso</AlertTitle>
-                      </Alert>
-                    )}
+                    ) : null}
                   </div>
 
                   {/* Filtro por categoría */}
@@ -2447,9 +2672,19 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                       <div className="h-11 flex items-center px-3 bg-gray-100 rounded-md border">
                         <Badge variant="outline">
                           Trimestre{' '}
-                          {Math.ceil(
-                            (new Date(nuevaConducta.fecha).getMonth() + 1) / 4
-                          )}
+                          {(() => {
+                            // ✅ Agregar T12:00:00 para evitar problemas de zona horaria
+                            const fecha = new Date(
+                              nuevaConducta.fecha + 'T12:00:00'
+                            );
+                            const fechaSV = new Date(
+                              fecha.toLocaleString('en-US', {
+                                timeZone: 'America/El_Salvador',
+                              })
+                            );
+                            const mes = fechaSV.getMonth() + 1;
+                            return Math.ceil(mes / 4);
+                          })()}
                         </Badge>
                       </div>
                     </div>
@@ -2464,7 +2699,24 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                         setNuevaConducta({
                           id_alumno: '',
                           id_infracciones: [],
-                          fecha: new Date().toISOString().split('T')[0],
+                          fecha: (() => {
+                            // ✅ Obtener fecha actual en zona horaria de El Salvador
+                            const ahora = new Date();
+                            const fechaSV = new Date(
+                              ahora.toLocaleString('en-US', {
+                                timeZone: 'America/El_Salvador',
+                              })
+                            );
+                            const year = fechaSV.getFullYear();
+                            const month = String(
+                              fechaSV.getMonth() + 1
+                            ).padStart(2, '0');
+                            const day = String(fechaSV.getDate()).padStart(
+                              2,
+                              '0'
+                            );
+                            return `${year}-${month}-${day}`;
+                          })(),
                         });
                         setBusquedaAlumnoConducta('');
                       }}
@@ -2501,13 +2753,11 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <Alert className="bg-blue-50 border-blue-200">
-            <AlertCircle className="h-4 w-4 text-blue-600" />
-            <AlertDescription className="text-blue-800">
-              <strong>Registrar Conducta:</strong> Usa el botón "Nuevo Registro"
-              para asignar una o más infracciones del catálogo a un alumno
-              específico. Primero selecciona el curso, luego busca al alumno y
-              finalmente elige las infracciones que aplican.
+          <Alert className="bg-blue-50 border-blue-200 py-2">
+            <AlertCircle className="h-3 w-3 text-blue-600" />
+            <AlertDescription className="text-xs text-blue-700">
+              📝 <strong>Nuevo Registro:</strong> Selecciona curso → Busca
+              alumno → Elige infracciones.
             </AlertDescription>
           </Alert>
         </CardContent>
@@ -2725,13 +2975,14 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
 
           {alumnoDetalleSeleccionado && (
             <div className="space-y-4">
-              <Alert className="bg-blue-50 border-blue-200">
-                <AlertCircle className="h-4 w-4 text-blue-600" />
-                <AlertDescription className="text-blue-800">
-                  <strong>Total de Infracciones:</strong>{' '}
-                  {infraccionesAlumno.length}
-                  {infraccionesAlumno.length === 0 &&
-                    ' - Este alumno no tiene infracciones registradas.'}
+              <Alert className="bg-blue-50 border-blue-200 py-2">
+                <AlertCircle className="h-3 w-3 text-blue-600" />
+                <AlertDescription className="text-xs text-blue-700">
+                  📊 <strong>Total:</strong> {infraccionesAlumno.length}{' '}
+                  {infraccionesAlumno.length === 1
+                    ? 'infracción'
+                    : 'infracciones'}
+                  {infraccionesAlumno.length === 0 && ' registrada'}
                 </AlertDescription>
               </Alert>
 
@@ -2818,14 +3069,15 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                               <div className="flex items-center space-x-1">
                                 <Calendar className="w-4 h-4" />
                                 <span>
-                                  {new Date(conducta.fecha).toLocaleDateString(
-                                    'es-ES',
-                                    {
+                                  {(() => {
+                                    const fecha = new Date(conducta.fecha);
+                                    return fecha.toLocaleDateString('es-SV', {
                                       day: '2-digit',
                                       month: 'long',
                                       year: 'numeric',
-                                    }
-                                  )}
+                                      timeZone: 'America/El_Salvador',
+                                    });
+                                  })()}
                                 </span>
                               </div>
                               {conducta.observacion && (
@@ -2880,10 +3132,10 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
           </DialogHeader>
           {conductaEditando && (
             <div className="space-y-4">
-              <Alert className="bg-blue-50 border-blue-200">
-                <AlertCircle className="h-4 w-4 text-blue-600" />
-                <AlertDescription className="text-blue-800">
-                  Editando registro de conducta para{' '}
+              <Alert className="bg-blue-50 border-blue-200 py-2">
+                <AlertCircle className="h-3 w-3 text-blue-600" />
+                <AlertDescription className="text-xs text-blue-700">
+                  ✏️ Editando conducta de{' '}
                   <strong>{conductaEditando.nombreAlumno}</strong>
                 </AlertDescription>
               </Alert>
@@ -3009,12 +3261,12 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                       </DialogTitle>
                     </DialogHeader>
                     <div className="space-y-6">
-                      <Alert className="bg-blue-50 border-blue-200">
-                        <AlertCircle className="h-4 w-4 text-blue-600" />
-                        <AlertDescription>
+                      <Alert className="bg-blue-50 border-blue-200 py-2">
+                        <AlertCircle className="h-3 w-3 text-blue-600" />
+                        <AlertDescription className="text-xs text-blue-700">
                           {modoEdicionInfraccion
-                            ? 'Modifica los datos de la infracción. Los cambios se aplicarán al catálogo.'
-                            : 'Las infracciones creadas aquí estarán disponibles para registrar conductas de alumnos.'}
+                            ? '✏️ Modifica la infracción. Los cambios se aplicarán al catálogo.'
+                            : '➕ Nueva infracción para el catálogo de conducta.'}
                         </AlertDescription>
                       </Alert>
 
@@ -3165,11 +3417,11 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                             -{nuevaInfraccion.puntos} pts
                           </Badge>
                         </div>
-                        <Alert className="bg-yellow-50 border-yellow-200">
-                          <AlertTriangle className="h-4 w-4 text-yellow-600" />
-                          <AlertDescription className="text-xs">
-                            <strong>Recomendado:</strong> Menos Grave (1 pt),
-                            Grave (2 pts), Muy Grave (3 pts)
+                        <Alert className="bg-blue-50 border-blue-200 py-2">
+                          <AlertCircle className="h-3 w-3 text-blue-600" />
+                          <AlertDescription className="text-xs text-blue-700">
+                            💡 <strong>Recomendado:</strong> Menos Grave (1 pt)
+                            • Grave (2 pts) • Muy Grave (3 pts)
                           </AlertDescription>
                         </Alert>
                       </div>
@@ -3365,6 +3617,14 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Mensaje de ayuda */}
+          <Alert className="bg-blue-50 border-blue-200 py-2">
+            <AlertCircle className="h-3 w-3 text-blue-600" />
+            <AlertDescription className="text-xs text-blue-700">
+              💡 Presiona <strong>"Buscar"</strong> nuevamente para ver cambios
+              recientes.
+            </AlertDescription>
+          </Alert>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <Label>Curso</Label>
@@ -3427,11 +3687,12 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
             <Search className="w-4 h-4 mr-2" />
             {isLoading ? 'Buscando...' : 'Buscar Asistencias'}
           </Button>
-          {!filtroHistorial.cursoId && (
-            <Alert className="bg-blue-50 border-blue-200">
-              <AlertCircle className="h-4 w-4 text-blue-600" />
-              <AlertDescription className="text-blue-800">
-                Selecciona un curso para ver el historial de asistencias
+          {!filtroHistorial.cursoId && historialAsistencias.length === 0 && (
+            <Alert className="bg-blue-50 border-blue-200 py-2">
+              <AlertCircle className="h-3 w-3 text-blue-600" />
+              <AlertDescription className="text-xs text-blue-700">
+                📚 Selecciona un curso y presiona <strong>"Buscar"</strong> para
+                consultar el historial.
               </AlertDescription>
             </Alert>
           )}
@@ -3478,11 +3739,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                       }
                     >
                       <TableCell className="font-medium">
-                        {new Date(asist.fecha).toLocaleDateString('es-ES', {
-                          day: '2-digit',
-                          month: '2-digit',
-                          year: 'numeric',
-                        })}
+                        {formatearFechaElSalvador(asist.fecha)}
                       </TableCell>
                       <TableCell>
                         {asist.alumno.nombre} {asist.alumno.apellido}
@@ -3545,14 +3802,11 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
           </DialogHeader>
           {asistenciaHistorialEditando && (
             <div className="space-y-4">
-              <Alert className="bg-blue-50 border-blue-200">
-                <AlertCircle className="h-4 w-4 text-blue-600" />
-                <AlertDescription className="text-blue-800">
-                  <strong>Modificar asistencia registrada</strong>
-                  <p className="text-sm mt-1">
-                    Cambia el estado si el alumno presentó justificación médica,
-                    constancia u otra documentación válida.
-                  </p>
+              <Alert className="bg-blue-50 border-blue-200 py-2">
+                <AlertCircle className="h-3 w-3 text-blue-600" />
+                <AlertDescription className="text-xs text-blue-700">
+                  ✏️ <strong>Modificar asistencia:</strong> Cambia el estado si
+                  hay justificación médica o documentación válida.
                 </AlertDescription>
               </Alert>
 
@@ -3740,6 +3994,13 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Mensaje de ayuda */}
+          <Alert className="bg-blue-50 border-blue-200 py-2">
+            <AlertCircle className="h-3 w-3 text-blue-600" />
+            <AlertDescription className="text-xs text-blue-700">
+              📊 Regenera el resumen para ver cambios recientes.
+            </AlertDescription>
+          </Alert>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <Label>Curso</Label>
@@ -3814,12 +4075,12 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
             <Download className="w-4 h-4 mr-2" />
             {isLoading ? 'Generando...' : 'Generar Resumen'}
           </Button>
-          {!filtroResumenMensual.cursoId && (
-            <Alert className="bg-blue-50 border-blue-200">
-              <AlertCircle className="h-4 w-4 text-blue-600" />
-              <AlertDescription className="text-blue-800">
-                Selecciona un curso, mes y año para generar el resumen mensual
-                de asistencia
+          {!resumenMensual && (
+            <Alert className="bg-blue-50 border-blue-200 py-2">
+              <AlertCircle className="h-3 w-3 text-blue-600" />
+              <AlertDescription className="text-xs text-blue-700">
+                � Selecciona curso, mes y año, luego presiona{' '}
+                <strong>"Generar"</strong>.
               </AlertDescription>
             </Alert>
           )}
@@ -3957,6 +4218,13 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Mensaje de ayuda */}
+          <Alert className="bg-blue-50 border-blue-200 py-2">
+            <AlertCircle className="h-3 w-3 text-blue-600" />
+            <AlertDescription className="text-xs text-blue-700">
+              🎯 Regenera para actualizar la nota de conducta.
+            </AlertDescription>
+          </Alert>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <Label>Curso</Label>
@@ -4043,12 +4311,12 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
               </div>
             </AlertDescription>
           </Alert>
-          {!filtroResumenTrimestral.cursoId && (
-            <Alert className="bg-blue-50 border-blue-200">
-              <AlertCircle className="h-4 w-4 text-blue-600" />
-              <AlertDescription className="text-blue-800">
-                Selecciona un curso, trimestre y año para generar el resumen con
-                la nota de conducta
+          {!resumenTrimestral && (
+            <Alert className="bg-blue-50 border-blue-200 py-2">
+              <AlertCircle className="h-3 w-3 text-blue-600" />
+              <AlertDescription className="text-xs text-blue-700">
+                🎯 Selecciona curso, trimestre y año, luego presiona{' '}
+                <strong>"Generar"</strong>.
               </AlertDescription>
             </Alert>
           )}

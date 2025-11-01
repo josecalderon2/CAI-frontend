@@ -104,9 +104,19 @@ export const asistenciaService = {
     if (params.fechaHasta) queryParams.append('fechaHasta', params.fechaHasta);
     if (params.estado) queryParams.append('estado', params.estado);
 
-    const response = await api.get<AsistenciaConRelaciones[]>(
-      `/asistencia/buscar/filtros?${queryParams.toString()}`
-    );
+    const url = `/asistencia/buscar/filtros?${queryParams.toString()}`;
+    console.log('🌐 DEBUG - Service llamando al endpoint:', {
+      url,
+      params,
+    });
+
+    const response = await api.get<AsistenciaConRelaciones[]>(url);
+
+    console.log('📦 DEBUG - Service respuesta recibida:', {
+      cantidad: response.data.length,
+      data: response.data,
+    });
+
     return response.data;
   },
 
