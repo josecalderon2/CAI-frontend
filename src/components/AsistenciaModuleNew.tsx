@@ -280,10 +280,6 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
   // Cargar asistencias guardadas cuando cambia curso o fecha
   useEffect(() => {
     if (cursoSeleccionado && fechaSeleccionada) {
-      console.log('🔄 Ejecutando carga de asistencias...', {
-        curso: cursoSeleccionado,
-        fecha: fechaSeleccionada,
-      });
       cargarAsistenciasGuardadas();
     } else {
       // Si no hay curso o fecha seleccionada, limpiar estados
@@ -360,13 +356,9 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
       }
 
       if (cursosResponse.length === 0) {
-        toast.warning(
-          'No se encontraron cursos asignados. Verifica que tengas cursos como orientador.'
-        );
+        toast.warning('No tienes cursos asignados');
       } else {
-        toast.success(
-          `${cursosResponse.length} curso(s) cargado(s) correctamente`
-        );
+        toast.success(`${cursosResponse.length} curso(s) cargado(s)`);
       }
 
       setCursosAsignados(cursosResponse);
@@ -418,18 +410,11 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
 
       if (!cursoActual?.id_curso) return;
 
-      console.log('🔄 Cargando asistencias para:', {
-        curso: cursoActual.nombre,
-        fecha: fechaSeleccionada,
-      });
-
       // Buscar asistencias del curso en la fecha seleccionada
       const asistencias = await asistenciaService.buscarConFiltros({
         cursoId: cursoActual.id_curso,
         fecha: fechaSeleccionada,
       });
-
-      console.log('📊 Asistencias encontradas:', asistencias);
 
       // Mapear asistencias por id_alumno
       const asistenciasMap: Record<
@@ -458,37 +443,22 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
       // Limpiar cualquier estado actual que pueda interferir
       setAsistenciaActual({});
     } catch (e: any) {
-      console.error('❌ Error al cargar asistencias guardadas:', e);
-      console.error('📋 Detalles del error:', {
-        status: e?.response?.status,
-        data: e?.response?.data,
-        message: e?.message,
-      });
-
-      // Mostrar mensaje específico según el error
-      const errorMsg = e?.response?.data?.message || e.message;
       const statusCode = e?.response?.status;
 
+      // Solo mostrar errores críticos, no los 404 normales
       if (statusCode === 500) {
-        console.error('🔴 Error 500 del servidor. Posibles causas:');
-        console.error('   - El backend no está corriendo');
-        console.error('   - Error en la base de datos');
-        console.error('   - Error en el código del servicio backend');
         toast.error(
-          'Error del servidor al cargar asistencias guardadas. Puedes marcar asistencia normalmente y guardar.',
-          { duration: 6000 }
+          'Error del servidor. Puedes continuar marcando asistencia normalmente.'
         );
-      } else if (statusCode === 404) {
-        // No hay asistencias guardadas para esta fecha (normal)
-        console.log('ℹ️ No hay asistencias guardadas para esta fecha');
-        toast.info('No hay asistencias previas para esta fecha');
-      } else {
-        toast.warning(`Error al cargar asistencias previas: ${errorMsg}`);
+      } else if (statusCode !== 404) {
+        // 404 es normal cuando no hay asistencias previas, no mostrar nada
+        const errorMsg =
+          e?.response?.data?.message || 'Error al cargar datos previos';
+        toast.warning(errorMsg);
       }
 
       // Limpiar estados pero no bloquear la funcionalidad
       setAsistenciasGuardadas({});
-      // NO limpiar asistenciaActual para que se mantengan los cambios del usuario
     }
   };
 
@@ -645,9 +615,8 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
         );
       }
 
-      toast.success(
-        `Asistencia guardada correctamente (${registrosNuevos.length} nuevo${registrosNuevos.length !== 1 ? 's' : ''}, ${modificaciones.length} modificado${modificaciones.length !== 1 ? 's' : ''})`
-      );
+      const totalCambios = registrosNuevos.length + modificaciones.length;
+      toast.success(`Asistencia guardada: ${totalCambios} registro(s)`);
 
       // Recargar asistencias guardadas
       await cargarAsistenciasGuardadas();
@@ -785,23 +754,15 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
     try {
       const registros = await conductaService.getAll();
 
-      console.log('📋 DEBUG - Registros de conducta del backend:', registros);
-      console.log('📋 DEBUG - Primer registro:', registros[0]);
-
       // Filtrar registros por los alumnos del curso seleccionado
       const alumnosIds = alumnosDelCurso.map((a) => a.id_alumno);
       const registrosFiltrados = registros.filter((r) =>
         alumnosIds.includes(parseInt(r.id_alumno))
       );
 
-      console.log(
-        '📋 DEBUG - Registros filtrados por curso:',
-        registrosFiltrados.length
-      );
       setRegistrosConducta(registrosFiltrados);
     } catch (e: any) {
-      console.error('Error al cargar registros de conducta:', e);
-      toast.error('Error al cargar registros de conducta');
+      toast.error('No se pudieron cargar los registros de conducta');
     } finally {
       setIsLoading(false);
     }
@@ -893,14 +854,13 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
           );
           setInfraccionesAlumno(infraccionesActualizadas);
         } catch (e) {
-          console.error('Error al recargar infracciones del alumno:', e);
           // Si hay error, al menos mantener el estado filtrado localmente
         }
       }
     } catch (error: any) {
       const errorMsg =
         error?.response?.data?.message ||
-        'Error al eliminar el registro de conducta';
+        'No se pudo eliminar el registro de conducta';
       toast.error(errorMsg);
 
       // Si hay error, recargar el modal para mostrar el estado correcto
@@ -911,7 +871,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
           );
           setInfraccionesAlumno(infraccionesActualizadas);
         } catch (e) {
-          console.error('Error al recargar infracciones después de error:', e);
+          // Silenciar error de recarga
         }
       }
     } finally {
@@ -928,15 +888,10 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
       const infracciones = await conductaService.getByAlumno(
         alumno.id_alumno.toString()
       );
-      console.log(
-        `📋 Infracciones de ${alumno.nombre} ${alumno.apellido}:`,
-        infracciones
-      );
       setInfraccionesAlumno(infracciones);
       setModalDetalleAlumno(true);
     } catch (e: any) {
-      console.error('Error al cargar infracciones del alumno:', e);
-      toast.error('Error al cargar infracciones del alumno');
+      toast.error('No se pudieron cargar las infracciones del alumno');
     } finally {
       setIsLoading(false);
     }
@@ -1011,12 +966,8 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
       // Ejecutar todas las promesas en paralelo
       await Promise.all(promesas);
 
-      const alumno = alumnosDelCurso.find(
-        (a) => a.id_alumno.toString() === nuevaConducta.id_alumno
-      );
-
       toast.success(
-        `${nuevaConducta.id_infracciones.length} conducta(s) registrada(s) para ${alumno?.nombre} ${alumno?.apellido}`
+        `${nuevaConducta.id_infracciones.length} infracción(es) registrada(s)`
       );
 
       setModalConducta(false);
@@ -1057,30 +1008,26 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
         cursoId: cursoActual.id_curso,
       };
 
-      // Enviar fechas en formato ISO UTC para evitar problemas de zona horaria
       if (filtroHistorial.fechaDesde) {
-        // Crear fecha en zona horaria local y enviar en formato YYYY-MM-DD
         params.fechaDesde = filtroHistorial.fechaDesde;
       }
       if (filtroHistorial.fechaHasta) {
-        // Crear fecha en zona horaria local y enviar en formato YYYY-MM-DD
         params.fechaHasta = filtroHistorial.fechaHasta;
       }
 
-      console.log('📅 Filtros de fecha enviados:', params);
-
       const asistencias = await asistenciaService.buscarConFiltros(params);
 
-      console.log('📊 Asistencias recibidas:', asistencias.length);
-      if (asistencias.length > 0) {
-        console.log('📊 Primera asistencia:', asistencias[0]);
-      }
-
       setHistorialAsistencias(asistencias);
-      toast.success(`${asistencias.length} registro(s) encontrado(s)`);
+
+      if (asistencias.length === 0) {
+        toast.info('No se encontraron registros con los filtros aplicados');
+      } else {
+        toast.success(`${asistencias.length} registro(s) encontrado(s)`);
+      }
     } catch (e: any) {
-      console.error('❌ Error al cargar historial:', e);
-      toast.error('Error al cargar el historial de asistencias');
+      const errorMsg =
+        e?.response?.data?.message || 'No se pudo cargar el historial';
+      toast.error(errorMsg);
     } finally {
       setIsLoading(false);
     }
@@ -1182,52 +1129,21 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
 
     setIsLoading(true);
     try {
-      console.log('📊 === RESUMEN TRIMESTRAL - DEBUG ===');
-      console.log('📊 Filtros enviados:', filtroResumenTrimestral);
-
       const resumen = await resumenService.getResumenTrimestral(
         filtroResumenTrimestral
       );
-
-      console.log('📊 Resumen recibido del backend:', resumen);
-      console.log('📊 Total de alumnos:', resumen.length);
-
-      if (resumen.length > 0) {
-        console.log('📊 Primer alumno completo:', resumen[0]);
-        console.log('📊 Estructura del primer alumno:', {
-          id_alumno: resumen[0].id_alumno,
-          nombre: resumen[0].nombre,
-          apellido: resumen[0].apellido,
-          justificadas: resumen[0].justificadas,
-          injustificadas: resumen[0].injustificadas,
-          infracciones: resumen[0].infracciones,
-          puntajeConducta: resumen[0].puntajeConducta,
-        });
-
-        if (resumen[0].infracciones && resumen[0].infracciones.length > 0) {
-          console.log('📊 Primera infracción:', resumen[0].infracciones[0]);
-        }
-      }
 
       setResumenTrimestral(resumen);
 
       if (resumen.length === 0) {
         toast.warning('No se encontraron registros para este trimestre');
       } else {
-        toast.success(
-          `Resumen trimestral generado: ${resumen.length} alumno(s)`
-        );
+        toast.success(`Resumen generado: ${resumen.length} alumno(s)`);
       }
     } catch (e: any) {
-      console.error('❌ Error al generar resumen trimestral:', e);
-      console.error('❌ Detalles del error:', {
-        message: e.message,
-        response: e.response?.data,
-        status: e.response?.status,
-      });
-      toast.error(
-        `Error al generar el resumen trimestral: ${e.message || 'Error desconocido'}`
-      );
+      const errorMsg =
+        e?.response?.data?.message || 'No se pudo generar el resumen';
+      toast.error(errorMsg);
     } finally {
       setIsLoading(false);
     }
@@ -1249,33 +1165,13 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
     let tardes = 0;
     let marcados = 0;
 
-    console.log('📊 DEBUG contarEstados:');
-    console.log('   - Total alumnos del curso:', alumnosDelCurso.length);
-    console.log(
-      '   - Total asistencias guardadas:',
-      Object.keys(asistenciasGuardadas).length
-    );
-    console.log(
-      '   - Total asistencias actuales:',
-      Object.keys(asistenciaActual).length
-    );
-
-    alumnosDelCurso.forEach((alumno, index) => {
+    alumnosDelCurso.forEach((alumno) => {
       const idAlumno = alumno.id_alumno.toString();
       const estadoActual = asistenciaActual[idAlumno];
       const asistenciaGuardada = asistenciasGuardadas[idAlumno];
 
       // Determinar el estado a mostrar (prioridad: actual > guardado)
       const estadoAMostrar = estadoActual || asistenciaGuardada;
-
-      if (index < 3) {
-        console.log(`   👤 Alumno ${index + 1}:`, {
-          id: idAlumno,
-          estadoActual,
-          asistenciaGuardada,
-          estadoAMostrar,
-        });
-      }
 
       if (estadoAMostrar) {
         marcados++;
