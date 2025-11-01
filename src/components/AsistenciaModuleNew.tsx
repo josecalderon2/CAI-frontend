@@ -50,6 +50,7 @@ import {
   Shield,
   ChevronDown,
   ChevronUp,
+  Eye,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { generarExcelResumenTrimestral } from '../utils/excelResumenTrimestral';
@@ -1504,24 +1505,35 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
   // Render tabs
   const renderTomarAsistencia = () => (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Calendar className="w-5 h-5" />
+      <Card className="border-l-4 border-l-blue-500 shadow-sm">
+        <CardHeader className="bg-gradient-to-r from-blue-50 to-white">
+          <CardTitle className="flex items-center space-x-2 text-blue-900">
+            <Calendar className="w-5 h-5 text-blue-600" />
             <span>Configuración de Asistencia</span>
           </CardTitle>
+          <p className="text-sm text-gray-600 mt-1">
+            Selecciona el curso y la fecha para comenzar
+          </p>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="curso">Curso</Label>
+        <CardContent className="space-y-4 pt-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <Label
+                htmlFor="curso"
+                className="text-sm font-semibold text-gray-700 flex items-center"
+              >
+                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 text-blue-600 text-xs font-bold mr-2">
+                  1
+                </span>
+                Curso
+              </Label>
               <Select
                 value={cursoSeleccionado}
                 onValueChange={setCursoSeleccionado}
                 disabled={isLoading}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecciona el curso para tomar asistencia" />
+                <SelectTrigger className="h-11 border-2 hover:border-blue-400 transition-colors">
+                  <SelectValue placeholder="📚 Selecciona el curso para tomar asistencia" />
                 </SelectTrigger>
                 <SelectContent>
                   {cursosAsignados.length === 0 ? (
@@ -1534,7 +1546,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                         key={curso.id_curso}
                         value={curso.id_curso.toString()}
                       >
-                        {curso.nombre}
+                        📚 {curso.nombre}
                         {curso.seccion ? ` - ${curso.seccion}` : ''}
                       </SelectItem>
                     ))
@@ -1542,13 +1554,22 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                 </SelectContent>
               </Select>
               {!cursoSeleccionado && (
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-blue-600 mt-1 flex items-center">
+                  <AlertCircle className="w-3 h-3 mr-1" />
                   Primero selecciona un curso para comenzar
                 </p>
               )}
             </div>
-            <div>
-              <Label htmlFor="fecha-asistencia">Fecha de Registro</Label>
+            <div className="space-y-2">
+              <Label
+                htmlFor="fecha-asistencia"
+                className="text-sm font-semibold text-gray-700 flex items-center"
+              >
+                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 text-blue-600 text-xs font-bold mr-2">
+                  2
+                </span>
+                Fecha de Registro
+              </Label>
               <Input
                 id="fecha-asistencia"
                 type="date"
@@ -1561,12 +1582,11 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                   const day = String(hoy.getDate()).padStart(2, '0');
                   return `${year}-${month}-${day}`;
                 })()}
-                className="h-10"
+                className="h-11 border-2 hover:border-blue-400 transition-colors"
               />
               <p className="text-xs text-gray-500 mt-1">
-                Selecciona la fecha para tomar asistencia. Si olvidaste tomar
-                asistencia de un día anterior, cámbiala aquí. El historial es
-                para corregir estados de asistencias ya guardadas.
+                📅 Puedes cambiar la fecha si necesitas registrar asistencia de
+                días anteriores
               </p>
             </div>
           </div>
@@ -1575,20 +1595,24 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
 
       {!!cursoSeleccionado && (
         <>
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <UserCheck className="w-5 h-5" />
+          <Card className="border-l-4 border-l-green-500 shadow-sm">
+            <CardHeader className="bg-gradient-to-r from-green-50 to-white">
+              <CardTitle className="flex items-center space-x-2 text-green-900">
+                <UserCheck className="w-5 h-5 text-green-600" />
                 <span>Controles Rápidos</span>
               </CardTitle>
+              <p className="text-sm text-gray-600 mt-1">
+                Acciones rápidas para gestionar la asistencia
+              </p>
             </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-2">
+            <CardContent className="pt-6">
+              <div className="flex flex-wrap gap-3">
                 <Button
                   onClick={marcarTodosPresentes}
                   variant="outline"
-                  size="sm"
+                  size="default"
                   disabled={isLoading}
+                  className="border-2 hover:scale-105 transition-transform"
                 >
                   {(() => {
                     const todosEstanMarcados = alumnosDelCurso.every(
@@ -1616,7 +1640,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                 </Button>
                 <Button
                   onClick={handleGuardarAsistencia}
-                  className="bg-green-600 hover:bg-green-700"
+                  className="bg-green-600 hover:bg-green-700 shadow-md hover:shadow-lg transition-all hover:scale-105"
                   disabled={
                     isLoading || Object.keys(asistenciaActual).length === 0
                   }
@@ -1656,18 +1680,27 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                 <Button
                   onClick={() => setMostrarEstados(!mostrarEstados)}
                   variant="outline"
-                  size="sm"
-                  className="ml-auto"
+                  size="default"
+                  className="ml-auto border-2 hover:bg-blue-50 hover:border-blue-400 transition-colors"
                 >
-                  <AlertCircle className="w-4 h-4 mr-2" />
-                  {mostrarEstados ? 'Ocultar' : 'Ver'} Estados de Asistencia
+                  {mostrarEstados ? (
+                    <>
+                      <Eye className="w-4 h-4 mr-2" />
+                      Ocultar Guía
+                    </>
+                  ) : (
+                    <>
+                      <AlertCircle className="w-4 h-4 mr-2" />
+                      Ver Guía de Estados
+                    </>
+                  )}
                 </Button>
               </div>
             </CardContent>
           </Card>
 
           {mostrarEstados && (
-            <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+            <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-300 shadow-lg">
               <CardContent className="p-4">
                 <div className="space-y-3">
                   <h3 className="font-semibold text-gray-900 text-base">
@@ -1754,25 +1787,33 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
             </Card>
           )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
+          <Card className="border-l-4 border-l-purple-500 shadow-sm">
+            <CardHeader className="bg-gradient-to-r from-purple-50 to-white">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div className="flex items-center space-x-2">
-                  <Users className="w-5 h-5" />
-                  <span>Lista de Alumnos</span>
+                  <Users className="w-5 h-5 text-purple-600" />
+                  <div>
+                    <h3 className="text-lg font-semibold text-purple-900">
+                      Lista de Alumnos
+                    </h3>
+                    <p className="text-sm text-gray-600">
+                      {alumnosDelCurso.length} estudiante
+                      {alumnosDelCurso.length !== 1 ? 's' : ''} en total
+                    </p>
+                  </div>
                 </div>
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <Input
-                    placeholder="Buscar alumno..."
+                    placeholder="🔍 Buscar alumno por nombre..."
                     value={busquedaAlumno}
                     onChange={(e) => setBusquedaAlumno(e.target.value)}
-                    className="pl-10 w-64"
+                    className="pl-10 w-full md:w-72 border-2 hover:border-purple-400 transition-colors"
                   />
                 </div>
-              </CardTitle>
+              </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-6">
               <div className="space-y-3">
                 {(() => {
                   console.log('👥 DEBUG - Alumnos filtrados a renderizar:', {
@@ -4653,12 +4694,13 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
   );
 
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">
+    <div className="p-6 space-y-6 bg-gradient-to-br from-gray-50 to-blue-50 min-h-screen">
+      <div className="bg-white rounded-lg shadow-sm p-6 border-l-4 border-l-blue-600">
+        <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
           Gestión de Asistencia y Conducta
         </h1>
-        <p className="text-gray-600 mt-2">
+        <p className="text-gray-600 mt-2 flex items-center">
+          <Shield className="w-4 h-4 mr-2 text-blue-600" />
           Sistema integral de registro y seguimiento académico
         </p>
       </div>
@@ -4666,72 +4708,127 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
       {/* Tarjetas informativas - Solo en tab de asistencia con curso seleccionado */}
       {activeTab === 'asistencia' && cursoSeleccionado && (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <Card className="border-l-4 border-l-blue-500">
+          <Card className="border-l-4 border-l-blue-500 hover:shadow-lg transition-shadow bg-gradient-to-br from-blue-50 to-white">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600">Total</p>
-                  <p className="text-2xl font-bold text-blue-600">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    Total
+                  </p>
+                  <p className="text-3xl font-bold text-blue-600 mt-1">
                     {alumnosDelCurso.length}
                   </p>
+                  <p className="text-xs text-gray-500 mt-1">Alumnos</p>
                 </div>
-                <Users className="w-8 h-8 text-blue-600" />
+                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                  <Users className="w-6 h-6 text-blue-600" />
+                </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="border-l-4 border-l-green-500">
+          <Card className="border-l-4 border-l-green-500 hover:shadow-lg transition-shadow bg-gradient-to-br from-green-50 to-white">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600">Presentes</p>
-                  <p className="text-2xl font-bold text-green-600">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    Presentes
+                  </p>
+                  <p className="text-3xl font-bold text-green-600 mt-1">
                     {estadosCount.presentes}
                   </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {alumnosDelCurso.length > 0
+                      ? Math.round(
+                          (estadosCount.presentes / alumnosDelCurso.length) *
+                            100
+                        )
+                      : 0}
+                    %
+                  </p>
                 </div>
-                <CheckCircle className="w-8 h-8 text-green-600" />
+                <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                  <CheckCircle className="w-6 h-6 text-green-600" />
+                </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="border-l-4 border-l-red-500">
+          <Card className="border-l-4 border-l-red-500 hover:shadow-lg transition-shadow bg-gradient-to-br from-red-50 to-white">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600">Ausentes</p>
-                  <p className="text-2xl font-bold text-red-600">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    Ausentes
+                  </p>
+                  <p className="text-3xl font-bold text-red-600 mt-1">
                     {estadosCount.ausentes}
                   </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {alumnosDelCurso.length > 0
+                      ? Math.round(
+                          (estadosCount.ausentes / alumnosDelCurso.length) * 100
+                        )
+                      : 0}
+                    %
+                  </p>
                 </div>
-                <XCircle className="w-8 h-8 text-red-600" />
+                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                  <XCircle className="w-6 h-6 text-red-600" />
+                </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="border-l-4 border-l-orange-500">
+          <Card className="border-l-4 border-l-orange-500 hover:shadow-lg transition-shadow bg-gradient-to-br from-orange-50 to-white">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600">Atrasos</p>
-                  <p className="text-2xl font-bold text-orange-600">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    Atrasos
+                  </p>
+                  <p className="text-3xl font-bold text-orange-600 mt-1">
                     {estadosCount.tardes}
                   </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {alumnosDelCurso.length > 0
+                      ? Math.round(
+                          (estadosCount.tardes / alumnosDelCurso.length) * 100
+                        )
+                      : 0}
+                    %
+                  </p>
                 </div>
-                <Clock className="w-8 h-8 text-orange-600" />
+                <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
+                  <Clock className="w-6 h-6 text-orange-600" />
+                </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="border-l-4 border-l-gray-500">
+          <Card className="border-l-4 border-l-gray-500 hover:shadow-lg transition-shadow bg-gradient-to-br from-gray-50 to-white">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600">Sin marcar</p>
-                  <p className="text-2xl font-bold text-gray-600">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    Sin marcar
+                  </p>
+                  <p className="text-3xl font-bold text-gray-600 mt-1">
                     {estadosCount.sinMarcar}
                   </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {alumnosDelCurso.length > 0
+                      ? Math.round(
+                          (estadosCount.sinMarcar / alumnosDelCurso.length) *
+                            100
+                        )
+                      : 0}
+                    %
+                  </p>
                 </div>
-                <AlertCircle className="w-8 h-8 text-gray-600" />
+                <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
+                  <AlertCircle className="w-6 h-6 text-gray-600" />
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -4739,46 +4836,75 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
       )}
 
       <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)}>
-        <div className="space-y-2">
-          <TabsList className="grid w-full grid-cols-3 gap-2 h-auto p-2">
-            <TabsTrigger
-              value="asistencia"
-              className="flex items-center gap-2 py-3"
-            >
-              <Calendar className="w-4 h-4" />
-              <span className="font-medium">Tomar Asistencia</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="conducta"
-              className="flex items-center gap-2 py-3"
-            >
-              <AlertTriangle className="w-4 h-4" />
-              <span className="font-medium">Conducta</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="historial"
-              className="flex items-center gap-2 py-3"
-            >
-              <FileText className="w-4 h-4" />
-              <span className="font-medium">Historial</span>
-            </TabsTrigger>
+        <div className="space-y-3 bg-white p-4 rounded-lg shadow-sm">
+          <TabsList className="grid w-full grid-cols-3 gap-3 h-auto p-2 bg-gray-100">
+            <div className="relative">
+              <TabsTrigger
+                value="asistencia"
+                className="w-full flex flex-col items-center justify-center gap-2 py-4 px-3 data-[state=active]:bg-white data-[state=active]:text-blue-700 transition-all duration-200 rounded-t-lg hover:bg-gray-50 relative overflow-hidden"
+              >
+                <Calendar className="w-5 h-5" />
+                <span className="font-semibold text-sm">Tomar Asistencia</span>
+              </TabsTrigger>
+              {activeTab === 'asistencia' && (
+                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-blue-600 animate-pulse"></div>
+              )}
+            </div>
+            <div className="relative">
+              <TabsTrigger
+                value="conducta"
+                className="w-full flex flex-col items-center justify-center gap-2 py-4 px-3 data-[state=active]:bg-white data-[state=active]:text-orange-700 transition-all duration-200 rounded-t-lg hover:bg-gray-50 relative overflow-hidden"
+              >
+                <AlertTriangle className="w-5 h-5" />
+                <span className="font-semibold text-sm">Conducta</span>
+              </TabsTrigger>
+              {activeTab === 'conducta' && (
+                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-500 to-orange-600 animate-pulse"></div>
+              )}
+            </div>
+            <div className="relative">
+              <TabsTrigger
+                value="historial"
+                className="w-full flex flex-col items-center justify-center gap-2 py-4 px-3 data-[state=active]:bg-white data-[state=active]:text-purple-700 transition-all duration-200 rounded-t-lg hover:bg-gray-50 relative overflow-hidden"
+              >
+                <FileText className="w-5 h-5" />
+                <span className="font-semibold text-sm">Historial</span>
+              </TabsTrigger>
+              {activeTab === 'historial' && (
+                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-500 to-purple-600 animate-pulse"></div>
+              )}
+            </div>
           </TabsList>
 
-          <TabsList className="grid w-full grid-cols-2 gap-2 h-auto p-2">
-            <TabsTrigger
-              value="resumen-mensual"
-              className="flex items-center gap-2 py-3"
-            >
-              <BarChart3 className="w-4 h-4" />
-              <span className="font-medium">Resumen Conductual</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="resumen-trimestral"
-              className="flex items-center gap-2 py-3"
-            >
-              <Award className="w-4 h-4" />
-              <span className="font-medium">Resumen Trimestral</span>
-            </TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2 gap-3 h-auto p-2 bg-gray-100">
+            <div className="relative">
+              <TabsTrigger
+                value="resumen-mensual"
+                className="w-full flex flex-col items-center justify-center gap-2 py-4 px-3 data-[state=active]:bg-white data-[state=active]:text-teal-700 transition-all duration-200 rounded-t-lg hover:bg-gray-50 relative overflow-hidden"
+              >
+                <BarChart3 className="w-5 h-5" />
+                <span className="font-semibold text-sm">
+                  Resumen Conductual
+                </span>
+              </TabsTrigger>
+              {activeTab === 'resumen-mensual' && (
+                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-teal-500 to-teal-600 animate-pulse"></div>
+              )}
+            </div>
+            <div className="relative">
+              <TabsTrigger
+                value="resumen-trimestral"
+                className="w-full flex flex-col items-center justify-center gap-2 py-4 px-3 data-[state=active]:bg-white data-[state=active]:text-indigo-700 transition-all duration-200 rounded-t-lg hover:bg-gray-50 relative overflow-hidden"
+              >
+                <Award className="w-5 h-5" />
+                <span className="font-semibold text-sm">
+                  Resumen Trimestral
+                </span>
+              </TabsTrigger>
+              {activeTab === 'resumen-trimestral' && (
+                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 to-indigo-600 animate-pulse"></div>
+              )}
+            </div>
           </TabsList>
         </div>
 
