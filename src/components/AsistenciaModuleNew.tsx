@@ -128,9 +128,13 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
 
   // Estados para Toma de Asistencia
   const [cursoSeleccionado, setCursoSeleccionado] = useState('');
-  const [fechaSeleccionada, setFechaSeleccionada] = useState(
-    new Date().toISOString().split('T')[0]
-  );
+  const [fechaSeleccionada, setFechaSeleccionada] = useState(() => {
+    const hoy = new Date();
+    const year = hoy.getFullYear();
+    const month = String(hoy.getMonth() + 1).padStart(2, '0');
+    const day = String(hoy.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  });
   const [alumnosPorCurso, setAlumnosPorCurso] = useState<
     Record<string, AlumnoResponse[]>
   >({});
@@ -217,6 +221,15 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
     fechaDesde: '',
     fechaHasta: '',
   });
+  const [modalEdicionHistorial, setModalEdicionHistorial] = useState(false);
+  const [asistenciaHistorialEditando, setAsistenciaHistorialEditando] =
+    useState<{
+      id_asistencia: string;
+      id_alumno: number;
+      nombreAlumno: string;
+      fecha: string;
+      estadoActual: EstadoAsistencia;
+    } | null>(null);
 
   // Estados para Resúmenes
   const [resumenMensual, setResumenMensual] = useState<
@@ -245,6 +258,17 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
       cargarCatalogoInfracciones();
     }
   }, [user?.id, activeTab]);
+
+  // Resetear fecha a hoy cuando se entra al tab de asistencia
+  useEffect(() => {
+    if (activeTab === 'asistencia') {
+      const hoy = new Date();
+      const year = hoy.getFullYear();
+      const month = String(hoy.getMonth() + 1).padStart(2, '0');
+      const day = String(hoy.getDate()).padStart(2, '0');
+      setFechaSeleccionada(`${year}-${month}-${day}`);
+    }
+  }, [activeTab]);
 
   // Cargar registros de conducta cuando cambie el curso
   useEffect(() => {
@@ -1033,18 +1057,95 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
         cursoId: cursoActual.id_curso,
       };
 
+      // Enviar fechas en formato ISO UTC para evitar problemas de zona horaria
       if (filtroHistorial.fechaDesde) {
+        // Crear fecha en zona horaria local y enviar en formato YYYY-MM-DD
         params.fechaDesde = filtroHistorial.fechaDesde;
       }
       if (filtroHistorial.fechaHasta) {
+        // Crear fecha en zona horaria local y enviar en formato YYYY-MM-DD
         params.fechaHasta = filtroHistorial.fechaHasta;
       }
 
+      console.log('📅 Filtros de fecha enviados:', params);
+
       const asistencias = await asistenciaService.buscarConFiltros(params);
+
+      console.log('📊 Asistencias recibidas:', asistencias.length);
+      if (asistencias.length > 0) {
+        console.log('📊 Primera asistencia:', asistencias[0]);
+      }
+
       setHistorialAsistencias(asistencias);
       toast.success(`${asistencias.length} registro(s) encontrado(s)`);
     } catch (e: any) {
+      console.error('❌ Error al cargar historial:', e);
       toast.error('Error al cargar el historial de asistencias');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEditarAsistenciaHistorial = (asist: any) => {
+    setAsistenciaHistorialEditando({
+      id_asistencia: asist.id_asistencia,
+      id_alumno: asist.id_alumno,
+      nombreAlumno: `${asist.alumno.nombre} ${asist.alumno.apellido}`,
+      fecha: new Date(asist.fecha).toLocaleDateString('es-ES', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      }),
+      estadoActual: asist.estado,
+    });
+    // Pre-cargar el estado actual
+    setAsistenciaActual({
+      [asist.id_alumno]: {
+        estado: asist.estado,
+      },
+    });
+    setModalEdicionHistorial(true);
+  };
+
+  const handleGuardarEdicionHistorial = async () => {
+    if (!asistenciaHistorialEditando) return;
+
+    const nuevoEstado = asistenciaActual[asistenciaHistorialEditando.id_alumno];
+
+    if (!nuevoEstado) {
+      toast.error('Debe seleccionar un estado');
+      return;
+    }
+
+    // Verificar si realmente cambió el estado
+    if (nuevoEstado.estado === asistenciaHistorialEditando.estadoActual) {
+      toast.warning('No se detectaron cambios en el estado');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await asistenciaService.update(
+        asistenciaHistorialEditando.id_asistencia,
+        {
+          estado: nuevoEstado.estado,
+          id_orientador: parseInt(user.id),
+        }
+      );
+
+      toast.success('Asistencia actualizada correctamente');
+
+      // Recargar el historial
+      await handleCargarHistorial();
+
+      // Cerrar modal y limpiar estados
+      setModalEdicionHistorial(false);
+      setAsistenciaHistorialEditando(null);
+      setAsistenciaActual({});
+    } catch (e: any) {
+      const errorMsg =
+        e?.response?.data?.message || 'Error al actualizar la asistencia';
+      toast.error(errorMsg);
     } finally {
       setIsLoading(false);
     }
@@ -1371,16 +1472,25 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
               )}
             </div>
             <div>
-              <Label htmlFor="fecha">Fecha</Label>
+              <Label htmlFor="fecha-asistencia">Fecha de Registro</Label>
               <Input
+                id="fecha-asistencia"
                 type="date"
                 value={fechaSeleccionada}
                 onChange={(e) => setFechaSeleccionada(e.target.value)}
-                disabled={isLoading}
-                max={new Date().toISOString().split('T')[0]}
+                max={(() => {
+                  const hoy = new Date();
+                  const year = hoy.getFullYear();
+                  const month = String(hoy.getMonth() + 1).padStart(2, '0');
+                  const day = String(hoy.getDate()).padStart(2, '0');
+                  return `${year}-${month}-${day}`;
+                })()}
+                className="h-10"
               />
               <p className="text-xs text-gray-500 mt-1">
-                El trimestre se calcula automáticamente según la fecha
+                Selecciona la fecha para tomar asistencia. Si olvidaste tomar
+                asistencia de un día anterior, cámbiala aquí. El historial es
+                para corregir estados de asistencias ya guardadas.
               </p>
             </div>
           </div>
@@ -3456,6 +3566,9 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                     <TableHead className="font-bold text-gray-900">
                       Registrado por
                     </TableHead>
+                    <TableHead className="text-center font-bold text-gray-900">
+                      Acciones
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -3502,6 +3615,17 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                       <TableCell>
                         {asist.orientador.nombre} {asist.orientador.apellido}
                       </TableCell>
+                      <TableCell className="text-center">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleEditarAsistenciaHistorial(asist)}
+                          disabled={isLoading}
+                        >
+                          <Edit className="w-4 h-4 mr-1" />
+                          Editar
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -3510,6 +3634,197 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
           </CardContent>
         </Card>
       )}
+
+      {/* Modal de edición de asistencia del historial */}
+      <Dialog
+        open={modalEdicionHistorial}
+        onOpenChange={setModalEdicionHistorial}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center space-x-2">
+              <Edit className="w-5 h-5 text-blue-600" />
+              <span>Editar Asistencia</span>
+            </DialogTitle>
+          </DialogHeader>
+          {asistenciaHistorialEditando && (
+            <div className="space-y-4">
+              <Alert className="bg-blue-50 border-blue-200">
+                <AlertCircle className="h-4 w-4 text-blue-600" />
+                <AlertDescription className="text-blue-800">
+                  <strong>Modificar asistencia registrada</strong>
+                  <p className="text-sm mt-1">
+                    Cambia el estado si el alumno presentó justificación médica,
+                    constancia u otra documentación válida.
+                  </p>
+                </AlertDescription>
+              </Alert>
+
+              <div>
+                <Label className="text-sm font-medium">Alumno</Label>
+                <p className="text-base font-semibold text-gray-900 mt-1">
+                  {asistenciaHistorialEditando.nombreAlumno}
+                </p>
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium">Fecha</Label>
+                <p className="text-base text-gray-700 mt-1">
+                  {asistenciaHistorialEditando.fecha}
+                </p>
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium">Estado Actual</Label>
+                <div className="mt-2">
+                  <Badge
+                    variant="outline"
+                    className={
+                      asistenciaHistorialEditando.estadoActual === 'P'
+                        ? 'bg-green-100 text-green-800 border-green-300'
+                        : asistenciaHistorialEditando.estadoActual === 'E'
+                          ? 'bg-blue-100 text-blue-800 border-blue-300'
+                          : asistenciaHistorialEditando.estadoActual === 'SP'
+                            ? 'bg-red-100 text-red-800 border-red-300'
+                            : 'bg-orange-100 text-orange-800 border-orange-300'
+                    }
+                  >
+                    {asistenciaHistorialEditando.estadoActual === 'P' &&
+                      'Presente'}
+                    {asistenciaHistorialEditando.estadoActual === 'E' &&
+                      'Con Permiso'}
+                    {asistenciaHistorialEditando.estadoActual === 'SP' &&
+                      'Sin Permiso'}
+                    {asistenciaHistorialEditando.estadoActual === 'A' &&
+                      'Atraso'}
+                  </Badge>
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium mb-3 block">
+                  Cambiar a:
+                </Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant={
+                      asistenciaActual[asistenciaHistorialEditando.id_alumno]
+                        ?.estado === 'P'
+                        ? 'default'
+                        : 'outline'
+                    }
+                    className={
+                      asistenciaActual[asistenciaHistorialEditando.id_alumno]
+                        ?.estado === 'P'
+                        ? 'bg-green-600 hover:bg-green-700'
+                        : ''
+                    }
+                    onClick={() =>
+                      handleEstadoChange(
+                        asistenciaHistorialEditando.id_alumno,
+                        'P'
+                      )
+                    }
+                  >
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Presente
+                  </Button>
+                  <Button
+                    variant={
+                      asistenciaActual[asistenciaHistorialEditando.id_alumno]
+                        ?.estado === 'E'
+                        ? 'default'
+                        : 'outline'
+                    }
+                    className={
+                      asistenciaActual[asistenciaHistorialEditando.id_alumno]
+                        ?.estado === 'E'
+                        ? 'bg-blue-600 hover:bg-blue-700'
+                        : ''
+                    }
+                    onClick={() =>
+                      handleEstadoChange(
+                        asistenciaHistorialEditando.id_alumno,
+                        'E'
+                      )
+                    }
+                  >
+                    <FileText className="w-4 h-4 mr-2" />
+                    Con Permiso
+                  </Button>
+                  <Button
+                    variant={
+                      asistenciaActual[asistenciaHistorialEditando.id_alumno]
+                        ?.estado === 'SP'
+                        ? 'default'
+                        : 'outline'
+                    }
+                    className={
+                      asistenciaActual[asistenciaHistorialEditando.id_alumno]
+                        ?.estado === 'SP'
+                        ? 'bg-red-600 hover:bg-red-700'
+                        : ''
+                    }
+                    onClick={() =>
+                      handleEstadoChange(
+                        asistenciaHistorialEditando.id_alumno,
+                        'SP'
+                      )
+                    }
+                  >
+                    <XCircle className="w-4 h-4 mr-2" />
+                    Sin Permiso
+                  </Button>
+                  <Button
+                    variant={
+                      asistenciaActual[asistenciaHistorialEditando.id_alumno]
+                        ?.estado === 'A'
+                        ? 'default'
+                        : 'outline'
+                    }
+                    className={
+                      asistenciaActual[asistenciaHistorialEditando.id_alumno]
+                        ?.estado === 'A'
+                        ? 'bg-orange-600 hover:bg-orange-700'
+                        : ''
+                    }
+                    onClick={() =>
+                      handleEstadoChange(
+                        asistenciaHistorialEditando.id_alumno,
+                        'A'
+                      )
+                    }
+                  >
+                    <Clock className="w-4 h-4 mr-2" />
+                    Atraso
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setModalEdicionHistorial(false);
+                    setAsistenciaHistorialEditando(null);
+                    setAsistenciaActual({});
+                  }}
+                  disabled={isLoading}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleGuardarEdicionHistorial}
+                  disabled={isLoading}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {isLoading ? 'Guardando...' : 'Guardar Cambios'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 
