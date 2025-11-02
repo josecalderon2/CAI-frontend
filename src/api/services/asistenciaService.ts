@@ -99,15 +99,36 @@ export const asistenciaService = {
       queryParams.append('cursoId', params.cursoId.toString());
     if (params.alumnoId)
       queryParams.append('alumnoId', params.alumnoId.toString());
-    if (params.fecha) queryParams.append('fecha', params.fecha);
-    if (params.fechaDesde) queryParams.append('fechaDesde', params.fechaDesde);
-    if (params.fechaHasta) queryParams.append('fechaHasta', params.fechaHasta);
+
+    // ✅ CORREGIDO: Ajustar fechas a zona horaria de El Salvador (UTC-6)
+    // El Salvador está en UTC-6, entonces:
+    // - Para buscar desde el inicio del día en El Salvador (00:00 SV), necesitamos 06:00 UTC
+    // - Para buscar hasta el final del día en El Salvador (23:59 SV), necesitamos 05:59 UTC del día siguiente
+    if (params.fecha) {
+      queryParams.append('fecha', params.fecha);
+    }
+    if (params.fechaDesde) {
+      // Inicio del día en El Salvador = 06:00 UTC del mismo día
+      queryParams.append('fechaDesde', `${params.fechaDesde}T06:00:00.000Z`);
+    }
+    if (params.fechaHasta) {
+      // Final del día en El Salvador = 05:59:59 UTC del día siguiente
+      // Calcular el día siguiente
+      const fechaHasta = new Date(params.fechaHasta + 'T00:00:00');
+      fechaHasta.setDate(fechaHasta.getDate() + 1);
+      const fechaHastaSiguiente = fechaHasta.toISOString().split('T')[0];
+      queryParams.append('fechaHasta', `${fechaHastaSiguiente}T05:59:59.999Z`);
+    }
     if (params.estado) queryParams.append('estado', params.estado);
 
     const url = `/asistencia/buscar/filtros?${queryParams.toString()}`;
     console.log('🌐 DEBUG - Service llamando al endpoint:', {
       url,
       params,
+      fechaDesdeAjustada: params.fechaDesde
+        ? `${params.fechaDesde}T06:00:00.000Z`
+        : null,
+      fechaHastaAjustada: params.fechaHasta,
     });
 
     const response = await api.get<AsistenciaConRelaciones[]>(url);

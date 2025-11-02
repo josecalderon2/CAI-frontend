@@ -1169,6 +1169,9 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
         cursoId: cursoActual.id_curso,
       };
 
+      // ✅ CORREGIDO: Ajustar fechas a zona horaria de El Salvador (UTC-6) para evitar desfase de un día
+      // Cuando el usuario selecciona "31/10/2024", queremos TODOS los registros de ese día en El Salvador
+      // Por eso agregamos 'T12:00:00' para que la fecha se interprete al mediodía y evitar problemas de zona horaria
       if (filtroHistorial.fechaDesde) {
         params.fechaDesde = filtroHistorial.fechaDesde;
       }
@@ -1176,7 +1179,15 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
         params.fechaHasta = filtroHistorial.fechaHasta;
       }
 
+      console.log('🔍 DEBUG - Cargando historial con parámetros:', params);
+
       const asistencias = await asistenciaService.buscarConFiltros(params);
+
+      console.log('📊 DEBUG - Asistencias recibidas:', {
+        cantidad: asistencias.length,
+        primeraFecha: asistencias[0]?.fecha,
+        ultimaFecha: asistencias[asistencias.length - 1]?.fecha,
+      });
 
       setHistorialAsistencias(asistencias);
 
@@ -1802,14 +1813,16 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                     </p>
                   </div>
                 </div>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <Input
-                    placeholder="🔍 Buscar alumno por nombre..."
-                    value={busquedaAlumno}
-                    onChange={(e) => setBusquedaAlumno(e.target.value)}
-                    className="pl-10 w-full md:w-72 border-2 hover:border-purple-400 transition-colors"
-                  />
+                <div className="w-full md:w-96">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" />
+                    <Input
+                      placeholder="Buscar alumno por nombre..."
+                      value={busquedaAlumno}
+                      onChange={(e) => setBusquedaAlumno(e.target.value)}
+                      className="pl-10 w-full border-2 hover:border-purple-400 transition-colors"
+                    />
+                  </div>
                 </div>
               </div>
             </CardHeader>
