@@ -68,11 +68,6 @@ export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
             obtenerTotalAsignaturas(),
           ]);
 
-        console.log('Datos de personal:', personalData);
-        console.log('Total alumnos:', totalAlumnos);
-        console.log('Total cursos:', totalCursos);
-        console.log('Total asignaturas:', totalAsignaturas);
-
         // Actualizamos el estado con los datos reales
         setStats({
           totalUsuarios:
@@ -136,6 +131,14 @@ export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
       color: 'bg-red-600',
       action: () => onNavigate('asignaciones'),
       stats: 'Gestionar asignaciones',
+    },
+    {
+      title: 'Catálogo de Conductas',
+      description: 'Gestionar infracciones y catálogo de conducta',
+      icon: UserPlus,
+      color: 'bg-pink-600',
+      action: () => onNavigate('conductas'),
+      stats: 'Gestionar conductas',
     },
     {
       title: 'Reportes',

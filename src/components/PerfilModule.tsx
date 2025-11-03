@@ -43,7 +43,7 @@ export function PerfilModule({}: PerfilModuleProps) {
     telefono: '',
     direccion: '',
   });
-   // Helper: valida y formatea teléfono a XXXX-XXXX
+  // Helper: valida y formatea teléfono a XXXX-XXXX
   const normalizeDigits = (s: string) => s.replace(/\D/g, '');
   const isValidPhone = (s: string) => normalizeDigits(s).length === 8;
   const formatPhone = (s: string) => {
@@ -75,7 +75,6 @@ export function PerfilModule({}: PerfilModuleProps) {
         setIsLoading(true);
         const authData = getUser();
         setUserAuthData(authData);
-        console.log('Datos de autenticación:', authData);
 
         if (!authData || !authData.role) {
           console.error('No hay información de rol en los datos del usuario');
@@ -84,9 +83,7 @@ export function PerfilModule({}: PerfilModuleProps) {
           return;
         }
 
-        console.log('Intentando obtener perfil para rol:', authData.role);
         const profile = await perfilService.getPerfilUsuario(authData.role);
-        console.log('Perfil obtenido:', profile);
 
         setUserProfile(profile);
         setProfileForm({
@@ -431,18 +428,20 @@ export function PerfilModule({}: PerfilModuleProps) {
                         onChange={(e) =>
                           setProfileForm({
                             ...profileForm,
-                             // mantener solo dígitos y formatear automáticamente cuando tenga 8
-                          telefono: formatPhone(e.target.value.replace(/[^\d]/g, '')),
-                    })
-                  }
-                  placeholder="Ingresa tu teléfono (ej. 7491-5623)"
-                />
-              ) : (
-                <div className="flex items-center space-x-2 p-2">
-                  <Phone className="w-4 h-4 text-gray-500" />
-                  <span>{userProfile.telefono || 'No disponible'}</span>
-                </div>
-              )}
+                            // mantener solo dígitos y formatear automáticamente cuando tenga 8
+                            telefono: formatPhone(
+                              e.target.value.replace(/[^\d]/g, '')
+                            ),
+                          })
+                        }
+                        placeholder="Ingresa tu teléfono (ej. 7491-5623)"
+                      />
+                    ) : (
+                      <div className="flex items-center space-x-2 p-2">
+                        <Phone className="w-4 h-4 text-gray-500" />
+                        <span>{userProfile.telefono || 'No disponible'}</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* DUI (si está disponible) */}

@@ -460,11 +460,6 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
   const cargarAsistenciasGuardadas = async () => {
     if (!cursoSeleccionado || !fechaSeleccionada) return;
 
-    console.log('🔍 DEBUG - Cargando asistencias guardadas:', {
-      cursoSeleccionado,
-      fechaSeleccionada,
-    });
-
     try {
       const cursoActual = cursosAsignados.find(
         (c) => c.id_curso === parseInt(cursoSeleccionado)
@@ -476,11 +471,6 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
       const asistencias = await asistenciaService.buscarConFiltros({
         cursoId: cursoActual.id_curso,
         fecha: fechaSeleccionada,
-      });
-
-      console.log('📡 DEBUG - Asistencias recibidas del servidor:', {
-        cantidad: asistencias.length,
-        asistencias,
       });
 
       // Mapear asistencias por id_alumno
@@ -498,13 +488,6 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
         const alumnoId = String(asist.id_alumno);
         const asistenciaId = String(asist.id_asistencia);
 
-        console.log('🔗 DEBUG - Mapeando asistencia:', {
-          alumnoId,
-          asistenciaId,
-          estado: asist.estado,
-          observacion: asist.observacion,
-        });
-
         asistenciasMap[alumnoId] = {
           id_asistencia: asistenciaId,
           estado: asist.estado,
@@ -512,17 +495,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
         };
       });
 
-      console.log(
-        '📋 DEBUG - Map de asistencias guardadas final:',
-        asistenciasMap
-      );
-
       setAsistenciasGuardadas(asistenciasMap);
-
-      console.log(
-        '✅ DEBUG - Estado actualizado. Asistencias guardadas:',
-        Object.keys(asistenciasMap).length
-      );
 
       // Limpiar cualquier estado actual que pueda interferir
       setAsistenciaActual({});
@@ -1179,15 +1152,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
         params.fechaHasta = filtroHistorial.fechaHasta;
       }
 
-      console.log('🔍 DEBUG - Cargando historial con parámetros:', params);
-
       const asistencias = await asistenciaService.buscarConFiltros(params);
-
-      console.log('📊 DEBUG - Asistencias recibidas:', {
-        cantidad: asistencias.length,
-        primeraFecha: asistencias[0]?.fecha,
-        ultimaFecha: asistencias[asistencias.length - 1]?.fecha,
-      });
 
       setHistorialAsistencias(asistencias);
 
@@ -1828,37 +1793,11 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
             </CardHeader>
             <CardContent className="pt-6">
               <div className="space-y-3">
-                {(() => {
-                  console.log('👥 DEBUG - Alumnos filtrados a renderizar:', {
-                    total: alumnosFiltrados.length,
-                    alumnos: alumnosFiltrados.map((a) => ({
-                      id: a.id_alumno,
-                      nombre: `${a.nombre} ${a.apellido}`,
-                    })),
-                  });
-                  return null;
-                })()}
                 {alumnosFiltrados.map((alumno) => {
                   // Verificar estados
                   const alumnoIdStr = alumno.id_alumno.toString();
                   const asistenciaGuardada = asistenciasGuardadas[alumnoIdStr];
                   const estadoActual = asistenciaActual[alumnoIdStr];
-
-                  // Solo mostrar debug para el primer alumno (evitar spam en consola)
-                  if (alumno.id_alumno === alumnosFiltrados[0]?.id_alumno) {
-                    console.log(
-                      `🎓 DEBUG - PRIMER ALUMNO ${alumno.nombre} ${alumno.apellido}:`,
-                      {
-                        alumnoIdStr,
-                        asistenciaGuardada,
-                        estadoActual,
-                        keysEnMap: Object.keys(asistenciasGuardadas),
-                        cantidadAsistenciasGuardadas:
-                          Object.keys(asistenciasGuardadas).length,
-                        mapaCompleto: asistenciasGuardadas,
-                      }
-                    );
-                  }
 
                   // CORREGIDO: Determinar el estado a mostrar correctamente
                   // Prioridad: estado temporal > estado guardado > sin estado
@@ -1879,60 +1818,33 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                     estadoActual.estado !== asistenciaGuardada.estado;
                   const estaGuardado = asistenciaGuardada && !estadoActual;
 
-                  console.log(`🔍 DEBUG - Flags para ${alumno.nombre}:`, {
-                    esNuevo,
-                    hayModificacion,
-                    estaGuardado,
-                    tieneAsistenciaGuardada: !!asistenciaGuardada,
-                    tieneEstadoActual: !!estadoActual,
-                  });
-
                   // ✅ NUEVO: Determinar si los botones deben estar bloqueados
                   const botonesBloqueados = !!asistenciaGuardada;
 
                   // Función para obtener el color del borde y fondo del card según el estado
                   const getCardBorderColor = () => {
                     if (hayModificacion) {
-                      console.log(
-                        `🎨 DEBUG - Color para ${alumno.nombre}: MODIFICADO (amarillo)`
-                      );
                       return 'bg-yellow-50 border-yellow-300 hover:bg-yellow-100 shadow-sm';
                     }
                     if (esNuevo) {
-                      console.log(
-                        `🎨 DEBUG - Color para ${alumno.nombre}: NUEVO (azul claro)`
-                      );
                       return 'bg-blue-50 border-blue-200 hover:bg-blue-100 shadow-sm';
                     }
                     if (estaGuardado) {
                       // ✅ Colorear toda la fila según el estado guardado (más visible)
                       const estado = asistenciaGuardada.estado;
-                      console.log(
-                        `🎨 DEBUG - Color para ${alumno.nombre}: GUARDADO con estado ${estado}`
-                      );
                       switch (estado) {
                         case 'P':
-                          console.log(`  ✅ Devolviendo: VERDE (Presente)`);
                           return 'bg-green-100 border-green-300 hover:bg-green-200 shadow-sm';
                         case 'A':
-                          console.log(`  ⏰ Devolviendo: NARANJA (Atraso)`);
                           return 'bg-orange-100 border-orange-300 hover:bg-orange-200 shadow-sm';
                         case 'SP':
-                          console.log(`  ❌ Devolviendo: ROJO (Sin Permiso)`);
                           return 'bg-red-100 border-red-300 hover:bg-red-200 shadow-sm';
                         case 'E':
-                          console.log(`  🛡️ Devolviendo: AZUL (Con Permiso)`);
                           return 'bg-blue-100 border-blue-300 hover:bg-blue-200 shadow-sm';
                         default:
-                          console.log(
-                            `  ⚠️ Estado desconocido: ${estado}, usando gris`
-                          );
                           return 'bg-gray-50 border-gray-200 hover:bg-gray-100';
                       }
                     }
-                    console.log(
-                      `🎨 DEBUG - Color para ${alumno.nombre}: SIN MARCAR (blanco)`
-                    );
                     return 'bg-white border-gray-200 hover:bg-gray-50';
                   };
                   return (
@@ -3575,82 +3487,86 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
 
         {!catalogoColapsado && (
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Categoría</TableHead>
-                  <TableHead>Artículo</TableHead>
-                  <TableHead>Descripción</TableHead>
-                  <TableHead>Puntos</TableHead>
-                  {user.role === 'admin' && (
-                    <TableHead className="text-right">Acciones</TableHead>
-                  )}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            {catalogoInfracciones.length === 0 ? (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  No hay infracciones registradas en el catálogo
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <div className="space-y-3">
                 {catalogoInfracciones.map((infraccion) => (
-                  <TableRow key={infraccion.id_infraccion}>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={getBadgeColor(infraccion.categoria)}
-                      >
-                        {infraccion.categoria.replace('_', ' ')}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      {infraccion.articulo}
-                    </TableCell>
-                    <TableCell className="max-w-md truncate">
-                      {infraccion.descripcion}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">
-                        -{infraccion.puntos} pts
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {user.role === 'admin' && (
-                        <>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
-                              handleAbrirEditarInfraccion(infraccion)
-                            }
-                            disabled={isLoading}
-                            title="Editar infracción"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
-                              handleEliminarInfraccion(infraccion.id_infraccion)
-                            }
-                            disabled={isLoading}
-                            title="Eliminar infracción"
-                          >
-                            <Trash2 className="w-4 h-4 text-red-600" />
-                          </Button>
-                        </>
-                      )}
-                    </TableCell>
-                  </TableRow>
+                  <Card
+                    key={infraccion.id_infraccion}
+                    className="border-l-4 hover:shadow-md transition-shadow"
+                    style={{
+                      borderLeftColor:
+                        infraccion.categoria === 'MENOS_GRAVE'
+                          ? '#eab308'
+                          : infraccion.categoria === 'GRAVE'
+                            ? '#f97316'
+                            : '#ef4444',
+                    }}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-3 mb-2">
+                            {getCategoriaIcon(infraccion.categoria)}
+                            <Badge
+                              variant="outline"
+                              className={getBadgeColor(infraccion.categoria)}
+                            >
+                              {getCategoriaLabel(infraccion.categoria)}
+                            </Badge>
+                            <Badge variant="secondary">
+                              -{infraccion.puntos} pt
+                              {infraccion.puntos > 1 ? 's' : ''}
+                            </Badge>
+                          </div>
+                          <p className="font-semibold text-gray-900 mb-1">
+                            Artículo: {infraccion.articulo}
+                          </p>
+                          <p className="text-sm text-gray-600">
+                            {infraccion.descripcion}
+                          </p>
+                        </div>
+                        {user.role === 'admin' && (
+                          <div className="flex space-x-2 ml-4">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                handleAbrirEditarInfraccion(infraccion)
+                              }
+                              disabled={isLoading}
+                              title="Editar infracción"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-red-600 hover:bg-red-50"
+                              onClick={() =>
+                                handleEliminarInfraccion(
+                                  infraccion.id_infraccion
+                                )
+                              }
+                              disabled={isLoading}
+                              title="Eliminar infracción"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
                 ))}
-                {catalogoInfracciones.length === 0 && (
-                  <TableRow>
-                    <TableCell
-                      colSpan={5}
-                      className="text-center text-gray-500"
-                    >
-                      No hay infracciones registradas
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+              </div>
+            )}
           </CardContent>
         )}
       </Card>

@@ -27,6 +27,7 @@ import { AsignaturasModule } from './components/AsignaturasModule';
 import { AsignacionesModule } from './components/AsignacionesModule';
 import { PerfilModule } from './components/PerfilModule';
 import { AsistenciaModuleNew } from './components/AsistenciaModuleNew';
+import { ConductaModule } from './components/ConductaModule';
 
 // ================= Helpers de auth =================
 function getUser() {
@@ -320,6 +321,15 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <AsignacionesModule />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/conductas"
+          element={
+            <ProtectedRoute>
+              <ConductaModule user={getUser()} />
             </ProtectedRoute>
           }
         />

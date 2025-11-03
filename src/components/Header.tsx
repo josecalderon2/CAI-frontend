@@ -60,6 +60,7 @@ export function Header({
     { id: 'grados-academicos', label: 'Grados', icon: Award },
     { id: 'cursos', label: 'Cursos', icon: School },
     { id: 'asignaciones', label: 'Asignaciones', icon: ClipboardList },
+    { id: 'conductas', label: 'Conductas', icon: UserCheck },
     { id: 'reportes', label: 'Reportes', icon: FileText },
   ];
 
@@ -105,6 +106,8 @@ export function Header({
         return 'Perfil';
       case 'asistencia':
         return 'Asistencia';
+      case 'conductas':
+        return 'Conductas';
       default:
         return 'Dashboard';
     }
@@ -236,6 +239,11 @@ export function Header({
               window.location.pathname === '/asistencia'
             ) {
               isActive = true;
+            } else if (
+              item.id === 'conductas' &&
+              window.location.pathname === '/conductas'
+            ) {
+              isActive = true;
             } else {
               isActive = currentSection === item.id;
             }
@@ -279,6 +287,11 @@ export function Header({
               } else if (
                 item.id === 'asistencia' &&
                 window.location.pathname === '/asistencia'
+              ) {
+                isActive = true;
+              } else if (
+                item.id === 'conductas' &&
+                window.location.pathname === '/conductas'
               ) {
                 isActive = true;
               } else {
