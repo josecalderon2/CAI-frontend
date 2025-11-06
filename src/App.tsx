@@ -29,6 +29,7 @@ import { PerfilModule } from './components/PerfilModule';
 import { AsistenciaModuleNew } from './components/AsistenciaModuleNew';
 import { ConductaModule } from './components/ConductaModule';
 import { TiposEvaluacionModule } from './components/TiposEvaluacionModule';
+import { ReportesModule } from './components/ReportesModule';
 
 // ================= Helpers de auth =================
 function getUser() {
@@ -96,6 +97,15 @@ function Dashboard() {
   );
 }
 
+// ================= Wrapper para AsistenciaModule con location =================
+function AsistenciaModuleWithLocation() {
+  const location = useLocation();
+  const user = getUser();
+
+  // Usar location.search como key para forzar re-render cuando cambien los query params
+  return <AsistenciaModuleNew key={location.search} user={user} />;
+}
+
 // ================= Shell (Header + rutas) =================
 function Shell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
@@ -131,7 +141,10 @@ function Shell({ children }: { children: ReactNode }) {
       else if (uiUser?.role === 'P.A') navigate('/pa');
       else navigate('/');
     } else {
-      navigate(`/${section}`);
+      // Separar la ruta de los query parameters si existen
+      const [path, queryString] = section.split('?');
+      const fullPath = queryString ? `/${path}?${queryString}` : `/${path}`;
+      navigate(fullPath);
     }
   };
 
@@ -222,10 +235,27 @@ function OrientadorDashboardWrapper() {
     role: 'docente' as const, // El componente OrientadorDashboard espera 'admin' o 'docente' como rol
   };
 
-  const onNavigate = (section: string) =>
-    navigate(section === 'dashboard' ? '/' : `/${section}`);
+  const onNavigate = (section: string) => {
+    // Separar la ruta de los query parameters si existen
+    const [path, queryString] = section.split('?');
+    const fullPath = queryString ? `/${path}?${queryString}` : `/${path}`;
+    navigate(fullPath);
+  };
 
   return <OrientadorDashboard user={uiUser} onNavigate={onNavigate} />;
+}
+
+function ReportesModuleWrapper() {
+  const navigate = useNavigate();
+
+  const onNavigate = (section: string) => {
+    // Separar la ruta de los query parameters si existen
+    const [path, queryString] = section.split('?');
+    const fullPath = queryString ? `/${path}?${queryString}` : `/${path}`;
+    navigate(fullPath);
+  };
+
+  return <ReportesModule onNavigate={onNavigate} />;
 }
 
 // ===================== Rutas =====================
@@ -356,7 +386,15 @@ function AppRoutes() {
           path="/asistencia"
           element={
             <ProtectedRoute>
-              <AsistenciaModuleNew user={getUser()} />{' '}
+              <AsistenciaModuleWithLocation />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/reportes"
+          element={
+            <ProtectedRoute>
+              <ReportesModuleWrapper />
             </ProtectedRoute>
           }
         />

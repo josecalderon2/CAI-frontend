@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -69,6 +70,10 @@ import {
   type ResumenMensualResponse,
   type ResumenTrimestralDto,
   type ResumenTrimestralResponse,
+  type ResumenAnualDto,
+  type ResumenAnualResponse,
+  type ResumenTrimestralConsolidadoDto,
+  type ResumenTrimestralConsolidadoResponse,
   type InfraccionCatalogoResponse,
   type InfraccionResumen,
   type CreateInfraccionCatalogoDto,
@@ -150,6 +155,9 @@ interface CursoResponse {
 }
 
 export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
+  // Hook para leer parámetros de URL
+  const [searchParams] = useSearchParams();
+
   // Estados globales
   const [activeTab, setActiveTab] = useState<
     | 'asistencia'
@@ -157,9 +165,31 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
     | 'historial'
     | 'resumen-mensual'
     | 'resumen-trimestral'
+    | 'resumen-anual'
+    | 'resumen-trimestral-consolidado'
   >('asistencia');
   const [isLoading, setIsLoading] = useState(false);
   const [cursosAsignados, setCursosAsignados] = useState<CursoResponse[]>([]);
+
+  // Efecto para leer el tab de la URL al cargar
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    console.log('🔍 [AsistenciaModule] Tab param de URL:', tabParam);
+    if (tabParam) {
+      const validTabs = [
+        'asistencia',
+        'conducta',
+        'historial',
+        'resumen-mensual',
+        'resumen-trimestral',
+        'resumen-anual',
+      ];
+      if (validTabs.includes(tabParam)) {
+        console.log('✅ [AsistenciaModule] Cambiando a tab:', tabParam);
+        setActiveTab(tabParam as typeof activeTab);
+      }
+    }
+  }, [searchParams]);
 
   // Estados para Toma de Asistencia
   const [cursoSeleccionado, setCursoSeleccionado] = useState('');
@@ -309,6 +339,26 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
       })(),
       anio: obtenerAnioActualElSalvador(),
     });
+  const [resumenAnual, setResumenAnual] = useState<
+    ResumenAnualResponse[] | null
+  >(null);
+  const [filtroResumenAnual, setFiltroResumenAnual] = useState<ResumenAnualDto>(
+    {
+      cursoId: 0,
+      anio: obtenerAnioActualElSalvador(),
+    }
+  );
+
+  // Estados para Resumen Trimestral Consolidado
+  const [resumenTrimestralConsolidado, setResumenTrimestralConsolidado] =
+    useState<ResumenTrimestralConsolidadoResponse[] | null>(null);
+  const [
+    filtroResumenTrimestralConsolidado,
+    setFiltroResumenTrimestralConsolidado,
+  ] = useState<ResumenTrimestralConsolidadoDto>({
+    cursoId: 0,
+    anio: obtenerAnioActualElSalvador(),
+  });
 
   // Cargar datos iniciales
   useEffect(() => {
@@ -1300,6 +1350,66 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
     } catch (e: any) {
       const errorMsg =
         e?.response?.data?.message || 'No se pudo generar el resumen';
+      toast.error(errorMsg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGenerarResumenAnual = async () => {
+    if (!filtroResumenAnual.cursoId || filtroResumenAnual.cursoId === 0) {
+      toast.error('Debe seleccionar un curso');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const resumen = await resumenService.getResumenAnual(filtroResumenAnual);
+
+      setResumenAnual(resumen);
+
+      if (resumen.length === 0) {
+        toast.warning('No se encontraron registros para este año');
+      } else {
+        toast.success(`Resumen anual generado: ${resumen.length} alumno(s)`);
+      }
+    } catch (e: any) {
+      const errorMsg =
+        e?.response?.data?.message || 'No se pudo generar el resumen anual';
+      toast.error(errorMsg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGenerarResumenTrimestralConsolidado = async () => {
+    if (
+      !filtroResumenTrimestralConsolidado.cursoId ||
+      filtroResumenTrimestralConsolidado.cursoId === 0
+    ) {
+      toast.error('Debe seleccionar un curso');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const resumen = await resumenService.getResumenTrimestralConsolidado(
+        filtroResumenTrimestralConsolidado
+      );
+
+      setResumenTrimestralConsolidado(resumen);
+
+      if (resumen.length === 0) {
+        toast.warning('No se encontraron registros para este año');
+      } else {
+        toast.success(
+          `Resumen trimestral consolidado generado: ${resumen.length} alumno(s)`
+        );
+      }
+    } catch (e: any) {
+      const errorMsg =
+        e?.response?.data?.message ||
+        'No se pudo generar el resumen trimestral consolidado';
       toast.error(errorMsg);
     } finally {
       setIsLoading(false);
@@ -4622,6 +4732,540 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
     </div>
   );
 
+  const renderResumenAnual = () => (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <BarChart3 className="w-5 h-5" />
+              <span>Resumen Anual de Asistencia y Conducta</span>
+            </div>
+          </CardTitle>
+          <p className="text-sm text-gray-600 mt-2">
+            Consulta el resumen completo del año académico con asistencia e
+            infracciones consolidadas
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Alert className="bg-blue-50 border-blue-200 py-2">
+            <AlertCircle className="h-3 w-3 text-blue-600" />
+            <AlertDescription className="text-xs text-blue-700">
+              📊 Resumen anual: consolida todos los trimestres del año académico
+              seleccionado
+            </AlertDescription>
+          </Alert>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label>Curso</Label>
+              <Select
+                value={filtroResumenAnual.cursoId?.toString() || ''}
+                onValueChange={(v) =>
+                  setFiltroResumenAnual({
+                    ...filtroResumenAnual,
+                    cursoId: parseInt(v),
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona un curso" />
+                </SelectTrigger>
+                <SelectContent>
+                  {cursosAsignados.map((curso) => (
+                    <SelectItem
+                      key={curso.id_curso}
+                      value={curso.id_curso.toString()}
+                    >
+                      {curso.nombre}
+                      {curso.seccion ? ` - ${curso.seccion}` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Año Académico</Label>
+              <Input
+                type="number"
+                value={filtroResumenAnual.anio}
+                onChange={(e) =>
+                  setFiltroResumenAnual({
+                    ...filtroResumenAnual,
+                    anio: parseInt(e.target.value),
+                  })
+                }
+              />
+            </div>
+          </div>
+
+          <Button
+            onClick={handleGenerarResumenAnual}
+            disabled={isLoading || !filtroResumenAnual.cursoId}
+          >
+            <Download className="w-4 h-4 mr-2" />
+            {isLoading ? 'Generando...' : 'Generar Resumen Anual'}
+          </Button>
+
+          {!resumenAnual && (
+            <Alert className="bg-blue-50 border-blue-200 py-2">
+              <AlertCircle className="h-3 w-3 text-blue-600" />
+              <AlertDescription className="text-xs text-blue-700">
+                📅 Selecciona curso y año académico, luego presiona{' '}
+                <strong>"Generar"</strong>
+              </AlertDescription>
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
+
+      {resumenAnual && resumenAnual.length > 0 && (
+        <Card>
+          <CardHeader className="bg-gradient-to-r from-purple-50 to-pink-50 border-b-2 border-purple-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-xl font-bold text-gray-900 mb-1">
+                  RESUMEN ANUAL -{' '}
+                  {cursosAsignados
+                    .find((c) => c.id_curso === filtroResumenAnual.cursoId)
+                    ?.nombre?.toUpperCase() || 'CURSO'}
+                </CardTitle>
+                <p className="text-sm text-gray-600">
+                  AÑO LECTIVO {filtroResumenAnual.anio} • CONSOLIDADO COMPLETO
+                </p>
+              </div>
+              <Badge className="bg-purple-600 text-white px-3 py-2">
+                {resumenAnual.length} Alumno
+                {resumenAnual.length !== 1 ? 's' : ''}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-gray-50">
+                    <TableHead className="font-bold text-gray-900">#</TableHead>
+                    <TableHead className="font-bold text-gray-900">
+                      Alumno
+                    </TableHead>
+                    <TableHead className="font-bold text-gray-900 text-center">
+                      Justificadas
+                    </TableHead>
+                    <TableHead className="font-bold text-gray-900 text-center">
+                      Injustificadas
+                    </TableHead>
+                    <TableHead className="font-bold text-gray-900 text-center">
+                      Atrasos
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {resumenAnual.map((est, index) => (
+                    <TableRow
+                      key={est.id_alumno}
+                      className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
+                    >
+                      <TableCell className="font-medium">{index + 1}</TableCell>
+                      <TableCell className="font-medium">
+                        {est.nombre} {est.apellido}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge
+                          variant="outline"
+                          className="bg-blue-50 text-blue-700 border-blue-200"
+                        >
+                          {est.justificadas}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge
+                          variant={
+                            est.injustificadas === 0
+                              ? 'secondary'
+                              : 'destructive'
+                          }
+                        >
+                          {est.injustificadas}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge
+                          variant={est.atrasos === 0 ? 'secondary' : 'outline'}
+                          className={
+                            est.atrasos > 0
+                              ? 'bg-orange-50 text-orange-700 border-orange-200'
+                              : ''
+                          }
+                        >
+                          {est.atrasos}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+
+  const renderResumenTrimestralConsolidado = () => (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <BarChart3 className="w-5 h-5" />
+              <span>Resumen Trimestral Consolidado Anual</span>
+            </div>
+          </CardTitle>
+          <p className="text-sm text-gray-600 mt-2">
+            Consulta el resumen de los tres trimestres del año académico con
+            asistencia, conducta e infracciones por trimestre
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Alert className="bg-indigo-50 border-indigo-200 py-2">
+            <AlertCircle className="h-3 w-3 text-indigo-600" />
+            <AlertDescription className="text-xs text-indigo-700">
+              📊 Este reporte muestra el detalle trimestral completo del año
+              académico seleccionado
+            </AlertDescription>
+          </Alert>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label>Curso</Label>
+              <Select
+                value={
+                  filtroResumenTrimestralConsolidado.cursoId?.toString() || ''
+                }
+                onValueChange={(v) =>
+                  setFiltroResumenTrimestralConsolidado({
+                    ...filtroResumenTrimestralConsolidado,
+                    cursoId: parseInt(v),
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona un curso" />
+                </SelectTrigger>
+                <SelectContent>
+                  {cursosAsignados.map((curso) => (
+                    <SelectItem
+                      key={curso.id_curso}
+                      value={curso.id_curso.toString()}
+                    >
+                      {curso.nombre}
+                      {curso.seccion ? ` - ${curso.seccion}` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Año Académico</Label>
+              <Input
+                type="number"
+                value={filtroResumenTrimestralConsolidado.anio}
+                onChange={(e) =>
+                  setFiltroResumenTrimestralConsolidado({
+                    ...filtroResumenTrimestralConsolidado,
+                    anio: parseInt(e.target.value),
+                  })
+                }
+              />
+            </div>
+          </div>
+
+          <Button
+            onClick={handleGenerarResumenTrimestralConsolidado}
+            disabled={isLoading || !filtroResumenTrimestralConsolidado.cursoId}
+          >
+            <Download className="w-4 h-4 mr-2" />
+            {isLoading ? 'Generando...' : 'Generar Resumen Consolidado'}
+          </Button>
+
+          {!resumenTrimestralConsolidado && (
+            <Alert className="bg-indigo-50 border-indigo-200 py-2">
+              <AlertCircle className="h-3 w-3 text-indigo-600" />
+              <AlertDescription className="text-xs text-indigo-700">
+                📅 Selecciona curso y año académico, luego presiona{' '}
+                <strong>"Generar"</strong>
+              </AlertDescription>
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
+
+      {resumenTrimestralConsolidado &&
+        resumenTrimestralConsolidado.length > 0 && (
+          <Card>
+            <CardHeader className="bg-gradient-to-r from-indigo-50 to-purple-50 border-b-2 border-indigo-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-xl font-bold text-gray-900 mb-1">
+                    RESUMEN TRIMESTRAL CONSOLIDADO -{' '}
+                    {cursosAsignados
+                      .find(
+                        (c) =>
+                          c.id_curso ===
+                          filtroResumenTrimestralConsolidado.cursoId
+                      )
+                      ?.nombre?.toUpperCase() || 'CURSO'}
+                  </CardTitle>
+                  <p className="text-sm text-gray-600">
+                    Año Académico: {filtroResumenTrimestralConsolidado.anio}
+                  </p>
+                </div>
+                <div className="flex space-x-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      // TODO: Implementar exportación a PDF
+                      toast.info('Función de PDF en desarrollo');
+                    }}
+                    className="bg-red-50 hover:bg-red-100 text-red-700 border-red-200"
+                  >
+                    <FileText className="w-4 h-4 mr-2" />
+                    PDF
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      // TODO: Implementar exportación a Excel
+                      toast.info('Función de Excel en desarrollo');
+                    }}
+                    className="bg-green-50 hover:bg-green-100 text-green-700 border-green-200"
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Excel
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-gray-50">
+                      <TableHead className="font-bold text-gray-900 border">
+                        Alumno
+                      </TableHead>
+                      <TableHead
+                        colSpan={4}
+                        className="font-bold text-center text-gray-900 border bg-blue-50"
+                      >
+                        TRIMESTRE 1
+                      </TableHead>
+                      <TableHead
+                        colSpan={4}
+                        className="font-bold text-center text-gray-900 border bg-green-50"
+                      >
+                        TRIMESTRE 2
+                      </TableHead>
+                      <TableHead
+                        colSpan={4}
+                        className="font-bold text-center text-gray-900 border bg-purple-50"
+                      >
+                        TRIMESTRE 3
+                      </TableHead>
+                      <TableHead
+                        colSpan={4}
+                        className="font-bold text-center text-gray-900 border bg-orange-50"
+                      >
+                        TOTALES
+                      </TableHead>
+                    </TableRow>
+                    <TableRow className="bg-gray-50">
+                      <TableHead className="border"></TableHead>
+                      {/* Trimestre 1 */}
+                      <TableHead className="text-center border text-xs">
+                        Just.
+                      </TableHead>
+                      <TableHead className="text-center border text-xs">
+                        Injust.
+                      </TableHead>
+                      <TableHead className="text-center border text-xs">
+                        Infrac.
+                      </TableHead>
+                      <TableHead className="text-center border text-xs">
+                        Punt.
+                      </TableHead>
+                      {/* Trimestre 2 */}
+                      <TableHead className="text-center border text-xs">
+                        Just.
+                      </TableHead>
+                      <TableHead className="text-center border text-xs">
+                        Injust.
+                      </TableHead>
+                      <TableHead className="text-center border text-xs">
+                        Infrac.
+                      </TableHead>
+                      <TableHead className="text-center border text-xs">
+                        Punt.
+                      </TableHead>
+                      {/* Trimestre 3 */}
+                      <TableHead className="text-center border text-xs">
+                        Just.
+                      </TableHead>
+                      <TableHead className="text-center border text-xs">
+                        Injust.
+                      </TableHead>
+                      <TableHead className="text-center border text-xs">
+                        Infrac.
+                      </TableHead>
+                      <TableHead className="text-center border text-xs">
+                        Punt.
+                      </TableHead>
+                      {/* Totales */}
+                      <TableHead className="text-center border text-xs">
+                        Just.
+                      </TableHead>
+                      <TableHead className="text-center border text-xs">
+                        Injust.
+                      </TableHead>
+                      <TableHead className="text-center border text-xs">
+                        Tot. Infrac.
+                      </TableHead>
+                      <TableHead className="text-center border text-xs">
+                        Prom.
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {resumenTrimestralConsolidado.map((alumno) => (
+                      <TableRow
+                        key={alumno.id_alumno}
+                        className="hover:bg-gray-50"
+                      >
+                        <TableCell className="font-medium border">
+                          {alumno.nombre} {alumno.apellido}
+                        </TableCell>
+
+                        {/* Trimestre 1 */}
+                        <TableCell className="text-center border bg-blue-50">
+                          {alumno.trimestre1.justificadas}
+                        </TableCell>
+                        <TableCell className="text-center border bg-blue-50">
+                          {alumno.trimestre1.injustificadas}
+                        </TableCell>
+                        <TableCell className="text-center border bg-blue-50">
+                          {alumno.trimestre1.infracciones.length}
+                        </TableCell>
+                        <TableCell className="text-center border bg-blue-50">
+                          <Badge
+                            variant={
+                              alumno.trimestre1.puntajeConducta >= 7
+                                ? 'default'
+                                : 'destructive'
+                            }
+                            className={
+                              alumno.trimestre1.puntajeConducta >= 7
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-red-100 text-red-800'
+                            }
+                          >
+                            {alumno.trimestre1.puntajeConducta.toFixed(2)}
+                          </Badge>
+                        </TableCell>
+
+                        {/* Trimestre 2 */}
+                        <TableCell className="text-center border bg-green-50">
+                          {alumno.trimestre2.justificadas}
+                        </TableCell>
+                        <TableCell className="text-center border bg-green-50">
+                          {alumno.trimestre2.injustificadas}
+                        </TableCell>
+                        <TableCell className="text-center border bg-green-50">
+                          {alumno.trimestre2.infracciones.length}
+                        </TableCell>
+                        <TableCell className="text-center border bg-green-50">
+                          <Badge
+                            variant={
+                              alumno.trimestre2.puntajeConducta >= 7
+                                ? 'default'
+                                : 'destructive'
+                            }
+                            className={
+                              alumno.trimestre2.puntajeConducta >= 7
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-red-100 text-red-800'
+                            }
+                          >
+                            {alumno.trimestre2.puntajeConducta.toFixed(2)}
+                          </Badge>
+                        </TableCell>
+
+                        {/* Trimestre 3 */}
+                        <TableCell className="text-center border bg-purple-50">
+                          {alumno.trimestre3.justificadas}
+                        </TableCell>
+                        <TableCell className="text-center border bg-purple-50">
+                          {alumno.trimestre3.injustificadas}
+                        </TableCell>
+                        <TableCell className="text-center border bg-purple-50">
+                          {alumno.trimestre3.infracciones.length}
+                        </TableCell>
+                        <TableCell className="text-center border bg-purple-50">
+                          <Badge
+                            variant={
+                              alumno.trimestre3.puntajeConducta >= 7
+                                ? 'default'
+                                : 'destructive'
+                            }
+                            className={
+                              alumno.trimestre3.puntajeConducta >= 7
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-red-100 text-red-800'
+                            }
+                          >
+                            {alumno.trimestre3.puntajeConducta.toFixed(2)}
+                          </Badge>
+                        </TableCell>
+
+                        {/* Totales */}
+                        <TableCell className="text-center border font-bold bg-orange-50">
+                          {alumno.totales.justificadas}
+                        </TableCell>
+                        <TableCell className="text-center border font-bold bg-orange-50">
+                          {alumno.totales.injustificadas}
+                        </TableCell>
+                        <TableCell className="text-center border font-bold bg-orange-50">
+                          {alumno.totales.totalInfracciones}
+                        </TableCell>
+                        <TableCell className="text-center border bg-orange-50">
+                          <Badge
+                            variant={
+                              alumno.totales.promedioConducta >= 7
+                                ? 'default'
+                                : 'destructive'
+                            }
+                            className={
+                              alumno.totales.promedioConducta >= 7
+                                ? 'bg-green-100 text-green-800 font-bold'
+                                : 'bg-red-100 text-red-800 font-bold'
+                            }
+                          >
+                            {alumno.totales.promedioConducta.toFixed(2)}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+    </div>
+  );
+
   return (
     <div className="p-6 space-y-6 bg-gradient-to-br from-gray-50 to-blue-50 min-h-screen">
       <div className="bg-white rounded-lg shadow-sm p-6 border-l-4 border-l-blue-600">
@@ -4805,7 +5449,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
             </div>
           </TabsList>
 
-          <TabsList className="grid w-full grid-cols-2 gap-3 h-auto p-2 bg-gray-100">
+          <TabsList className="grid w-full grid-cols-4 gap-3 h-auto p-2 bg-gray-100">
             <div className="relative">
               <TabsTrigger
                 value="resumen-mensual"
@@ -4834,6 +5478,32 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
                 <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 to-indigo-600 animate-pulse"></div>
               )}
             </div>
+            <div className="relative">
+              <TabsTrigger
+                value="resumen-anual"
+                className="w-full flex flex-col items-center justify-center gap-2 py-4 px-3 data-[state=active]:bg-white data-[state=active]:text-purple-700 transition-all duration-200 rounded-t-lg hover:bg-gray-50 relative overflow-hidden"
+              >
+                <FileText className="w-5 h-5" />
+                <span className="font-semibold text-sm">Resumen Anual</span>
+              </TabsTrigger>
+              {activeTab === 'resumen-anual' && (
+                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-500 to-purple-600 animate-pulse"></div>
+              )}
+            </div>
+            <div className="relative">
+              <TabsTrigger
+                value="resumen-trimestral-consolidado"
+                className="w-full flex flex-col items-center justify-center gap-2 py-4 px-3 data-[state=active]:bg-white data-[state=active]:text-pink-700 transition-all duration-200 rounded-t-lg hover:bg-gray-50 relative overflow-hidden"
+              >
+                <BarChart3 className="w-5 h-5" />
+                <span className="font-semibold text-xs">
+                  Trimestral Consolidado
+                </span>
+              </TabsTrigger>
+              {activeTab === 'resumen-trimestral-consolidado' && (
+                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-pink-500 to-pink-600 animate-pulse"></div>
+              )}
+            </div>
           </TabsList>
         </div>
 
@@ -4850,6 +5520,12 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
           </TabsContent>
           <TabsContent value="resumen-trimestral">
             {renderResumenTrimestral()}
+          </TabsContent>
+          <TabsContent value="resumen-anual">
+            {renderResumenAnual()}
+          </TabsContent>
+          <TabsContent value="resumen-trimestral-consolidado">
+            {renderResumenTrimestralConsolidado()}
           </TabsContent>
         </div>
       </Tabs>
