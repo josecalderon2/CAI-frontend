@@ -427,6 +427,57 @@ export interface ResumenTrimestralResponse {
   puntajeConducta?: number; // Calculado: 10 - (SP × 0.2) - (infracciones según categoría) | Opcional si backend no lo calcula
 }
 
+export interface ResumenAnualDto {
+  cursoId: number;
+  anio: number;
+}
+
+export interface ResumenAnualResponse {
+  id_alumno: number;
+  nombre: string;
+  apellido: string;
+  justificadas: number; // Total de ausencias con permiso (E) en el año
+  injustificadas: number; // Total de ausencias sin permiso (SP) en el año
+  atrasos: number; // Total de llegadas tarde (A) en el año
+}
+
+// ✅ NUEVO: DTO para Resumen Trimestral Consolidado Anual
+export interface ResumenTrimestralConsolidadoDto {
+  cursoId: number;
+  anio: number;
+}
+
+// ✅ NUEVO: Response de Resumen Trimestral Consolidado Anual
+export interface ResumenTrimestralConsolidadoResponse {
+  id_alumno: number;
+  nombre: string;
+  apellido: string;
+  trimestre1: {
+    justificadas: number;
+    injustificadas: number;
+    infracciones: InfraccionResumen[];
+    puntajeConducta: number;
+  };
+  trimestre2: {
+    justificadas: number;
+    injustificadas: number;
+    infracciones: InfraccionResumen[];
+    puntajeConducta: number;
+  };
+  trimestre3: {
+    justificadas: number;
+    injustificadas: number;
+    infracciones: InfraccionResumen[];
+    puntajeConducta: number;
+  };
+  totales: {
+    justificadas: number;
+    injustificadas: number;
+    totalInfracciones: number;
+    promedioConducta: number;
+  };
+}
+
 // Servicio de resúmenes
 export const resumenService = {
   getResumenMensual: async (
@@ -483,6 +534,104 @@ export const resumenService = {
     });
 
     console.log('🔧 [Service] Datos finales mapeados:', mapped);
+    return mapped;
+  },
+
+  getResumenAnual: async (
+    params: ResumenAnualDto
+  ): Promise<ResumenAnualResponse[]> => {
+    const response = await api.get<any>('/resumen/anual', { params });
+
+    // Mapear los nombres de campos del backend (snake_case) al frontend (camelCase)
+    const mapped = response.data.map((item: any) => ({
+      id_alumno: item.id_alumno,
+      nombre: item.nombre,
+      apellido: item.apellido,
+      justificadas: item.total_justificadas ?? item.justificadas ?? 0,
+      injustificadas: item.total_injustificadas ?? item.injustificadas ?? 0,
+      atrasos: item.total_atrasos ?? item.atrasos ?? 0,
+    }));
+
+    return mapped;
+  },
+
+  // 🆕 Obtener resumen trimestral consolidado anual
+  getResumenTrimestralConsolidado: async (
+    params: ResumenTrimestralConsolidadoDto
+  ): Promise<ResumenTrimestralConsolidadoResponse[]> => {
+    const queryParams = new URLSearchParams({
+      cursoId: params.cursoId.toString(),
+      anio: params.anio.toString(),
+    });
+
+    const response = await api.get<any>(
+      `/asistencia/resumen/trimestral-consolidado?${queryParams.toString()}`
+    );
+
+    // Mapear los nombres de campos del backend (snake_case) al frontend (camelCase)
+    const mapped = response.data.map((item: any) => ({
+      id_alumno: item.id_alumno,
+      nombre: item.nombre,
+      apellido: item.apellido,
+      trimestre1: {
+        justificadas: item.trimestre1?.justificadas ?? 0,
+        injustificadas: item.trimestre1?.injustificadas ?? 0,
+        infracciones: (item.trimestre1?.infracciones ?? []).map((inf: any) => ({
+          categoria: inf.categoria,
+          articulo: inf.articulo,
+          descripcion: inf.descripcion,
+          puntos: inf.puntos,
+          cantidad: inf.cantidad ?? inf.conteo ?? 0,
+        })),
+        puntajeConducta:
+          item.trimestre1?.puntaje_conducta ??
+          item.trimestre1?.puntajeConducta ??
+          10,
+      },
+      trimestre2: {
+        justificadas: item.trimestre2?.justificadas ?? 0,
+        injustificadas: item.trimestre2?.injustificadas ?? 0,
+        infracciones: (item.trimestre2?.infracciones ?? []).map((inf: any) => ({
+          categoria: inf.categoria,
+          articulo: inf.articulo,
+          descripcion: inf.descripcion,
+          puntos: inf.puntos,
+          cantidad: inf.cantidad ?? inf.conteo ?? 0,
+        })),
+        puntajeConducta:
+          item.trimestre2?.puntaje_conducta ??
+          item.trimestre2?.puntajeConducta ??
+          10,
+      },
+      trimestre3: {
+        justificadas: item.trimestre3?.justificadas ?? 0,
+        injustificadas: item.trimestre3?.injustificadas ?? 0,
+        infracciones: (item.trimestre3?.infracciones ?? []).map((inf: any) => ({
+          categoria: inf.categoria,
+          articulo: inf.articulo,
+          descripcion: inf.descripcion,
+          puntos: inf.puntos,
+          cantidad: inf.cantidad ?? inf.conteo ?? 0,
+        })),
+        puntajeConducta:
+          item.trimestre3?.puntaje_conducta ??
+          item.trimestre3?.puntajeConducta ??
+          10,
+      },
+      totales: {
+        justificadas: item.totales?.justificadas ?? 0,
+        injustificadas: item.totales?.injustificadas ?? 0,
+        totalInfracciones:
+          item.totales?.total_infracciones ??
+          item.totales?.totalInfracciones ??
+          0,
+        promedioConducta:
+          item.totales?.promedio_conducta ??
+          item.totales?.promedioConducta ??
+          10,
+      },
+    }));
+
     return mapped;
   },
 };
