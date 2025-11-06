@@ -33,6 +33,8 @@ import {
   BookOpen,
   Eye,
   Calendar,
+  RotateCcw,
+  EyeOff,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -91,6 +93,7 @@ export function ConductaModule({ readOnly = false }: ConductaModuleProps) {
     CategoriaInfraccion | 'TODAS'
   >('TODAS');
   const [busqueda, setBusqueda] = useState('');
+  const [mostrarDesactivadas, setMostrarDesactivadas] = useState(false);
   const [nuevaInfraccion, setNuevaInfraccion] =
     useState<CreateInfraccionCatalogoDto>({
       categoria: 'MENOS_GRAVE',
@@ -162,7 +165,10 @@ export function ConductaModule({ readOnly = false }: ConductaModuleProps) {
   const cargarCatalogoInfracciones = async () => {
     setIsLoading(true);
     try {
-      const catalogo = await conductaService.getAllCatalogo();
+      // ✅ SIEMPRE cargar TODAS las infracciones (activas + inactivas)
+      // El filtrado se hace en el frontend según el toggle
+      const catalogo = await conductaService.getAllCatalogoIncludingInactive();
+
       setCatalogoInfracciones(catalogo);
     } catch (e) {
       toast.error('Error al cargar el catálogo de infracciones');
@@ -286,24 +292,46 @@ export function ConductaModule({ readOnly = false }: ConductaModuleProps) {
     setModalInfraccion(true);
   };
 
-  const handleEliminarInfraccion = async (idInfraccion: string) => {
-    if (
-      !confirm(
-        '¿Estás seguro de eliminar esta infracción del catálogo?\n\nADVERTENCIA: Si hay registros de conducta asociados a esta infracción, no podrá eliminarse.'
-      )
-    ) {
-      return;
-    }
+  const [modalEliminar, setModalEliminar] = useState(false);
+  const [infraccionEliminar, setInfraccionEliminar] = useState<string | null>(
+    null
+  );
+
+  const handleEliminarInfraccion = async () => {
+    if (!infraccionEliminar) return;
 
     setIsLoading(true);
     try {
-      await conductaService.deleteCatalogo(idInfraccion);
-      toast.success('Infracción eliminada correctamente del catálogo');
+      await conductaService.deleteCatalogo(infraccionEliminar);
+      toast.success(
+        '✅ Infracción eliminada del catálogo. Los registros históricos se mantienen intactos.',
+        { duration: 5000 }
+      );
       await cargarCatalogoInfracciones();
+      setModalEliminar(false);
+      setInfraccionEliminar(null);
     } catch (error: any) {
       const errorMsg =
         error?.response?.data?.message ||
-        'Error al eliminar la infracción. Puede que existan registros de conducta asociados.';
+        'Error al eliminar la infracción del catálogo.';
+      toast.error(errorMsg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleReactivarInfraccion = async (id: string) => {
+    setIsLoading(true);
+    try {
+      await conductaService.restoreCatalogo(id);
+      toast.success(
+        '✅ Infracción reactivada correctamente. Ya está disponible para usar.',
+        { duration: 5000 }
+      );
+      await cargarCatalogoInfracciones();
+    } catch (error: any) {
+      const errorMsg =
+        error?.response?.data?.message || 'Error al reactivar la infracción.';
       toast.error(errorMsg);
     } finally {
       setIsLoading(false);
@@ -362,22 +390,35 @@ export function ConductaModule({ readOnly = false }: ConductaModuleProps) {
     }
   };
 
-  // Agrupar infracciones por categoría
+  // Agrupar infracciones por categoría y estado (activas/inactivas)
+  const infraccionesActivas = catalogoInfracciones.filter(
+    (inf) => inf.activo !== false
+  );
+  const infraccionesInactivas = catalogoInfracciones.filter(
+    (inf) => inf.activo === false
+  );
+
   const infraccionesPorCategoria = {
-    MENOS_GRAVE: catalogoInfracciones.filter(
+    MENOS_GRAVE: infraccionesActivas.filter(
       (inf) => inf.categoria === 'MENOS_GRAVE'
     ),
-    GRAVE: catalogoInfracciones.filter((inf) => inf.categoria === 'GRAVE'),
-    MUY_GRAVE: catalogoInfracciones.filter(
+    GRAVE: infraccionesActivas.filter((inf) => inf.categoria === 'GRAVE'),
+    MUY_GRAVE: infraccionesActivas.filter(
       (inf) => inf.categoria === 'MUY_GRAVE'
     ),
   };
 
   // Filtrar infracciones por búsqueda y categoría
+  // Si mostrarDesactivadas está activo, mostrar SOLO las inactivas
+  // Si no, mostrar solo las activas
+  const infraccionesBase = mostrarDesactivadas
+    ? infraccionesInactivas
+    : infraccionesActivas;
+
   const infraccionesFiltradas =
     categoriaFiltro === 'TODAS'
-      ? catalogoInfracciones
-      : catalogoInfracciones.filter((inf) => inf.categoria === categoriaFiltro);
+      ? infraccionesBase
+      : infraccionesBase.filter((inf) => inf.categoria === categoriaFiltro);
 
   const infraccionesConBusqueda = infraccionesFiltradas.filter(
     (inf) =>
@@ -463,10 +504,10 @@ export function ConductaModule({ readOnly = false }: ConductaModuleProps) {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm text-gray-600 mb-2">
-                        Total Infracciones
+                        Infracciones Activas
                       </p>
                       <p className="text-3xl font-bold text-blue-600">
-                        {catalogoInfracciones.length}
+                        {infraccionesActivas.length}
                       </p>
                     </div>
                     <div className="bg-blue-50 p-3 rounded-lg">
@@ -533,30 +574,56 @@ export function ConductaModule({ readOnly = false }: ConductaModuleProps) {
                     <Search className="w-5 h-5 text-blue-600" />
                     <span>Filtros y Búsqueda</span>
                   </div>
-                  {!readOnly && (
-                    <Dialog
-                      open={modalInfraccion}
-                      onOpenChange={setModalInfraccion}
+                  <div className="flex items-center gap-2">
+                    {/* Botón para ver desactivadas */}
+                    <Button
+                      size="sm"
+                      onClick={() =>
+                        setMostrarDesactivadas(!mostrarDesactivadas)
+                      }
+                      className={`transition-all duration-200 ${
+                        mostrarDesactivadas
+                          ? 'bg-blue-600 hover:bg-blue-700 text-white border-2 border-blue-600'
+                          : 'bg-white hover:bg-gray-50 text-gray-700 border-2 border-gray-300'
+                      }`}
                     >
-                      <DialogTrigger asChild>
-                        <Button
-                          onClick={() => {
-                            setModoEdicionInfraccion(false);
-                            setInfraccionEditando(null);
-                            setNuevaInfraccion({
-                              categoria: 'MENOS_GRAVE',
-                              articulo: '',
-                              descripcion: '',
-                              puntos: 1,
-                            });
-                          }}
-                        >
-                          <Plus className="w-4 h-4 mr-2" />
-                          Nueva Infracción
-                        </Button>
-                      </DialogTrigger>
-                    </Dialog>
-                  )}
+                      {mostrarDesactivadas ? (
+                        <>
+                          <Eye className="w-4 h-4 mr-2" />
+                          Ocultar desactivadas
+                        </>
+                      ) : (
+                        <>
+                          <EyeOff className="w-4 h-4 mr-2" />
+                          Mostrar desactivadas ({infraccionesInactivas.length})
+                        </>
+                      )}
+                    </Button>
+                    {!readOnly && (
+                      <Dialog
+                        open={modalInfraccion}
+                        onOpenChange={setModalInfraccion}
+                      >
+                        <DialogTrigger asChild>
+                          <Button
+                            onClick={() => {
+                              setModoEdicionInfraccion(false);
+                              setInfraccionEditando(null);
+                              setNuevaInfraccion({
+                                categoria: 'MENOS_GRAVE',
+                                articulo: '',
+                                descripcion: '',
+                                puntos: 1,
+                              });
+                            }}
+                          >
+                            <Plus className="w-4 h-4 mr-2" />
+                            Nueva Infracción
+                          </Button>
+                        </DialogTrigger>
+                      </Dialog>
+                    )}
+                  </div>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6 p-6">
@@ -593,6 +660,16 @@ export function ConductaModule({ readOnly = false }: ConductaModuleProps) {
                     </div>
                   </div>
                 </div>
+                {mostrarDesactivadas && (
+                  <Alert className="bg-amber-50 border-amber-200">
+                    <Eye className="h-4 w-4 text-amber-600" />
+                    <AlertDescription className="text-sm text-amber-800">
+                      Mostrando infracciones desactivadas. Estas infracciones no
+                      están disponibles para nuevos registros pero se mantienen
+                      en historiales.
+                    </AlertDescription>
+                  </Alert>
+                )}
               </CardContent>
             </Card>
 
@@ -630,14 +707,20 @@ export function ConductaModule({ readOnly = false }: ConductaModuleProps) {
                     {infraccionesConBusqueda.map((infraccion) => (
                       <Card
                         key={infraccion.id_infraccion}
-                        className="border-l-4 hover:shadow-md transition-shadow duration-200"
+                        className={`border-l-4 hover:shadow-md transition-shadow duration-200 ${
+                          infraccion.activo === false
+                            ? 'opacity-70 bg-gray-50'
+                            : ''
+                        }`}
                         style={{
                           borderLeftColor:
-                            infraccion.categoria === 'MENOS_GRAVE'
-                              ? '#eab308'
-                              : infraccion.categoria === 'GRAVE'
-                                ? '#f97316'
-                                : '#ef4444',
+                            infraccion.activo === false
+                              ? '#9ca3af'
+                              : infraccion.categoria === 'MENOS_GRAVE'
+                                ? '#eab308'
+                                : infraccion.categoria === 'GRAVE'
+                                  ? '#f97316'
+                                  : '#ef4444',
                         }}
                       >
                         <CardContent className="p-6">
@@ -658,6 +741,14 @@ export function ConductaModule({ readOnly = false }: ConductaModuleProps) {
                                   -{infraccion.puntos} punto
                                   {infraccion.puntos !== 1 ? 's' : ''}
                                 </Badge>
+                                {infraccion.activo === false && (
+                                  <Badge
+                                    variant="outline"
+                                    className="bg-gray-100 text-gray-600 border-gray-400"
+                                  >
+                                    Desactivada
+                                  </Badge>
+                                )}
                               </div>
                               <div>
                                 <h3 className="font-bold text-gray-900 text-lg mb-2">
@@ -669,31 +760,53 @@ export function ConductaModule({ readOnly = false }: ConductaModuleProps) {
                               </div>
                             </div>
                             {!readOnly && (
-                              <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() =>
-                                    handleAbrirEditarInfraccion(infraccion)
-                                  }
-                                  disabled={isLoading}
-                                  className="hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300"
-                                >
-                                  <Edit className="w-4 h-4" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() =>
-                                    handleEliminarInfraccion(
-                                      infraccion.id_infraccion
-                                    )
-                                  }
-                                  disabled={isLoading}
-                                  className="hover:bg-red-50 hover:text-red-600 hover:border-red-300"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
+                              <div className="flex gap-2">
+                                {infraccion.activo === false ? (
+                                  // Botón de reactivar para infracciones desactivadas
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() =>
+                                      handleReactivarInfraccion(
+                                        infraccion.id_infraccion
+                                      )
+                                    }
+                                    disabled={isLoading}
+                                    className="bg-green-50 hover:bg-green-100 text-green-700 border-green-300 hover:border-green-400"
+                                  >
+                                    <RotateCcw className="w-4 h-4 mr-1" />
+                                    Reactivar
+                                  </Button>
+                                ) : (
+                                  // Botones normales para infracciones activas
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() =>
+                                        handleAbrirEditarInfraccion(infraccion)
+                                      }
+                                      disabled={isLoading}
+                                      className="hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300"
+                                    >
+                                      <Edit className="w-4 h-4" />
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => {
+                                        setInfraccionEliminar(
+                                          infraccion.id_infraccion
+                                        );
+                                        setModalEliminar(true);
+                                      }}
+                                      disabled={isLoading}
+                                      className="hover:bg-red-50 hover:text-red-600 hover:border-red-300"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </>
+                                )}
                               </div>
                             )}
                           </div>
@@ -1247,7 +1360,11 @@ export function ConductaModule({ readOnly = false }: ConductaModuleProps) {
                     {alumnoSeleccionado.infracciones.map((infraccion) => (
                       <Card
                         key={infraccion.id_conducta}
-                        className="border-l-4 hover:shadow-md transition-shadow duration-200"
+                        className={`border-l-4 hover:shadow-md transition-shadow duration-200 ${
+                          infraccion.activo === false
+                            ? 'opacity-75 bg-gray-50'
+                            : ''
+                        }`}
                         style={{
                           borderLeftColor:
                             infraccion.categoria === 'MENOS_GRAVE'
@@ -1281,6 +1398,16 @@ export function ConductaModule({ readOnly = false }: ConductaModuleProps) {
                                 <Badge variant="secondary" className="text-xs">
                                   -{infraccion.puntos} pts
                                 </Badge>
+                                {/* Badge para infracciones inactivas */}
+                                {infraccion.activo === false && (
+                                  <Badge
+                                    variant="outline"
+                                    className="bg-amber-50 text-amber-700 border-amber-300 text-xs"
+                                    title="Esta infracción ya no está disponible en el catálogo actual"
+                                  >
+                                    ⚠️ Eliminada del Catálogo
+                                  </Badge>
+                                )}
                               </div>
                               <h4 className="font-bold text-base text-gray-900 mb-2 mt-1">
                                 {infraccion.articulo}
@@ -1312,6 +1439,115 @@ export function ConductaModule({ readOnly = false }: ConductaModuleProps) {
                 </div>
               </div>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal de confirmación para eliminar infracción */}
+        <Dialog open={modalEliminar} onOpenChange={setModalEliminar}>
+          <DialogContent className="max-w-xl p-0">
+            {/* Header simple */}
+            <div className="bg-red-600 px-6 py-4">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-3 text-white">
+                  <AlertTriangle className="w-5 h-5" />
+                  <span className="text-lg font-semibold">
+                    Confirmar Eliminación
+                  </span>
+                </DialogTitle>
+              </DialogHeader>
+            </div>
+
+            {/* Contenido */}
+            <div className="p-6 space-y-4">
+              {/* Pregunta principal */}
+              <p className="text-gray-800 font-medium">
+                ¿Está seguro que desea eliminar esta infracción del catálogo?
+              </p>
+
+              {/* Descripción */}
+              <p className="text-sm text-gray-600 leading-relaxed">
+                Esta acción desactivará la infracción del catálogo mediante una
+                eliminación lógica (soft delete).
+              </p>
+
+              {/* Información importante */}
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+                <h4 className="font-semibold text-gray-900 text-sm">
+                  Efectos de esta acción:
+                </h4>
+
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-start gap-2">
+                    <span className="text-green-600 mt-0.5">✓</span>
+                    <span className="text-gray-700">
+                      Los registros históricos de alumnos{' '}
+                      <strong>se mantendrán intactos</strong>
+                    </span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-green-600 mt-0.5">✓</span>
+                    <span className="text-gray-700">
+                      Seguirá visible en el historial con una marca de
+                      "inactiva"
+                    </span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-red-600 mt-0.5">✗</span>
+                    <span className="text-gray-700">
+                      No estará disponible para crear nuevas infracciones
+                    </span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-red-600 mt-0.5">✗</span>
+                    <span className="text-gray-700">
+                      No aparecerá en el catálogo activo de los orientadores
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Nota de seguridad */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-xs text-blue-900 flex items-start gap-2">
+                  <Shield className="w-4 h-4 flex-shrink-0 mt-0.5 text-blue-600" />
+                  <span>
+                    Los datos históricos están completamente seguros y no se
+                    perderán.
+                  </span>
+                </p>
+              </div>
+
+              {/* Botones */}
+              <div className="flex justify-end gap-3 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setModalEliminar(false);
+                    setInfraccionEliminar(null);
+                  }}
+                  disabled={isLoading}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleEliminarInfraccion}
+                  disabled={isLoading}
+                  className="bg-red-600 hover:bg-red-700"
+                >
+                  {isLoading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Eliminando...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Confirmar Eliminación
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
           </DialogContent>
         </Dialog>
       </div>

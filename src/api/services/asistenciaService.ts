@@ -258,6 +258,7 @@ export interface InfraccionCatalogoResponse {
   articulo: string;
   descripcion: string;
   puntos: number;
+  activo: boolean; // ✅ Campo para soft delete
   creadoEn: string;
 }
 
@@ -346,6 +347,7 @@ export interface AlumnoConInfracciones {
     articulo: string;
     descripcion: string;
     puntos: number;
+    activo?: boolean; // ✅ Campo para detectar infracciones inactivas
     observacion: string | null;
     anio_academico: string;
     trimestre: number;
@@ -397,6 +399,16 @@ export const conductaService = {
     return response.data;
   },
 
+  // 🆕 NUEVO: Obtener TODAS las infracciones (activas + inactivas)
+  getAllCatalogoIncludingInactive: async (): Promise<
+    InfraccionCatalogoResponse[]
+  > => {
+    const response = await api.get<InfraccionCatalogoResponse[]>(
+      '/conducta/catalogo/all'
+    );
+    return response.data;
+  },
+
   getCatalogoById: async (id: string): Promise<InfraccionCatalogoResponse> => {
     const response = await api.get<InfraccionCatalogoResponse>(
       `/conducta/catalogo/${id}`
@@ -415,8 +427,19 @@ export const conductaService = {
     return response.data;
   },
 
-  deleteCatalogo: async (id: string): Promise<void> => {
-    await api.delete(`/conducta/catalogo/${id}`);
+  deleteCatalogo: async (id: string): Promise<InfraccionCatalogoResponse> => {
+    const response = await api.delete<InfraccionCatalogoResponse>(
+      `/conducta/catalogo/${id}`
+    );
+    return response.data;
+  },
+
+  // 🆕 NUEVO: Reactivar infracción desactivada
+  restoreCatalogo: async (id: string): Promise<InfraccionCatalogoResponse> => {
+    const response = await api.patch<InfraccionCatalogoResponse>(
+      `/conducta/catalogo/${id}/restore`
+    );
+    return response.data;
   },
 
   create: async (data: CreateConductaDto): Promise<ConductaResponse> => {
