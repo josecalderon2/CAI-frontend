@@ -367,6 +367,18 @@ export interface AlumnosConInfraccionesResponse {
   alumnos: AlumnoConInfracciones[];
 }
 
+// ✅ NUEVO: Response de años académicos disponibles
+export interface AnioDisponible {
+  anio_academico: string;
+  trimestres_disponibles: number[];
+  total_registros: number;
+}
+
+export interface AniosDisponiblesResponse {
+  total_anios: number;
+  anios: AnioDisponible[];
+}
+
 // Servicio de conducta
 export const conductaService = {
   createCatalogo: async (
@@ -460,6 +472,14 @@ export const conductaService = {
     const response = await api.get<AlumnosConInfraccionesResponse>(url);
     console.log('✅ [Service] Respuesta recibida:', response.data);
 
+    return response.data;
+  },
+
+  // 🆕 Obtener años académicos disponibles para filtros
+  getAniosDisponibles: async (): Promise<AniosDisponiblesResponse> => {
+    const response = await api.get<AniosDisponiblesResponse>(
+      '/conducta/anios-disponibles'
+    );
     return response.data;
   },
 };

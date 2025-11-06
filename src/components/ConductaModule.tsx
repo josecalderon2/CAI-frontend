@@ -43,6 +43,7 @@ import {
   type AlumnoConInfracciones,
   type AlumnosConInfraccionesResponse,
   type FiltrosConductaDto,
+  type AnioDisponible,
 } from '../api/services/asistenciaService';
 
 interface User {
@@ -72,6 +73,9 @@ export function ConductaModule({ readOnly = false }: ConductaModuleProps) {
   // Estados globales
   const [isLoading, setIsLoading] = useState(false);
   const [cursosDisponibles, setCursosDisponibles] = useState<CursoResponse[]>(
+    []
+  );
+  const [aniosDisponibles, setAniosDisponibles] = useState<AnioDisponible[]>(
     []
   );
 
@@ -121,7 +125,11 @@ export function ConductaModule({ readOnly = false }: ConductaModuleProps) {
   }, [activeTab, filtrosAlumnos]);
 
   const cargarDatosIniciales = async () => {
-    await Promise.all([cargarCatalogoInfracciones(), cargarCursos()]);
+    await Promise.all([
+      cargarCatalogoInfracciones(),
+      cargarCursos(),
+      cargarAniosDisponibles(),
+    ]);
   };
 
   const cargarCursos = async () => {
@@ -137,6 +145,17 @@ export function ConductaModule({ readOnly = false }: ConductaModuleProps) {
       }
     } catch (error) {
       console.error('Error al cargar cursos:', error);
+    }
+  };
+
+  const cargarAniosDisponibles = async () => {
+    try {
+      const response = await conductaService.getAniosDisponibles();
+      setAniosDisponibles(response.anios);
+    } catch (error) {
+      console.error('Error al cargar años disponibles:', error);
+      // Si falla, usar años dinámicos como fallback
+      setAniosDisponibles([]);
     }
   };
 
@@ -173,6 +192,36 @@ export function ConductaModule({ readOnly = false }: ConductaModuleProps) {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Generar años académicos dinámicamente (año actual ± 3 años)
+  // O usar los años disponibles del backend si existen
+  const getAniosAcademicos = () => {
+    // Si tenemos datos del backend, usar esos
+    if (aniosDisponibles.length > 0) {
+      return aniosDisponibles.map((a) => parseInt(a.anio_academico));
+    }
+
+    // Fallback: generar años dinámicamente (año actual ± 3 años)
+    const anioActual = new Date().getFullYear();
+    const anios = [];
+    for (let i = -3; i <= 3; i++) {
+      anios.push(anioActual + i);
+    }
+    return anios.sort((a, b) => b - a); // Ordenar descendente (más reciente primero)
+  };
+
+  // Obtener trimestres disponibles para el año seleccionado
+  const getTrimestresDisponibles = () => {
+    if (!filtrosAlumnos.anio_academico || aniosDisponibles.length === 0) {
+      return [1, 2, 3]; // Por defecto, mostrar 1, 2, 3
+    }
+
+    const anioInfo = aniosDisponibles.find(
+      (a) => a.anio_academico === filtrosAlumnos.anio_academico
+    );
+
+    return anioInfo?.trimestres_disponibles || [1, 2, 3];
   };
 
   const handleCrearInfraccion = async () => {
@@ -853,7 +902,7 @@ export function ConductaModule({ readOnly = false }: ConductaModuleProps) {
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="md:col-span-1">
                     <Label className="text-sm font-medium text-gray-700 mb-2 block">
                       Nombre del Alumno
@@ -867,6 +916,34 @@ export function ConductaModule({ readOnly = false }: ConductaModuleProps) {
                         className="pl-10 h-11"
                       />
                     </div>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-700 mb-2 block">
+                      Año Académico
+                    </Label>
+                    <Select
+                      value={
+                        filtrosAlumnos.anio_academico ||
+                        new Date().getFullYear().toString()
+                      }
+                      onValueChange={(value) =>
+                        setFiltrosAlumnos({
+                          ...filtrosAlumnos,
+                          anio_academico: value,
+                        })
+                      }
+                    >
+                      <SelectTrigger className="h-11">
+                        <SelectValue placeholder="Seleccionar año" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {getAniosAcademicos().map((year) => (
+                          <SelectItem key={year} value={year.toString()}>
+                            {year}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-700 mb-2 block">
@@ -918,16 +995,23 @@ export function ConductaModule({ readOnly = false }: ConductaModuleProps) {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="todos">Todos</SelectItem>
-                        <SelectItem value="1">Trimestre 1</SelectItem>
-                        <SelectItem value="2">Trimestre 2</SelectItem>
-                        <SelectItem value="3">Trimestre 3</SelectItem>
+                        {getTrimestresDisponibles().map((trimestre) => (
+                          <SelectItem
+                            key={trimestre}
+                            value={trimestre.toString()}
+                          >
+                            Trimestre {trimestre}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
                 {(busquedaAlumno ||
                   filtrosAlumnos.id_curso ||
-                  filtrosAlumnos.trimestre) && (
+                  filtrosAlumnos.trimestre ||
+                  filtrosAlumnos.anio_academico !==
+                    new Date().getFullYear().toString()) && (
                   <div className="mt-4 pt-4 border-t border-gray-200">
                     <p className="text-sm text-gray-600">
                       <span className="font-semibold text-blue-600">
@@ -937,6 +1021,18 @@ export function ConductaModule({ readOnly = false }: ConductaModuleProps) {
                       encontrado
                       {alumnosFiltrados.length !== 1 ? 's' : ''} con
                       infracciones
+                      {filtrosAlumnos.anio_academico && (
+                        <span className="ml-2 text-gray-700">
+                          en el año{' '}
+                          <strong>{filtrosAlumnos.anio_academico}</strong>
+                        </span>
+                      )}
+                      {filtrosAlumnos.trimestre && (
+                        <span className="ml-2 text-gray-700">
+                          - Trimestre{' '}
+                          <strong>{filtrosAlumnos.trimestre}</strong>
+                        </span>
+                      )}
                     </p>
                   </div>
                 )}
