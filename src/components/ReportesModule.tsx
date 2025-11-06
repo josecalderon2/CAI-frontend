@@ -158,36 +158,6 @@ export function ReportesModule({ onNavigate }: ReportesModuleProps) {
           </div>
         </CardContent>
       </Card>
-
-      {/* Información adicional */}
-      <Card className="bg-blue-50 border-blue-200">
-        <CardContent className="p-6">
-          <h3 className="font-semibold text-blue-900 mb-3 flex items-center">
-            <FileText className="w-5 h-5 mr-2" />
-            Información sobre los Reportes
-          </h3>
-          <div className="space-y-2 text-sm text-blue-800">
-            <p>
-              • <strong>Reporte Conductual:</strong> Muestra las asistencias y
-              conducta de los alumnos durante un mes específico.
-            </p>
-            <p>
-              • <strong>Reporte Trimestral:</strong> Consolida la información de
-              un trimestre completo incluyendo infracciones y puntuación de
-              conducta.
-            </p>
-            <p>
-              • <strong>Reporte Anual:</strong> Resume todo el año lectivo con
-              totales de justificadas, injustificadas y atrasos.
-            </p>
-            <p>
-              • <strong>Reporte Trimestral Consolidado:</strong> Muestra el
-              detalle completo de los tres trimestres del año académico con
-              asistencia, conducta, infracciones y promedios por trimestre.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }

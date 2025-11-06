@@ -138,7 +138,7 @@ export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
       icon: UserPlus,
       color: 'bg-pink-600',
       action: () => onNavigate('conductas'),
-      stats: 'Gestionar conductas',
+      stats: 'Gestionar catálogo',
     },
     {
       title: 'Reportes',

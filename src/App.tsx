@@ -359,7 +359,10 @@ function AppRoutes() {
           path="/conductas"
           element={
             <ProtectedRoute>
-              <ConductaModule user={getUser()} />
+              <ConductaModule
+                user={getUser()}
+                readOnly={getUser()?.role === 'P.A'}
+              />
             </ProtectedRoute>
           }
         />

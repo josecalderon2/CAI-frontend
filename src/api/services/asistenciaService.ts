@@ -302,6 +302,71 @@ export interface ConductaConRelaciones extends ConductaResponse {
   };
 }
 
+// ✅ NUEVO: DTO para filtros de conducta (para endpoint de alumnos con infracciones)
+export interface FiltrosConductaDto {
+  id_curso?: number;
+  anio_academico?: string;
+  trimestre?: number;
+}
+
+// ✅ NUEVO: Response de alumnos con infracciones
+export interface AlumnoConInfracciones {
+  id_alumno: number;
+  nombre: string;
+  apellido: string;
+  cursos: {
+    id_curso: number;
+    nombre: string;
+    seccion: string;
+    grado: string;
+    anio_academico: string;
+  }[];
+  estadisticas: {
+    total_infracciones: number;
+    total_puntos: number;
+    por_categoria: {
+      MENOS_GRAVE?: {
+        cantidad: number;
+        puntos: number;
+      };
+      GRAVE?: {
+        cantidad: number;
+        puntos: number;
+      };
+      MUY_GRAVE?: {
+        cantidad: number;
+        puntos: number;
+      };
+    };
+  };
+  infracciones: {
+    id_conducta: number;
+    fecha: string;
+    categoria: CategoriaInfraccion;
+    articulo: string;
+    descripcion: string;
+    puntos: number;
+    observacion: string | null;
+    anio_academico: string;
+    trimestre: number;
+    orientador: {
+      id_orientador: number;
+      nombre: string;
+      apellido: string;
+    };
+    asignatura: {
+      id_asignatura: number;
+      nombre: string;
+    } | null;
+  }[];
+}
+
+export interface AlumnosConInfraccionesResponse {
+  filtros_aplicados: FiltrosConductaDto;
+  total_alumnos: number;
+  alumnos: AlumnoConInfracciones[];
+}
+
 // Servicio de conducta
 export const conductaService = {
   createCatalogo: async (
@@ -374,6 +439,28 @@ export const conductaService = {
 
   delete: async (id: string): Promise<void> => {
     await api.delete(`/conducta/${id}`);
+  },
+
+  // 🆕 Obtener alumnos con infracciones (para administrador)
+  getAlumnosConInfracciones: async (
+    filtros?: FiltrosConductaDto
+  ): Promise<AlumnosConInfraccionesResponse> => {
+    const queryParams = new URLSearchParams();
+    if (filtros?.id_curso)
+      queryParams.append('id_curso', filtros.id_curso.toString());
+    if (filtros?.anio_academico)
+      queryParams.append('anio_academico', filtros.anio_academico);
+    if (filtros?.trimestre)
+      queryParams.append('trimestre', filtros.trimestre.toString());
+
+    const url = `/conducta/alumnos-con-infracciones${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+    console.log('🌐 [Service] Llamando endpoint:', url);
+    console.log('📋 [Service] Filtros recibidos:', filtros);
+
+    const response = await api.get<AlumnosConInfraccionesResponse>(url);
+    console.log('✅ [Service] Respuesta recibida:', response.data);
+
+    return response.data;
   },
 };
 

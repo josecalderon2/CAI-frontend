@@ -1,17 +1,18 @@
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import { 
-  Users, 
-  GraduationCap, 
-  BookOpen, 
+import {
+  Users,
+  GraduationCap,
+  BookOpen,
   Calendar,
   FileText,
   School,
   ClipboardList,
   UserPlus,
   Plus,
-  BarChart3
+  BarChart3,
+  Shield,
 } from 'lucide-react';
 
 interface User {
@@ -26,7 +27,10 @@ interface AdministrativoDashboardProps {
   onNavigate: (section: string) => void;
 }
 
-export function AdministrativoDashboard({ user, onNavigate }: AdministrativoDashboardProps) {
+export function AdministrativoDashboard({
+  user,
+  onNavigate,
+}: AdministrativoDashboardProps) {
   const statsCards = [
     {
       title: 'Total Alumnos',
@@ -34,7 +38,7 @@ export function AdministrativoDashboard({ user, onNavigate }: AdministrativoDash
       change: '+12',
       changeType: 'positive' as const,
       icon: Users,
-      description: 'Estudiantes activos'
+      description: 'Estudiantes activos',
     },
     {
       title: 'Cursos Activos',
@@ -42,7 +46,7 @@ export function AdministrativoDashboard({ user, onNavigate }: AdministrativoDash
       change: '+2',
       changeType: 'positive' as const,
       icon: School,
-      description: 'Cursos en funcionamiento'
+      description: 'Cursos en funcionamiento',
     },
     {
       title: 'Asignaturas',
@@ -50,7 +54,7 @@ export function AdministrativoDashboard({ user, onNavigate }: AdministrativoDash
       change: '+1',
       changeType: 'positive' as const,
       icon: BookOpen,
-      description: 'Materias registradas'
+      description: 'Materias registradas',
     },
     {
       title: 'Docentes',
@@ -58,8 +62,8 @@ export function AdministrativoDashboard({ user, onNavigate }: AdministrativoDash
       change: '+3',
       changeType: 'positive' as const,
       icon: GraduationCap,
-      description: 'Profesores activos'
-    }
+      description: 'Profesores activos',
+    },
   ];
 
   const quickActions = [
@@ -68,29 +72,36 @@ export function AdministrativoDashboard({ user, onNavigate }: AdministrativoDash
       description: 'Agregar nuevo estudiante al sistema',
       icon: UserPlus,
       action: () => onNavigate('alumnos'),
-      color: 'bg-blue-600 hover:bg-blue-700'
+      color: 'bg-blue-600 hover:bg-blue-700',
+    },
+    {
+      title: 'Ver Conducta',
+      description: 'Consultar infracciones de alumnos',
+      icon: Shield,
+      action: () => onNavigate('conducta'),
+      color: 'bg-red-600 hover:bg-red-700',
     },
     {
       title: 'Crear Asignatura',
       description: 'Añadir nueva materia al plan de estudios',
       icon: BookOpen,
       action: () => onNavigate('asignaturas'),
-      color: 'bg-green-600 hover:bg-green-700'
+      color: 'bg-green-600 hover:bg-green-700',
     },
     {
       title: 'Nuevo Curso',
       description: 'Configurar un nuevo curso',
       icon: School,
       action: () => onNavigate('cursos'),
-      color: 'bg-purple-600 hover:bg-purple-700'
+      color: 'bg-purple-600 hover:bg-purple-700',
     },
     {
       title: 'Generar Reporte',
       description: 'Crear reportes académicos',
       icon: FileText,
       action: () => onNavigate('reportes'),
-      color: 'bg-orange-600 hover:bg-orange-700'
-    }
+      color: 'bg-orange-600 hover:bg-orange-700',
+    },
   ];
 
   const recentActivities = [
@@ -98,61 +109,69 @@ export function AdministrativoDashboard({ user, onNavigate }: AdministrativoDash
       type: 'alumno',
       message: 'Nuevo alumno registrado: Juan Carlos Méndez',
       time: 'Hace 2 horas',
-      icon: Users
+      icon: Users,
     },
     {
       type: 'asignatura',
       message: 'Asignatura creada: Educación Física',
       time: 'Hace 4 horas',
-      icon: BookOpen
+      icon: BookOpen,
     },
     {
       type: 'curso',
       message: 'Curso 9° Básico C configurado',
       time: 'Hace 1 día',
-      icon: School
+      icon: School,
     },
     {
       type: 'asignacion',
       message: 'Asignación completada: Prof. Ana - Matemáticas',
       time: 'Hace 2 días',
-      icon: ClipboardList
-    }
+      icon: ClipboardList,
+    },
   ];
 
   const pendingTasks = [
     {
       task: 'Revisar solicitudes de inscripción',
       priority: 'high' as const,
-      count: 8
+      count: 8,
     },
     {
       task: 'Asignar docentes a nuevos cursos',
       priority: 'medium' as const,
-      count: 3
+      count: 3,
     },
     {
       task: 'Actualizar información de asignaturas',
       priority: 'low' as const,
-      count: 5
-    }
+      count: 5,
+    },
   ];
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case 'high': return 'bg-red-100 text-red-800 border-red-200';
-      case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'low': return 'bg-green-100 text-green-800 border-green-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+      case 'high':
+        return 'bg-red-100 text-red-800 border-red-200';
+      case 'medium':
+        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'low':
+        return 'bg-green-100 text-green-800 border-green-200';
+      default:
+        return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
 
   const getPriorityText = (priority: string) => {
     switch (priority) {
-      case 'high': return 'Alta';
-      case 'medium': return 'Media';
-      case 'low': return 'Baja';
-      default: return priority;
+      case 'high':
+        return 'Alta';
+      case 'medium':
+        return 'Media';
+      case 'low':
+        return 'Baja';
+      default:
+        return priority;
     }
   };
 
@@ -161,10 +180,15 @@ export function AdministrativoDashboard({ user, onNavigate }: AdministrativoDash
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Panel Administrativo</h1>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Panel Administrativo
+          </h1>
           <p className="text-gray-600">Bienvenido, {user.name}</p>
         </div>
-        <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-200">
+        <Badge
+          variant="outline"
+          className="bg-blue-100 text-blue-800 border-blue-200"
+        >
           Personal Administrativo
         </Badge>
       </div>
@@ -177,9 +201,13 @@ export function AdministrativoDashboard({ user, onNavigate }: AdministrativoDash
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">{stat.title}</p>
-                  <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {stat.value}
+                  </p>
                   <div className="flex items-center space-x-1 mt-1">
-                    <span className={`text-sm ${stat.changeType === 'positive' ? 'text-green-600' : 'text-red-600'}`}>
+                    <span
+                      className={`text-sm ${stat.changeType === 'positive' ? 'text-green-600' : 'text-red-600'}`}
+                    >
                       {stat.change}
                     </span>
                     <span className="text-sm text-gray-500">este mes</span>
@@ -206,14 +234,22 @@ export function AdministrativoDashboard({ user, onNavigate }: AdministrativoDash
           <CardContent>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {quickActions.map((action, index) => (
-                <div key={index} className="p-4 border rounded-lg hover:bg-gray-50 transition-colors cursor-pointer" onClick={action.action}>
+                <div
+                  key={index}
+                  className="p-4 border rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+                  onClick={action.action}
+                >
                   <div className="flex items-center space-x-3">
                     <div className={`p-2 rounded-lg ${action.color}`}>
                       <action.icon className="w-5 h-5 text-white" />
                     </div>
                     <div className="flex-1">
-                      <h4 className="font-medium text-gray-900">{action.title}</h4>
-                      <p className="text-sm text-gray-600">{action.description}</p>
+                      <h4 className="font-medium text-gray-900">
+                        {action.title}
+                      </h4>
+                      <p className="text-sm text-gray-600">
+                        {action.description}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -233,14 +269,24 @@ export function AdministrativoDashboard({ user, onNavigate }: AdministrativoDash
           <CardContent>
             <div className="space-y-3">
               {pendingTasks.map((task, index) => (
-                <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div
+                  key={index}
+                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                >
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-900">{task.task}</p>
+                    <p className="text-sm font-medium text-gray-900">
+                      {task.task}
+                    </p>
                     <div className="flex items-center space-x-2 mt-1">
-                      <Badge variant="outline" className={getPriorityColor(task.priority)}>
+                      <Badge
+                        variant="outline"
+                        className={getPriorityColor(task.priority)}
+                      >
                         {getPriorityText(task.priority)}
                       </Badge>
-                      <span className="text-xs text-gray-500">{task.count} pendientes</span>
+                      <span className="text-xs text-gray-500">
+                        {task.count} pendientes
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -291,15 +337,21 @@ export function AdministrativoDashboard({ user, onNavigate }: AdministrativoDash
                 <span className="font-medium">12</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">Asignaturas Creadas</span>
+                <span className="text-sm text-gray-600">
+                  Asignaturas Creadas
+                </span>
                 <span className="font-medium">3</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">Cursos Configurados</span>
+                <span className="text-sm text-gray-600">
+                  Cursos Configurados
+                </span>
                 <span className="font-medium">2</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">Reportes Generados</span>
+                <span className="text-sm text-gray-600">
+                  Reportes Generados
+                </span>
                 <span className="font-medium">25</span>
               </div>
             </div>
@@ -313,7 +365,7 @@ export function AdministrativoDashboard({ user, onNavigate }: AdministrativoDash
           <CardTitle>Módulos Administrativos</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <Button
               variant="outline"
               className="h-20 flex flex-col items-center justify-center space-y-2"
@@ -348,6 +400,15 @@ export function AdministrativoDashboard({ user, onNavigate }: AdministrativoDash
             >
               <ClipboardList className="w-6 h-6" />
               <span>Asignaciones</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              className="h-20 flex flex-col items-center justify-center space-y-2"
+              onClick={() => onNavigate('conducta')}
+            >
+              <Shield className="w-6 h-6" />
+              <span>Conducta</span>
             </Button>
           </div>
         </CardContent>

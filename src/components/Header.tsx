@@ -79,6 +79,7 @@ export function Header({
     { id: 'grados-academicos', label: 'Grados', icon: Award },
     { id: 'cursos', label: 'Cursos', icon: School },
     { id: 'asignaciones', label: 'Asignaciones', icon: ClipboardList },
+    { id: 'conductas', label: 'Conductas', icon: UserCheck },
     { id: 'reportes', label: 'Reportes', icon: FileText },
   ];
 
