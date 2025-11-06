@@ -61,6 +61,7 @@ export function Header({
     { id: 'cursos', label: 'Cursos', icon: School },
     { id: 'asignaciones', label: 'Asignaciones', icon: ClipboardList },
     { id: 'conductas', label: 'Conductas', icon: UserCheck },
+    { id: 'tipos-evaluacion', label: 'Evaluaciones', icon: Calendar },
     { id: 'reportes', label: 'Reportes', icon: FileText },
   ];
 
@@ -108,6 +109,8 @@ export function Header({
         return 'Asistencia';
       case 'conductas':
         return 'Conductas';
+      case 'tipos-evaluacion':
+        return 'Tipos de Evaluación';
       default:
         return 'Dashboard';
     }

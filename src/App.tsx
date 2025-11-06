@@ -28,6 +28,7 @@ import { AsignacionesModule } from './components/AsignacionesModule';
 import { PerfilModule } from './components/PerfilModule';
 import { AsistenciaModuleNew } from './components/AsistenciaModuleNew';
 import { ConductaModule } from './components/ConductaModule';
+import { TiposEvaluacionModule } from './components/TiposEvaluacionModule';
 
 // ================= Helpers de auth =================
 function getUser() {
@@ -330,6 +331,15 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <ConductaModule user={getUser()} />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/tipos-evaluacion"
+          element={
+            <ProtectedRoute>
+              <TiposEvaluacionModule />
             </ProtectedRoute>
           }
         />
