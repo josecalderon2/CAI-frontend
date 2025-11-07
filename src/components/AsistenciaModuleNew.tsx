@@ -174,7 +174,6 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
   // Efecto para leer el tab de la URL al cargar
   useEffect(() => {
     const tabParam = searchParams.get('tab');
-    console.log('🔍 [AsistenciaModule] Tab param de URL:', tabParam);
     if (tabParam) {
       const validTabs = [
         'asistencia',
@@ -185,7 +184,6 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
         'resumen-anual',
       ];
       if (validTabs.includes(tabParam)) {
-        console.log('✅ [AsistenciaModule] Cambiando a tab:', tabParam);
         setActiveTab(tabParam as typeof activeTab);
       }
     }
@@ -3597,6 +3595,17 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
 
         {!catalogoColapsado && (
           <CardContent>
+            {/* Mensaje informativo para usuarios no admin */}
+            {user.role !== 'admin' && (
+              <Alert className="mb-4 bg-blue-50 border-blue-200">
+                <AlertCircle className="h-4 w-4 text-blue-600" />
+                <AlertDescription className="text-blue-800">
+                  <strong>Modo consulta:</strong> Solo los administradores
+                  pueden editar el catálogo de infracciones.
+                </AlertDescription>
+              </Alert>
+            )}
+
             {catalogoInfracciones.length === 0 ? (
               <Alert>
                 <AlertCircle className="h-4 w-4" />

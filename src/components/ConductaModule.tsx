@@ -137,17 +137,20 @@ export function ConductaModule({ readOnly = false }: ConductaModuleProps) {
 
   const cargarCursos = async () => {
     try {
-      const response = await fetch('http://localhost:3000/api/cursos', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-        },
-      });
-      if (response.ok) {
-        const cursos = await response.json();
-        setCursosDisponibles(cursos);
-      }
+      // 🆕 Usar el nuevo endpoint que trae cursos con alumnos que tienen infracciones
+      const response = await conductaService.getCursosConInfracciones();
+
+      setCursosDisponibles(
+        response.cursos.map((c) => ({
+          id_curso: c.id_curso,
+          nombre: c.nombre_completo, // Usar el nombre completo que incluye grado y sección
+          seccion: c.seccion,
+        }))
+      );
     } catch (error) {
       console.error('Error al cargar cursos:', error);
+      toast.error('Error al cargar cursos con registros de conducta');
+      setCursosDisponibles([]);
     }
   };
 

@@ -122,21 +122,7 @@ export const asistenciaService = {
     if (params.estado) queryParams.append('estado', params.estado);
 
     const url = `/asistencia/buscar/filtros?${queryParams.toString()}`;
-    console.log('🌐 DEBUG - Service llamando al endpoint:', {
-      url,
-      params,
-      fechaDesdeAjustada: params.fechaDesde
-        ? `${params.fechaDesde}T06:00:00.000Z`
-        : null,
-      fechaHastaAjustada: params.fechaHasta,
-    });
-
     const response = await api.get<AsistenciaConRelaciones[]>(url);
-
-    console.log('📦 DEBUG - Service respuesta recibida:', {
-      cantidad: response.data.length,
-      data: response.data,
-    });
 
     return response.data;
   },
@@ -381,6 +367,15 @@ export interface AniosDisponiblesResponse {
   anios: AnioDisponible[];
 }
 
+// 🆕 Interface para cursos con registros de conducta
+export interface CursoConRegistrosResponse {
+  id_curso: number;
+  nombre: string;
+  seccion: string;
+  grado: string;
+  nombre_completo: string;
+}
+
 // Servicio de conducta
 export const conductaService = {
   createCatalogo: async (
@@ -489,11 +484,7 @@ export const conductaService = {
       queryParams.append('trimestre', filtros.trimestre.toString());
 
     const url = `/conducta/alumnos-con-infracciones${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
-    console.log('🌐 [Service] Llamando endpoint:', url);
-    console.log('📋 [Service] Filtros recibidos:', filtros);
-
     const response = await api.get<AlumnosConInfraccionesResponse>(url);
-    console.log('✅ [Service] Respuesta recibida:', response.data);
 
     return response.data;
   },
@@ -503,6 +494,18 @@ export const conductaService = {
     const response = await api.get<AniosDisponiblesResponse>(
       '/conducta/anios-disponibles'
     );
+    return response.data;
+  },
+
+  // 🆕 Obtener cursos que tienen registros de conducta
+  getCursosConInfracciones: async (): Promise<{
+    total_cursos: number;
+    cursos: CursoConRegistrosResponse[];
+  }> => {
+    const response = await api.get<{
+      total_cursos: number;
+      cursos: CursoConRegistrosResponse[];
+    }>('/conducta/cursos-con-infracciones');
     return response.data;
   },
 };
@@ -623,47 +626,26 @@ export const resumenService = {
   getResumenTrimestral: async (
     params: ResumenTrimestralDto
   ): Promise<ResumenTrimestralResponse[]> => {
-    console.log('🔧 [Service] Llamando al backend con params:', params);
     const response = await api.get<any>('/resumen/trimestral', { params });
 
-    console.log('🔧 [Service] Respuesta raw del backend:', response.data);
-    console.log(
-      '🔧 [Service] Total de alumnos recibidos:',
-      response.data.length
-    );
-
-    if (response.data.length > 0) {
-      console.log('🔧 [Service] Primer alumno sin mapear:', response.data[0]);
-      console.log(
-        '🔧 [Service] Campos disponibles:',
-        Object.keys(response.data[0])
-      );
-    }
-
     // Mapear los nombres de campos del backend (snake_case) al frontend (camelCase)
-    const mapped = response.data.map((item: any) => {
-      const alumno = {
-        id_alumno: item.id_alumno,
-        nombre: item.nombre,
-        apellido: item.apellido,
-        justificadas: item.total_justificadas ?? item.justificadas ?? 0,
-        injustificadas: item.total_injustificadas ?? item.injustificadas ?? 0,
-        // ✅ Mapear correctamente el array de infracciones
-        infracciones: (item.infracciones ?? []).map((inf: any) => ({
-          categoria: inf.categoria,
-          articulo: inf.articulo,
-          descripcion: inf.descripcion,
-          puntos: inf.puntos,
-          cantidad: inf.cantidad ?? inf.conteo ?? 1, // ⚠️ Probar con ambos nombres posibles
-        })),
-        puntajeConducta: item.puntuacion_conducta ?? item.puntajeConducta ?? 10,
-      };
+    const mapped = response.data.map((item: any) => ({
+      id_alumno: item.id_alumno,
+      nombre: item.nombre,
+      apellido: item.apellido,
+      justificadas: item.total_justificadas ?? item.justificadas ?? 0,
+      injustificadas: item.total_injustificadas ?? item.injustificadas ?? 0,
+      // ✅ Mapear correctamente el array de infracciones
+      infracciones: (item.infracciones ?? []).map((inf: any) => ({
+        categoria: inf.categoria,
+        articulo: inf.articulo,
+        descripcion: inf.descripcion,
+        puntos: inf.puntos,
+        cantidad: inf.cantidad ?? inf.conteo ?? 1, // ⚠️ Probar con ambos nombres posibles
+      })),
+      puntajeConducta: item.puntuacion_conducta ?? item.puntajeConducta ?? 10,
+    }));
 
-      console.log(`🔧 [Service] Alumno ${item.nombre} mapeado:`, alumno);
-      return alumno;
-    });
-
-    console.log('🔧 [Service] Datos finales mapeados:', mapped);
     return mapped;
   },
 

@@ -6,13 +6,7 @@ import { api } from '../axiosConfig';
  */
 export const obtenerEstadisticasPersonal = async () => {
   try {
-    console.log('Obteniendo estadísticas de personal...');
     const response = await api.get('/estadisticas/personal/total');
-    console.log(
-      'Respuesta de estadísticas de personal:',
-      response.status,
-      response.data
-    );
     return response.data;
   } catch (error) {
     console.error('Error al obtener estadísticas de personal:', error);
@@ -34,9 +28,7 @@ export const obtenerEstadisticasPersonal = async () => {
  */
 export const obtenerTotalAlumnos = async () => {
   try {
-    console.log('Obteniendo total de alumnos...');
     const response = await api.get('/alumnos');
-    console.log('Respuesta de alumnos:', response.status);
 
     const data = response.data;
     // Si viene paginado, tomamos la propiedad "total"
@@ -46,16 +38,11 @@ export const obtenerTotalAlumnos = async () => {
       'total' in data &&
       (data as { total?: number }).total !== undefined
     ) {
-      console.log(
-        'Total alumnos (de paginado):',
-        (data as { total: number }).total
-      );
       return (data as { total: number }).total;
     }
 
     // Si es un array, contamos los elementos
     if (Array.isArray(data)) {
-      console.log('Total alumnos (contando array):', data.length);
       return data.length;
     }
 
@@ -66,10 +53,6 @@ export const obtenerTotalAlumnos = async () => {
       'items' in data &&
       Array.isArray((data as { items?: unknown[] }).items)
     ) {
-      console.log(
-        'Total alumnos (de items):',
-        (data as { items: unknown[] }).items.length
-      );
       return (data as { items: unknown[] }).items.length;
     }
 
@@ -86,7 +69,6 @@ export const obtenerTotalAlumnos = async () => {
  */
 export const obtenerTotalCursos = async () => {
   try {
-    console.log('Obteniendo total de cursos...');
     const response = await api.get('/cursos');
 
     const data = response.data;
@@ -126,7 +108,6 @@ export const obtenerTotalCursos = async () => {
  */
 export const obtenerTotalAsignaturas = async () => {
   try {
-    console.log('Obteniendo total de asignaturas...');
     const response = await api.get('/asignaturas');
 
     const data = response.data;
@@ -166,7 +147,6 @@ export const obtenerTotalAsignaturas = async () => {
  */
 export const obtenerActividadReciente = async () => {
   try {
-    console.log('Obteniendo actividad reciente...');
     const response = await api.get('/actividad');
 
     const data = response.data;

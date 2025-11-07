@@ -863,9 +863,6 @@ export function AsignacionesModule() {
         // Llamar a la API de creación
         response = await asignacionesService.createAsignacion(createDto);
 
-        // Log para debug
-        console.log('Respuesta API:', response);
-
         // Obtener la asignación recién creada con formato UI
         const newAsignacion: AsignacionUI = {
           id: response.id_asignatura_orientador,

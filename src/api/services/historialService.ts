@@ -58,11 +58,8 @@ const historialService = {
   // Método de emergencia para obtener el historial de forma directa sin parámetros
   getHistorialDirecto: async (): Promise<HistorialResponse> => {
     try {
-      console.log('Usando método de emergencia getHistorialDirecto');
-
       // Intentar una petición simple sin params
       const response = await api.get('/asignaciones/historial');
-      console.log('Respuesta directa:', response.data);
 
       // Manejo seguro de datos
       const responseData = response.data as any;
@@ -130,8 +127,6 @@ const historialService = {
   // Obtener historial de asignaciones - Método simplificado sin parámetros
   getHistorial: async (): Promise<HistorialResponse> => {
     try {
-      console.log('Intentando obtener historial sin parámetros');
-
       // Verificar que hay un token en localStorage
       const token = localStorage.getItem('access_token');
       if (!token) {
@@ -145,7 +140,6 @@ const historialService = {
           Authorization: `Bearer ${token}`,
         },
       });
-      console.log('Respuesta historial:', response.data);
 
       // Validar que la respuesta tiene la estructura esperada
       const responseData = response.data as any;

@@ -190,14 +190,9 @@ const asignacionesService = {
     asignacion: CreateAsignacionDto
   ): Promise<Asignacion> => {
     try {
-      // Log para debug
-      console.log('Service - enviando asignación:', asignacion);
-
       const response = await api.post<Asignacion>('/asignaciones', asignacion);
-      console.log('Service - respuesta recibida:', response.data);
       return response.data;
     } catch (error) {
-      // Error al crear la asignación
       console.error('Service - error al crear asignación:', error);
       throw error;
     }
@@ -554,8 +549,6 @@ const asignacionesService = {
     params: HistorialQueryParams = {}
   ): Promise<HistorialResponse> => {
     try {
-      console.log('Solicitando historial con params:', params);
-
       // Creamos un objeto limpio con solo los parámetros admitidos por el backend
       const cleanParams: any = {};
 
@@ -631,9 +624,6 @@ const asignacionesService = {
         cleanParams.order = params.order;
       }
 
-      console.log('URL de historial:', '/asignaciones/historial');
-      console.log('Parámetros limpios enviados:', cleanParams);
-
       const response = await api.get<HistorialResponse>(
         '/asignaciones/historial',
         {
@@ -641,15 +631,12 @@ const asignacionesService = {
         }
       );
 
-      console.log('Respuesta del historial recibida correctamente');
-
       // Verificamos si la respuesta tiene datos
       if (
         !response.data ||
         (typeof response.data === 'object' &&
           Object.keys(response.data).length === 0)
       ) {
-        console.warn('La respuesta del historial está vacía');
         return {
           page: 1,
           pageSize: 10,
@@ -661,7 +648,6 @@ const asignacionesService = {
 
       // Si la respuesta viene directamente como un array en lugar de un objeto paginado
       if (Array.isArray(response.data)) {
-        console.log('Respuesta es un array, convirtiendo a formato paginado');
         return {
           page: 1,
           pageSize: response.data.length,
@@ -673,10 +659,6 @@ const asignacionesService = {
 
       // Verificamos que la respuesta tenga la estructura esperada
       if (!response.data.data || !Array.isArray(response.data.data)) {
-        console.warn(
-          'La respuesta del historial no tiene el formato esperado:',
-          response.data
-        );
         return {
           page: 1,
           pageSize: 10,
@@ -685,13 +667,6 @@ const asignacionesService = {
           data: [],
         };
       }
-
-      console.log('Datos de historial recibidos:', {
-        total: response.data.total,
-        count: response.data.count,
-        page: response.data.page,
-        dataLength: response.data.data.length,
-      });
 
       return response.data;
     } catch (error: any) {
@@ -732,9 +707,6 @@ const asignacionesService = {
       // Verificamos el tipo de error antes de asumir que no hay datos
       if (error.response && error.response.status === 404) {
         // Si el endpoint no existe o no hay datos (404 Not Found)
-        console.log(
-          'El endpoint de historial no existe o no se encontraron datos'
-        );
         return {
           page: 1,
           pageSize: 10,
@@ -746,7 +718,6 @@ const asignacionesService = {
 
       // Para otros tipos de errores, lanzamos el error para que el componente pueda manejarlo
       // y mostrar mensajes de error apropiados
-      console.error('Error al obtener historial, lanzando excepción');
       throw error;
     }
   },
@@ -756,9 +727,7 @@ const asignacionesService = {
   // para mantener un registro histórico completo
   createHistorial: async (dto: CreateHistorialDto): Promise<any> => {
     try {
-      console.log('Creando registro histórico:', dto);
       const response = await api.post('/asignaciones/create-historial', dto);
-      console.log('Registro histórico creado:', response.data);
       return response.data;
     } catch (error) {
       console.error('Error al crear registro histórico:', error);

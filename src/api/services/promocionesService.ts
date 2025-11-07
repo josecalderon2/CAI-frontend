@@ -77,8 +77,6 @@ const promocionesService = {
       params: { anioAcademico },
     });
 
-    console.log('🔍 Respuesta todos los alumnos:', response.data);
-
     // El backend devuelve { anioAcademico, totalCursos, totalAlumnos, items }
     const data: any = response.data;
     const items = data.items || [];
@@ -99,8 +97,6 @@ const promocionesService = {
       grado_academico: item.curso?.gradoAcademico, // nombre del grado académico
     }));
 
-    console.log('✅ Todos los alumnos mapeados:', itemsMapped);
-
     return {
       items: itemsMapped,
       totalCursos: data.totalCursos,
@@ -117,31 +113,22 @@ const promocionesService = {
       }
     );
 
-    console.log('🔍 Respuesta completa del backend:', response.data);
-
     // El backend devuelve { curso, alumnos, total }
     const data: any = response.data;
     const alumnos = data.alumnos || [];
 
-    console.log('📋 Alumnos extraídos:', alumnos);
-
     // Transformar al formato esperado por el frontend
-    const itemsMapped = alumnos.map((alumno: any) => {
-      console.log('👤 Procesando alumno:', alumno);
-      return {
-        id_alumno_curso: alumno.id, // No existe en backend, usar id
-        id_alumno: alumno.id,
-        id_curso: cursoId,
-        nombre: alumno.nombre,
-        apellido: alumno.apellido,
-        numero_matricula: alumno.numero_matricula || `MAT-${alumno.id}`,
-        estado: alumno.estadoActual || 'ACTIVO',
-        promedio_notas: alumno.notaPromedio,
-        anio_academico: anioAcademico,
-      };
-    });
-
-    console.log('✅ Items mapeados:', itemsMapped);
+    const itemsMapped = alumnos.map((alumno: any) => ({
+      id_alumno_curso: alumno.id, // No existe en backend, usar id
+      id_alumno: alumno.id,
+      id_curso: cursoId,
+      nombre: alumno.nombre,
+      apellido: alumno.apellido,
+      numero_matricula: alumno.numero_matricula || `MAT-${alumno.id}`,
+      estado: alumno.estadoActual || 'ACTIVO',
+      promedio_notas: alumno.notaPromedio,
+      anio_academico: anioAcademico,
+    }));
 
     return { items: itemsMapped };
   },
@@ -178,18 +165,11 @@ const promocionesService = {
 
   // Finalizar estudios de un alumno
   async finalizarAlumno(data: FinalizarAlumnoDto) {
-    console.log('🌐 promocionesService.finalizarAlumno - Iniciando');
-    console.log('🌐 URL:', '/promociones/finalizar-alumno');
-    console.log('🌐 Datos enviados:', data);
-
     try {
       const response = await api.post('/promociones/finalizar-alumno', data);
-      console.log('🌐 Respuesta recibida:', response.data);
       return response.data;
     } catch (error: any) {
-      console.error('🌐 Error en finalizarAlumno:', error);
-      console.error('🌐 Error response:', error.response);
-      console.error('🌐 Error data:', error.response?.data);
+      console.error('Error en finalizarAlumno:', error);
       throw error;
     }
   },
