@@ -20,16 +20,21 @@ export interface NotaMensual {
   id_nota_mensual?: number;
   id_alumno: number;
   id_asignatura: number;
-  mes: number;
-  trimestre: number;
-  anio_academico: string;
+  mes_numerico?: number; // Mes como número (1-12)
+  mes_nombre?: string; // Mes como texto ("Enero", "Febrero", etc.)
+  mes?: number | string; // Compatibilidad con ambos formatos
+  trimestre?: number;
+  anio?: number; // Año numérico (2025)
+  anio_academico?: string; // Año como string "2025"
   actividades: ActividadDetalleResponse[];
   examen_mensual?: number | null;
+  examen_parcial?: number | null;
   promedio_puro_actividades?: number;
   promedio_70_actividades?: number;
   promedio_30_examen?: number;
   nota_mensual?: number;
   porcentaje_aporte_trimestre?: number;
+  porcentaje_aporte?: number; // Alias alternativo
   aporte_al_trimestre?: number;
   fecha_registro?: string;
 }
@@ -71,25 +76,6 @@ export interface CreateNotaSimplificadaDto {
 
 const base = '/sistema-evaluacion';
 
-// Función auxiliar para convertir mes numérico a nombre
-const convertirMesANombre = (mes: number): string => {
-  const meses = [
-    'Enero',
-    'Febrero',
-    'Marzo',
-    'Abril',
-    'Mayo',
-    'Junio',
-    'Julio',
-    'Agosto',
-    'Septiembre',
-    'Octubre',
-    'Noviembre',
-    'Diciembre',
-  ];
-  return meses[mes - 1];
-};
-
 export const notasService = {
   /**
    * Crear o actualizar una nota mensual
@@ -127,6 +113,11 @@ export const notasService = {
   /**
    * Consultar notas mensuales con filtros
    * Usa el endpoint GET /sistema-evaluacion/notas/simplificadas con query params
+   * 
+   * Ejemplos de uso:
+   * - Un alumno, una asignatura, un mes: { id_alumno: 1, id_asignatura: 1, mes: 11, anio: 2025 }
+   * - Un alumno, una asignatura, todos los meses: { id_alumno: 1, id_asignatura: 1, anio: 2025 }
+   * - Todos los alumnos, una asignatura, un mes: { id_asignatura: 1, mes: 11, anio: 2025 }
    */
   async consultarNotasSimplificadas(params: {
     id_alumno?: number;
@@ -134,21 +125,19 @@ export const notasService = {
     mes?: number; // 1-12
     anio?: number; // 2025
   }): Promise<NotaMensualResponse[]> {
-    if (!params.id_alumno || !params.id_asignatura) {
-      throw new Error('id_alumno e id_asignatura son requeridos');
+    // Validar que al menos id_asignatura esté presente
+    if (!params.id_asignatura) {
+      throw new Error('id_asignatura es requerido');
     }
 
-    // Convertir parámetros al formato del backend
-    const mesNombre = params.mes ? convertirMesANombre(params.mes) : undefined;
-
     const queryParams: any = {
-      id_alumno: params.id_alumno,
       id_asignatura: params.id_asignatura,
     };
 
-    // Importante: NO enviar "trimestre" aquí.
-    // El backend puede responder 404 si no existe información para un trimestre específico (p.ej. trimestre=4),
-    // mientras que sin ese filtro devuelve todas las notas del año, que luego filtramos por mes.
+    // Agregar parámetros opcionales
+    if (params.id_alumno !== undefined) {
+      queryParams.id_alumno = params.id_alumno;
+    }
     if (params.anio !== undefined) {
       queryParams.anio = params.anio;
     }
@@ -169,11 +158,6 @@ export const notasService = {
         return [];
       }
       throw err; // otros códigos se propagan
-    }
-
-    // Filtrar por mes específico si se proporciona (por si el backend devuelve más de lo esperado)
-    if (mesNombre && notas.length > 0) {
-      notas = notas.filter((nota: any) => nota.mes === mesNombre);
     }
 
     return notas;

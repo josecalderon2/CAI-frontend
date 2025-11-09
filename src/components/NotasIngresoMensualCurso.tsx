@@ -302,28 +302,28 @@ export default function NotasIngresoMensualCurso() {
     const anio = new Date().getFullYear();
     const nuevos: RowNotas[] = [...rowsBase];
 
-    // limitar concurrencia
-    const chunkSize = 8;
-    for (let i = 0; i < nuevos.length; i += chunkSize) {
-      const chunk = nuevos.slice(i, i + chunkSize);
-      await Promise.all(
-        chunk.map(async (row) => {
-          try {
-            const nota = await notasService.obtenerNotaSimplificadaPorId(
-              row.alumno.id_alumno,
-              idAsignatura,
-              mesNum,
-              anio
-            );
-            if (nota) {
-              aplicarNotaEnRow(row, nota);
-            }
-          } catch {
-            // ignorar
-          }
-        })
-      );
-      setRows([...nuevos]); // refrescar por bloques
+    try {
+      // Cargar todas las notas del mes en una sola petición (optimizado)
+      const todasLasNotas = await notasService.consultarNotasSimplificadas({
+        id_asignatura: idAsignatura,
+        mes: mesNum,
+        anio: anio,
+      });
+
+      // Mapear las notas a las filas correspondientes
+      nuevos.forEach((row) => {
+        const notaAlumno = todasLasNotas.find(
+          (n) => n.id_alumno === row.alumno.id_alumno
+        );
+        if (notaAlumno) {
+          aplicarNotaEnRow(row, notaAlumno);
+        }
+      });
+
+      setRows([...nuevos]);
+    } catch (error) {
+      console.error('Error al cargar notas existentes:', error);
+      // No mostrar error al usuario, simplemente dejar los campos vacíos
     }
   };
 
@@ -332,11 +332,23 @@ export default function NotasIngresoMensualCurso() {
     const nuevosValores = { ...row.valores };
     columnas.forEach((c) => {
       if (c.key.startsWith('examen_')) return;
-      const a = nota.actividades?.find(
-        (x) =>
-          x.id_tipo_actividad === c.id_tipo_actividad &&
-          x.numero_actividad === c.numero_actividad
-      );
+
+      // Buscar la actividad correspondiente
+      // Para actividades únicas (sin numero_actividad), comparar solo el tipo
+      // Para actividades múltiples (con numero_actividad), comparar tipo y número
+      const a = nota.actividades?.find((x) => {
+        if (c.numero_actividad === undefined) {
+          // Actividad única: solo comparar id_tipo_actividad
+          return x.id_tipo_actividad === c.id_tipo_actividad;
+        } else {
+          // Actividad múltiple: comparar id_tipo_actividad y numero_actividad
+          return (
+            x.id_tipo_actividad === c.id_tipo_actividad &&
+            x.numero_actividad === c.numero_actividad
+          );
+        }
+      });
+
       nuevosValores[c.key] = a?.nota != null ? a.nota.toString() : '';
     });
     row.valores = nuevosValores;
