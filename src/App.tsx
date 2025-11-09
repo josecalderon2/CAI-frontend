@@ -29,7 +29,7 @@ import { PerfilModule } from './components/PerfilModule';
 import { AsistenciaModuleNew } from './components/AsistenciaModuleNew';
 import { ConductaModule } from './components/ConductaModule';
 import { ReportesModule } from './components/ReportesModule';
-import NotasModule from './components/NotasModule';
+import NotasModule from './components/NotasModuleNew';
 
 // ================= Helpers de auth =================
 function getUser() {

@@ -191,4 +191,22 @@ export const cursosService = {
       rut: string;
     }>;
   },
+
+  // Obtener nivel educativo de un curso
+  async getNivelEducativoCurso(cursoId: number): Promise<{
+    id_curso: number;
+    nombre_curso: string;
+    id_grado_academico: number;
+    nombre_grado: string;
+    nivel_educativo: 'BASICA' | 'BACHILLERATO';
+  }> {
+    const res = await api.get(`${base}/${cursoId}/nivel-educativo`);
+    return res.data as {
+      id_curso: number;
+      nombre_curso: string;
+      id_grado_academico: number;
+      nombre_grado: string;
+      nivel_educativo: 'BASICA' | 'BACHILLERATO';
+    };
+  },
 };
