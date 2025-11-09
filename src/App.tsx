@@ -29,7 +29,7 @@ import { PerfilModule } from './components/PerfilModule';
 import { AsistenciaModuleNew } from './components/AsistenciaModuleNew';
 import { ConductaModule } from './components/ConductaModule';
 import { ReportesModule } from './components/ReportesModule';
-import NotasModule from './components/NotasModuleNew';
+import NotasModule from './components/NotasIngresoMensualCurso';
 
 // ================= Helpers de auth =================
 function getUser() {
@@ -392,7 +392,7 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
-        
+
         <Route
           path="/notas"
           element={
