@@ -78,8 +78,23 @@ const base = '/sistema-evaluacion';
 
 export const notasService = {
   /**
-   * Crear o actualizar una nota mensual
-   * Usa el endpoint POST /sistema-evaluacion/notas/simplificadas
+   * ✅ MÉTODO RECOMENDADO PARA FRONTEND: Crear o actualizar una nota mensual
+   *
+   * Este método usa POST con lógica UPSERT en el backend:
+   * - Si la nota NO existe: la crea
+   * - Si la nota existe: la actualiza
+   *
+   * Ventajas:
+   * - Un solo endpoint para crear y actualizar
+   * - El frontend no necesita verificar si existe la nota
+   * - Menos propenso a errores
+   * - Idempotente (llamar múltiples veces produce el mismo resultado)
+   * - Mejor UX (el usuario solo "guarda")
+   *
+   * Usa el endpoint: POST /sistema-evaluacion/notas/simplificadas
+   *
+   * @param dto - Datos de la nota a crear/actualizar
+   * @returns La nota mensual con todos los cálculos realizados por el backend
    */
   async crearNotaSimplificada(
     dto: CreateNotaSimplificadaDto

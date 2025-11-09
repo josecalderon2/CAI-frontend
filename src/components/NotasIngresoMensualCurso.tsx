@@ -60,10 +60,13 @@ type RowNotas = {
     porcentaje_aporte?: number;
     aporte_al_trimestre?: number;
   };
+  // identificador para saber si existe en BD
+  id_nota_mensual?: number;
   // estados de guardado por fila
   saving?: boolean;
   savedAt?: number;
   error?: string | null;
+  isUpdate?: boolean; // indica si la última operación fue actualización
 };
 
 const nombresMeses = [
@@ -363,6 +366,9 @@ export default function NotasIngresoMensualCurso() {
         ? String((nota as any).examen_parcial)
         : row.examen_parcial;
 
+    // Guardar el ID de la nota (para identificar si existe en BD)
+    row.id_nota_mensual = nota.id_nota_mensual;
+
     // Mapear todos los cálculos disponibles
     row.calculos = {
       promedio_puro_actividades: nota.promedio_puro_actividades,
@@ -432,17 +438,29 @@ export default function NotasIngresoMensualCurso() {
     return { ok: true, payload: dto };
   };
 
+  /**
+   * Guarda o actualiza las notas de un alumno usando POST con upsert.
+   * El backend determina automáticamente si debe crear o actualizar.
+   *
+   * @param rowIndex - Índice de la fila en el arreglo de rows
+   */
   const guardarFila = async (rowIndex: number) => {
+    const row = rows[rowIndex];
+    const wasExisting = Boolean(row.id_nota_mensual);
+
     setRows((prev) => {
       const copy = [...prev];
       copy[rowIndex] = { ...copy[rowIndex], saving: true, error: null };
       return copy;
     });
+
     try {
-      const row = rows[rowIndex];
       const { ok, payload, error: e } = buildDto(row);
       if (!ok) throw new Error(e);
+
+      // POST con upsert: el backend decide si crea o actualiza
       const res = await notasService.crearNotaSimplificada(payload!);
+
       // aplicar resultados
       setRows((prev) => {
         const copy = [...prev];
@@ -450,6 +468,8 @@ export default function NotasIngresoMensualCurso() {
         aplicarNotaEnRow(r, res);
         r.saving = false;
         r.savedAt = Date.now();
+        r.isUpdate = wasExisting; // indicar si fue actualización
+        r.error = null;
         copy[rowIndex] = r;
         return copy;
       });
@@ -756,6 +776,11 @@ export default function NotasIngresoMensualCurso() {
                             onClick={() => guardarFila(idx)}
                             disabled={row.saving}
                             className="flex items-center gap-1"
+                            title={
+                              row.id_nota_mensual
+                                ? 'Actualizar nota existente'
+                                : 'Crear nueva nota'
+                            }
                           >
                             {row.saving ? (
                               <Loader2 className="h-4 w-4 animate-spin" />
@@ -765,7 +790,12 @@ export default function NotasIngresoMensualCurso() {
                             {row.saving ? 'Guardando...' : 'Guardar'}
                           </Button>
                           {row.savedAt && !row.saving && !row.error && (
-                            <Check className="h-4 w-4 text-green-600" />
+                            <div className="flex items-center gap-1">
+                              <Check className="h-4 w-4 text-green-600" />
+                              <span className="text-xs text-green-600">
+                                {row.isUpdate ? 'Actualizado' : 'Creado'}
+                              </span>
+                            </div>
                           )}
                           {row.error && (
                             <span className="text-red-600 text-xs">
