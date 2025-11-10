@@ -74,6 +74,26 @@ export interface CreateNotaSimplificadaDto {
   examen_parcial?: number;
 }
 
+// ============================================
+// NUEVO DTO PARA SISTEMA BASICA 2025
+// ============================================
+
+/**
+ * DTO para guardar una nota individual de BASICA 2025
+ * Se llama una vez por cada actividad/examen
+ */
+export interface GuardarNotaBasicaDto {
+  id_asignatura: number;
+  id_alumno: number;
+  tipo_actividad: string; // Nombre exacto del componente (ej: "Tareas (Mensual)")
+  id_tipo_actividad?: number; // ID del tipo de actividad (opcional, se puede inferir del nombre)
+  nota: number; // 0-10
+  mes: number; // 1-12
+  anio: number; // 2025
+  periodo: number; // 1, 2, 3 (trimestre)
+  numero_actividad?: number; // Número de la actividad (para tareas múltiples)
+}
+
 const base = '/sistema-evaluacion';
 
 export const notasService = {
@@ -233,9 +253,114 @@ export const notasService = {
     });
     return res.data as CatalogoTipoActividadResponse[];
   },
+
+  // ============================================
+  // MÉTODOS PARA NUEVO SISTEMA BASICA 2025
+  // ============================================
+
+  /**
+   * ✅ GUARDAR NOTA INDIVIDUAL (BASICA 2025)
+   *
+   * Se debe llamar UNA VEZ por cada actividad/examen
+   * Ejemplo: Si el alumno tiene 5 tareas, llamar 5 veces con diferentes notas
+   *
+   * POST /sistema-evaluacion/notas/simplificadas
+   */
+  async guardarNotaBasica2025(dto: GuardarNotaBasicaDto): Promise<any> {
+    // Construir el payload en el formato que el backend espera
+    const payload: any = {
+      id_alumno: dto.id_alumno,
+      id_asignatura: dto.id_asignatura,
+      mes_numerico: dto.mes,
+      anio: dto.anio,
+      actividades: [
+        {
+          id_tipo_actividad: dto.id_tipo_actividad || 1, // TODO: Obtener del backend
+          numero_actividad: dto.numero_actividad || null,
+          nota: dto.nota,
+        },
+      ],
+    };
+
+    const res = await api.post(`${base}/notas/simplificadas`, payload);
+    return res.data;
+  },
+
+  /**
+   * CONSULTAR NOTAS GUARDADAS (BASICA 2025)
+   *
+   * Obtiene todas las notas guardadas para un alumno en un mes específico
+   * GET /sistema-evaluacion/notas/simplificadas?alumno_id=X&mes=Y&anio=Z
+   */
+  async consultarNotasBasica2025(params: {
+    alumno_id: number;
+    mes: number; // 1-12
+    anio: number; // 2025
+  }): Promise<NotaBasica2025Response[]> {
+    const res = await api.get(`${base}/notas/simplificadas`, {
+      params,
+    });
+    return res.data as NotaBasica2025Response[];
+  },
+
+  /**
+   * VER CONSOLIDADO MENSUAL (Todas las asignaturas de un alumno)
+   *
+   * GET /sistema-evaluacion/consolidado-mensual-alumno/:alumno_id?mes=X&anio=Y
+   */
+  async obtenerConsolidadoMensualAlumno(
+    alumno_id: number,
+    mes: number,
+    anio: number
+  ): Promise<ConsolidadoMensualResponse> {
+    const res = await api.get(
+      `${base}/consolidado-mensual-alumno/${alumno_id}`,
+      {
+        params: { mes, anio },
+      }
+    );
+    return res.data as ConsolidadoMensualResponse;
+  },
+
+  /**
+   * ACTUALIZAR NOTA EXISTENTE
+   *
+   * PATCH /sistema-evaluacion/notas/simplificadas/:id
+   */
+  async actualizarNotaBasica2025(id_nota: number, nota: number): Promise<any> {
+    const res = await api.patch(`${base}/notas/simplificadas/${id_nota}`, {
+      nota,
+    });
+    return res.data;
+  },
 };
 
-// Interfaces para el formato de evaluación
+// ============================================
+// INTERFACES PARA NUEVO SISTEMA BASICA 2025
+// ============================================
+
+export interface ComponenteEvaluacionBasica {
+  id?: number; // ID del tipo de actividad (opcional, viene del backend)
+  nombre: string;
+  porcentaje: number;
+  tipo: 'ACTIVIDAD' | 'EXAMEN';
+  periodo: 'MENSUAL' | 'TRIMESTRAL';
+}
+
+export interface FormatoEvaluacionBasicaResponse {
+  nivel: 'BASICA';
+  asignatura: {
+    id: number;
+    nombre: string;
+    curso: string;
+  };
+  componentes: ComponenteEvaluacionBasica[];
+}
+
+// ============================================
+// INTERFACES PARA SISTEMA BACHILLERATO
+// ============================================
+
 export interface TipoActividad {
   id_tipo_actividad: number;
   nombre: string;
@@ -249,20 +374,35 @@ export interface ComponenteEvaluacion {
   actividades: TipoActividad[];
 }
 
+// ============================================
+// INTERFACE UNIFICADA (SOPORTA AMBOS SISTEMAS)
+// ============================================
+
 export interface FormatoEvaluacionResponse {
   nivel: 'BASICA' | 'BACHILLERATO';
-  id_asignatura: number;
-  nombre_asignatura: string;
-  id_sistema_evaluacion: number;
-  nombre_sistema: string;
 
-  // Para BASICA
+  // Datos de la asignatura
+  asignatura?: {
+    id: number;
+    nombre: string;
+    curso: string;
+  };
+  // Backward compatibility
+  id_asignatura?: number;
+  nombre_asignatura?: string;
+  id_sistema_evaluacion?: number;
+  nombre_sistema?: string;
+
+  // Para BASICA 2025 (NUEVO)
+  componentes?: ComponenteEvaluacionBasica[];
+
+  // Para BASICA (ANTIGUO - deprecated)
   actividades?: TipoActividad[];
   porcentaje_actividades?: number; // 70%
   porcentaje_examen?: number; // 30%
 
   // Para BACHILLERATO
-  componentes?: ComponenteEvaluacion[];
+  componentes_bachillerato?: ComponenteEvaluacion[];
   incluye_examen_parcial?: boolean;
   incluye_examen_periodo?: boolean;
 }
@@ -278,4 +418,44 @@ export interface CatalogoTipoActividadResponse {
   nivel_educativo: 'BASICA' | 'BACHILLERATO';
   permite_multiples_instancias: boolean;
   descripcion?: string;
+}
+
+// ============================================
+// INTERFACES PARA RESPUESTAS BASICA 2025
+// ============================================
+
+export interface NotaBasica2025Response {
+  id_nota: number;
+  asignatura_id: number;
+  alumno_id: number;
+  tipo_actividad: string;
+  notas: number[]; // Array de notas guardadas
+  promedio: number;
+  mes: number;
+  anio: number;
+  periodo: number;
+}
+
+export interface ComponenteMensualConsolidado {
+  promedio: number;
+  aporte: number;
+}
+
+export interface ConsolidadoMensualAsignatura {
+  asignatura_id: number;
+  nombre: string;
+  componentes_mensuales: {
+    tareas?: ComponenteMensualConsolidado;
+    revision?: ComponenteMensualConsolidado;
+    laboratorio?: ComponenteMensualConsolidado;
+    subtotal_mensual: number;
+  };
+  nota_mensual: number;
+}
+
+export interface ConsolidadoMensualResponse {
+  alumno_id: number;
+  mes: number;
+  anio: number;
+  asignaturas: ConsolidadoMensualAsignatura[];
 }
