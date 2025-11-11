@@ -28,6 +28,7 @@ import { AsignacionesModule } from './components/AsignacionesModule';
 import { PerfilModule } from './components/PerfilModule';
 import { AsistenciaModuleNew } from './components/AsistenciaModuleNew';
 import { ConductaModule } from './components/ConductaModule';
+import { ConsultarEvaluacionesModule } from './components/ConsultarEvaluacionesModule';
 import { ReportesModule } from './components/ReportesModule';
 
 // ================= Helpers de auth =================
@@ -363,6 +364,15 @@ function AppRoutes() {
                 user={getUser()}
                 readOnly={getUser()?.role === 'P.A'}
               />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/consultar-evaluaciones"
+          element={
+            <ProtectedRoute>
+              <ConsultarEvaluacionesModule />
             </ProtectedRoute>
           }
         />
