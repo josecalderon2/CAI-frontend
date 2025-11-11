@@ -19,7 +19,6 @@ import {
   Calendar,
   Users,
   FileText,
-  Loader2,
 } from 'lucide-react';
 
 interface Alumno {
@@ -47,7 +46,7 @@ interface NotaFormulario {
   examen_mensual: string;
 }
 
-const NotasModuleNew: React.FC = () => {
+const NotasModule: React.FC = () => {
   // Estados principales
   const [cursos, setCursos] = useState<Curso[]>([]);
   const [cursoSeleccionado, setCursoSeleccionado] = useState<number | null>(null);
@@ -126,7 +125,7 @@ const NotasModuleNew: React.FC = () => {
       limpiarFormulario();
       setNotaActual(null);
     }
-  }, [alumnoSeleccionado, asignaturaSeleccionada, mesActual]);
+  }, [alumnoSeleccionado, asignaturaSeleccionada, mesActual, formatoEvaluacion]);
 
   const cargarCursos = async () => {
     try {
@@ -170,51 +169,6 @@ const NotasModuleNew: React.FC = () => {
     }
   };
 
-  const cargarFormatoEvaluacion = async (idAsignatura: number) => {
-    try {
-      setLoading(true);
-      setError(null);
-      const formato = await notasService.obtenerFormatoEvaluacion(idAsignatura);
-      setFormatoEvaluacion(formato);
-      
-      // Inicializar actividades según el formato
-      if (formato.nivel === 'BASICA') {
-        const actividadesIniciales: ActividadFormulario[] = formato.actividades.map((act: any) => ({
-          id_tipo_actividad: act.id_tipo_actividad,
-          nombre: act.nombre,
-          numero_actividad: act.numero_actividad,
-          nota: '',
-        }));
-        setNotas({
-          actividades: actividadesIniciales,
-          examen_mensual: '',
-        });
-      } else {
-        // Para bachillerato, cargar las categorías
-        const actividadesIniciales: ActividadFormulario[] = [];
-        formato.componentes.forEach((comp: any) => {
-          comp.actividades.forEach((act: any) => {
-            actividadesIniciales.push({
-              id_tipo_actividad: act.id_tipo_actividad,
-              nombre: act.nombre,
-              numero_actividad: act.numero_actividad,
-              nota: '',
-            });
-          });
-        });
-        setNotas({
-          actividades: actividadesIniciales,
-          examen_mensual: '',
-        });
-      }
-    } catch (err: any) {
-      setError(err.message || 'Error al cargar el formato de evaluación');
-      console.error('Error cargando formato:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const cargarNotasExistentes = async () => {
     if (!alumnoSeleccionado || !asignaturaSeleccionada) return;
 
@@ -222,7 +176,7 @@ const NotasModuleNew: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      const notasData = await notasService.consultarNotasSimplificadas({
+      const notasData = await notasService.getNotasMensuales({
         id_alumno: alumnoSeleccionado,
         id_asignatura: asignaturaSeleccionada,
         mes: mesActual,
@@ -232,21 +186,11 @@ const NotasModuleNew: React.FC = () => {
       if (notasData && notasData.length > 0) {
         const nota = notasData[0];
         setNotaActual(nota);
-        
-        // Actualizar formulario con las notas existentes
-        const actividadesActualizadas = notas.actividades.map(act => {
-          const actividadExistente = nota.actividades?.find(
-            a => a.id_tipo_actividad === act.id_tipo_actividad && 
-                 a.numero_actividad === act.numero_actividad
-          );
-          return {
-            ...act,
-            nota: actividadExistente?.nota?.toString() || '',
-          };
-        });
-        
         setNotas({
-          actividades: actividadesActualizadas,
+          tarea_1: nota.tarea_1?.toString() || '',
+          revision_libros_cuadernos: nota.revision_libros_cuadernos?.toString() || '',
+          tarea_2: nota.tarea_2?.toString() || '',
+          laboratorio_escrito: nota.laboratorio_escrito?.toString() || '',
           examen_mensual: nota.examen_mensual?.toString() || '',
         });
         setModoEdicion(false);
@@ -256,6 +200,8 @@ const NotasModuleNew: React.FC = () => {
         setModoEdicion(false);
       }
     } catch (err: any) {
+      // Si el error es 404 o no hay notas, simplemente limpiamos el formulario
+      // No mostramos error porque es normal que no haya notas aún
       console.log('No hay notas previas para este alumno y asignatura');
       limpiarFormulario();
       setNotaActual(null);
@@ -265,72 +211,45 @@ const NotasModuleNew: React.FC = () => {
   };
 
   const limpiarFormulario = () => {
-    setNotas(prev => ({
-      actividades: prev.actividades.map(act => ({ ...act, nota: '' })),
+    setNotas({
+      tarea_1: '',
+      revision_libros_cuadernos: '',
+      tarea_2: '',
+      laboratorio_escrito: '',
       examen_mensual: '',
-    }));
+    });
   };
 
-  const handleActividadChange = (index: number, valor: string) => {
+  const handleNotaChange = (campo: keyof NotaFormulario, valor: string) => {
+    // Validar que sea un número válido entre 0 y 10
     if (valor === '') {
-      setNotas(prev => ({
-        ...prev,
-        actividades: prev.actividades.map((act, i) => 
-          i === index ? { ...act, nota: '' } : act
-        )
-      }));
+      setNotas(prev => ({ ...prev, [campo]: '' }));
       return;
     }
 
     const numero = parseFloat(valor);
     if (!isNaN(numero) && numero >= 0 && numero <= 10) {
-      setNotas(prev => ({
-        ...prev,
-        actividades: prev.actividades.map((act, i) => 
-          i === index ? { ...act, nota: valor } : act
-        )
-      }));
-    }
-  };
-
-  const handleExamenChange = (valor: string) => {
-    if (valor === '') {
-      setNotas(prev => ({ ...prev, examen_mensual: '' }));
-      return;
-    }
-
-    const numero = parseFloat(valor);
-    if (!isNaN(numero) && numero >= 0 && numero <= 10) {
-      setNotas(prev => ({ ...prev, examen_mensual: valor }));
+      setNotas(prev => ({ ...prev, [campo]: valor }));
     }
   };
 
   const validarNotas = (): boolean => {
     // Al menos una nota debe estar ingresada
-    const hayActividades = notas.actividades.some(act => act.nota !== '');
-    const hayExamen = notas.examen_mensual !== '';
+    const hayAlgunaNota = Object.values(notas).some(nota => nota !== '');
     
-    if (!hayActividades && !hayExamen) {
+    if (!hayAlgunaNota) {
       setError('Debe ingresar al menos una nota');
       return false;
     }
 
     // Validar que las notas ingresadas estén en el rango correcto
-    for (const actividad of notas.actividades) {
-      if (actividad.nota !== '') {
-        const numero = parseFloat(actividad.nota);
+    for (const [campo, valor] of Object.entries(notas)) {
+      if (valor !== '') {
+        const numero = parseFloat(valor);
         if (isNaN(numero) || numero < 0 || numero > 10) {
-          setError(`La nota de ${actividad.nombre} debe estar entre 0 y 10`);
+          setError(`La nota de ${campo.replace(/_/g, ' ')} debe estar entre 0 y 10`);
           return false;
         }
-      }
-    }
-
-    if (notas.examen_mensual !== '') {
-      const numero = parseFloat(notas.examen_mensual);
-      if (isNaN(numero) || numero < 0 || numero > 10) {
-        setError('El examen mensual debe estar entre 0 y 10');
-        return false;
       }
     }
 
@@ -352,52 +271,53 @@ const NotasModuleNew: React.FC = () => {
       setError(null);
       setSuccess(null);
 
-      // Convertir actividades al formato requerido
-      const actividadesDto: ActividadEvaluacion[] = notas.actividades
-        .filter(act => act.nota !== '')
-        .map(act => ({
-          id_tipo_actividad: act.id_tipo_actividad,
-          numero_actividad: act.numero_actividad,
-          nota: parseFloat(act.nota),
-        }));
+      // Convertir las notas a números, solo incluir las que tienen valores
+      const notasDto: any = {};
+      if (notas.tarea_1) notasDto.tarea_1 = parseFloat(notas.tarea_1);
+      if (notas.revision_libros_cuadernos) notasDto.revision_libros_cuadernos = parseFloat(notas.revision_libros_cuadernos);
+      if (notas.tarea_2) notasDto.tarea_2 = parseFloat(notas.tarea_2);
+      if (notas.laboratorio_escrito) notasDto.laboratorio_escrito = parseFloat(notas.laboratorio_escrito);
+      if (notas.examen_mensual) notasDto.examen_mensual = parseFloat(notas.examen_mensual);
 
-      const createDto: CreateNotaSimplificadaDto = {
-        id_alumno: alumnoSeleccionado,
-        id_asignatura: asignaturaSeleccionada,
-        mes: mesActual,
-        anio: anioActual,
-        actividades: actividadesDto,
-        examen_mensual: notas.examen_mensual ? parseFloat(notas.examen_mensual) : undefined,
-      };
+      let resultado: NotaMensualResponse;
 
-      console.log('Datos a enviar:', createDto);
-      const resultado = await notasService.crearNotaSimplificada(createDto);
-      setSuccess(notaActual ? 'Notas actualizadas correctamente' : 'Notas guardadas correctamente');
+      if (notaActual?.id_nota_mensual) {
+        // Actualizar nota existente
+        resultado = await notasService.updateNotaMensual(notaActual.id_nota_mensual, notasDto);
+        setSuccess('Notas actualizadas correctamente');
+      } else {
+        // Crear nueva nota
+        const createDto: CreateNotaMensualDto = {
+          id_alumno: alumnoSeleccionado,
+          id_asignatura: asignaturaSeleccionada,
+          mes: mesActual,
+          anio: anioActual,
+          ...notasDto,
+        };
+        
+        console.log('Datos a enviar:', createDto);
+        resultado = await notasService.createNotaMensual(createDto);
+        setSuccess('Notas guardadas correctamente');
+      }
 
       setNotaActual(resultado);
       setModoEdicion(false);
 
       // Actualizar el formulario con los datos guardados
-      const actividadesActualizadas = notas.actividades.map(act => {
-        const actividadGuardada = resultado.actividades?.find(
-          a => a.id_tipo_actividad === act.id_tipo_actividad && 
-               a.numero_actividad === act.numero_actividad
-        );
-        return {
-          ...act,
-          nota: actividadGuardada?.nota?.toString() || act.nota,
-        };
-      });
-      
       setNotas({
-        actividades: actividadesActualizadas,
+        tarea_1: resultado.tarea_1?.toString() || '',
+        revision_libros_cuadernos: resultado.revision_libros_cuadernos?.toString() || '',
+        tarea_2: resultado.tarea_2?.toString() || '',
+        laboratorio_escrito: resultado.laboratorio_escrito?.toString() || '',
         examen_mensual: resultado.examen_mensual?.toString() || '',
       });
 
     } catch (err: any) {
+      // Extraer mensaje de error más detallado del backend
       let errorMessage = 'Error al guardar las notas';
       
       if (err.response?.data?.message) {
+        // Si el backend envía un mensaje específico
         if (Array.isArray(err.response.data.message)) {
           errorMessage = err.response.data.message.join(', ');
         } else {
@@ -424,19 +344,11 @@ const NotasModuleNew: React.FC = () => {
   const cancelarEdicion = () => {
     if (notaActual) {
       // Restaurar los valores originales
-      const actividadesOriginales = notas.actividades.map(act => {
-        const actividadOriginal = notaActual.actividades?.find(
-          a => a.id_tipo_actividad === act.id_tipo_actividad && 
-               a.numero_actividad === act.numero_actividad
-        );
-        return {
-          ...act,
-          nota: actividadOriginal?.nota?.toString() || '',
-        };
-      });
-      
       setNotas({
-        actividades: actividadesOriginales,
+        tarea_1: notaActual.tarea_1?.toString() || '',
+        revision_libros_cuadernos: notaActual.revision_libros_cuadernos?.toString() || '',
+        tarea_2: notaActual.tarea_2?.toString() || '',
+        laboratorio_escrito: notaActual.laboratorio_escrito?.toString() || '',
         examen_mensual: notaActual.examen_mensual?.toString() || '',
       });
     } else {
@@ -613,17 +525,12 @@ const NotasModuleNew: React.FC = () => {
       )}
 
       {/* Formulario de Notas */}
-      {alumnoSeleccionado && asignaturaSeleccionada && formatoEvaluacion && (
+      {alumnoSeleccionado && asignaturaSeleccionada && (
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <Calendar className="h-5 w-5" />
               Evaluaciones - {nombresMeses[mesActual - 1]} {anioActual}
-              {formatoEvaluacion && (
-                <span className="text-sm font-normal text-gray-500">
-                  ({formatoEvaluacion.nivel === 'BASICA' ? 'Educación Básica' : 'Bachillerato'})
-                </span>
-              )}
             </CardTitle>
             {notaActual && !modoEdicion && (
               <Button
@@ -638,26 +545,77 @@ const NotasModuleNew: React.FC = () => {
             )}
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Actividades */}
-            {notas.actividades.map((actividad, index) => (
-              <div key={`${actividad.id_tipo_actividad}-${actividad.numero_actividad || 0}`}>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {actividad.nombre}
-                  {actividad.numero_actividad && ` ${actividad.numero_actividad}`}
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="10"
-                  value={actividad.nota}
-                  onChange={(e) => handleActividadChange(index, e.target.value)}
-                  disabled={!puedeEditar || loading}
-                  className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                  placeholder="0.00 - 10.00"
-                />
-              </div>
-            ))}
+            {/* Tarea 1 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Tarea 1
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                max="10"
+                value={notas.tarea_1}
+                onChange={(e) => handleNotaChange('tarea_1', e.target.value)}
+                disabled={!puedeEditar || loading}
+                className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                placeholder="0.00 - 10.00"
+              />
+            </div>
+
+            {/* Revisión de Libros y Cuadernos */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Revisión de Libros y Cuadernos
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                max="10"
+                value={notas.revision_libros_cuadernos}
+                onChange={(e) => handleNotaChange('revision_libros_cuadernos', e.target.value)}
+                disabled={!puedeEditar || loading}
+                className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                placeholder="0.00 - 10.00"
+              />
+            </div>
+
+            {/* Tarea 2 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Tarea 2
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                max="10"
+                value={notas.tarea_2}
+                onChange={(e) => handleNotaChange('tarea_2', e.target.value)}
+                disabled={!puedeEditar || loading}
+                className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                placeholder="0.00 - 10.00"
+              />
+            </div>
+
+            {/* Laboratorio Escrito */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Laboratorio Escrito
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                max="10"
+                value={notas.laboratorio_escrito}
+                onChange={(e) => handleNotaChange('laboratorio_escrito', e.target.value)}
+                disabled={!puedeEditar || loading}
+                className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                placeholder="0.00 - 10.00"
+              />
+            </div>
 
             {/* Examen Mensual */}
             <div>
@@ -670,38 +628,22 @@ const NotasModuleNew: React.FC = () => {
                 min="0"
                 max="10"
                 value={notas.examen_mensual}
-                onChange={(e) => handleExamenChange(e.target.value)}
+                onChange={(e) => handleNotaChange('examen_mensual', e.target.value)}
                 disabled={!puedeEditar || loading}
                 className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                 placeholder="0.00 - 10.00"
               />
             </div>
 
-            {/* Promedio y Detalles */}
-            {notaActual && (
-              <div className="pt-4 border-t space-y-2">
-                {notaActual.promedio_puro_actividades !== undefined && (
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-gray-600">Promedio Actividades:</span>
-                    <span className="font-semibold">{notaActual.promedio_puro_actividades?.toFixed(2)}</span>
-                  </div>
-                )}
-                {notaActual.nota_mensual !== undefined && (
-                  <div className="flex justify-between items-center pt-2 border-t">
-                    <span className="text-lg font-semibold text-gray-700">Nota Mensual:</span>
-                    <span className="text-2xl font-bold text-blue-600">
-                      {notaActual.nota_mensual?.toFixed(2)}
-                    </span>
-                  </div>
-                )}
-                {notaActual.aporte_al_trimestre !== undefined && (
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-gray-600">Aporte al Trimestre:</span>
-                    <span className="font-semibold text-blue-600">
-                      {notaActual.aporte_al_trimestre?.toFixed(2)}
-                    </span>
-                  </div>
-                )}
+            {/* Promedio */}
+            {notaActual?.promedio !== undefined && notaActual?.promedio !== null && (
+              <div className="pt-4 border-t">
+                <div className="flex justify-between items-center">
+                  <span className="text-lg font-semibold text-gray-700">Promedio:</span>
+                  <span className="text-2xl font-bold text-blue-600">
+                    {notaActual.promedio.toFixed(2)}
+                  </span>
+                </div>
               </div>
             )}
 
@@ -714,17 +656,8 @@ const NotasModuleNew: React.FC = () => {
                     disabled={loading}
                     className="flex items-center gap-2 flex-1"
                   >
-                    {loading ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Guardando...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="h-4 w-4" />
-                        Guardar Notas
-                      </>
-                    )}
+                    <Save className="h-4 w-4" />
+                    {loading ? 'Guardando...' : 'Guardar Notas'}
                   </Button>
                   {modoEdicion && (
                     <Button
@@ -752,18 +685,8 @@ const NotasModuleNew: React.FC = () => {
           </CardContent>
         </Card>
       )}
-
-      {/* Loading spinner cuando se carga formato */}
-      {loading && asignaturaSeleccionada && !formatoEvaluacion && (
-        <Card>
-          <CardContent className="py-12 text-center text-gray-500">
-            <Loader2 className="h-12 w-12 mx-auto mb-4 text-blue-600 animate-spin" />
-            <p>Cargando formato de evaluación...</p>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 };
 
-export default NotasModuleNew;
+export default NotasModule;

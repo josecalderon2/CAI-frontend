@@ -74,20 +74,18 @@ const base = '/sistema-evaluacion';
 // Función auxiliar para convertir mes numérico a nombre
 const convertirMesANombre = (mes: number): string => {
   const meses = [
-    'Enero',
-    'Febrero',
-    'Marzo',
-    'Abril',
-    'Mayo',
-    'Junio',
-    'Julio',
-    'Agosto',
-    'Septiembre',
-    'Octubre',
-    'Noviembre',
-    'Diciembre',
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
   ];
   return meses[mes - 1];
+};
+
+// Función auxiliar para calcular trimestre según mes
+const calcularTrimestre = (mes: number): number => {
+  if (mes >= 2 && mes <= 4) return 1;  // Febrero, Marzo, Abril
+  if (mes >= 5 && mes <= 7) return 2;  // Mayo, Junio, Julio
+  if (mes >= 8 && mes <= 10) return 3; // Agosto, Septiembre, Octubre
+  return 4; // Noviembre (solo para Bachillerato)
 };
 
 export const notasService = {
@@ -95,28 +93,27 @@ export const notasService = {
    * Crear o actualizar una nota mensual
    * Usa el endpoint POST /sistema-evaluacion/nota-mensual
    */
-  async crearNotaSimplificada(
-    dto: CreateNotaSimplificadaDto
-  ): Promise<NotaMensualResponse> {
-    // Usar directamente el formato simplificado que el backend acepta
-    const payload = {
+  async crearNotaSimplificada(dto: CreateNotaSimplificadaDto): Promise<NotaMensualResponse> {
+    // Convertir a formato que espera el backend
+    const payload: CalcularNotaMensualDto = {
       id_alumno: dto.id_alumno,
       id_asignatura: dto.id_asignatura,
-      mes: dto.mes, // numérico 1-12
-      anio: dto.anio, // numérico 2025
+      mes: convertirMesANombre(dto.mes),
+      trimestre: calcularTrimestre(dto.mes),
+      anio_academico: dto.anio.toString(),
       actividades: dto.actividades,
       examen_mensual: dto.examen_mensual,
       examen_parcial: dto.examen_parcial,
     };
-
-    // Endpoint simplificado
-    const res = await api.post(`${base}/notas/simplificadas`, payload);
+    
+    // Endpoint correcto según el controlador
+    const res = await api.post(`${base}/nota-mensual`, payload);
     return res.data as NotaMensualResponse;
   },
 
   /**
    * Consultar notas mensuales con filtros
-   * Usa el endpoint GET /sistema-evaluacion/notas/simplificadas con query params
+   * Usa el endpoint GET /sistema-evaluacion/notas-mensuales/:id_alumno/:id_asignatura
    */
   async consultarNotasSimplificadas(params: {
     id_alumno?: number;
@@ -130,42 +127,24 @@ export const notasService = {
 
     // Convertir parámetros al formato del backend
     const mesNombre = params.mes ? convertirMesANombre(params.mes) : undefined;
-
-    const queryParams: any = {
-      id_alumno: params.id_alumno,
-      id_asignatura: params.id_asignatura,
-    };
-
-    // Importante: NO enviar "trimestre" aquí.
-    // El backend puede responder 404 si no existe información para un trimestre específico (p.ej. trimestre=4),
-    // mientras que sin ese filtro devuelve todas las notas del año, que luego filtramos por mes.
-    if (params.anio !== undefined) {
-      queryParams.anio = params.anio;
-    }
-    if (params.mes !== undefined) {
-      queryParams.mes = params.mes;
-    }
-
-    // Endpoint con query params según backend consultarNotasSimplificadas
-    let notas: NotaMensualResponse[] = [];
-    try {
-      const res = await api.get(`${base}/notas/simplificadas`, {
-        params: queryParams,
-      });
-      notas = res.data as NotaMensualResponse[];
-    } catch (err: any) {
-      // Si el backend responde 404 (no hay notas para esa combinación), tratamos como lista vacía
-      if (err?.response?.status === 404) {
-        return [];
-      }
-      throw err; // otros códigos se propagan
-    }
-
-    // Filtrar por mes específico si se proporciona (por si el backend devuelve más de lo esperado)
+    const trimestre = params.mes ? calcularTrimestre(params.mes) : undefined;
+    
+    const queryParams: any = {};
+    if (trimestre) queryParams.trimestre = trimestre;
+    if (params.anio !== undefined) queryParams.anio_academico = params.anio.toString();
+    
+    // Endpoint correcto según el controlador: GET notas-mensuales/:id_alumno/:id_asignatura
+    const res = await api.get(
+      `${base}/notas-mensuales/${params.id_alumno}/${params.id_asignatura}`,
+      { params: queryParams }
+    );
+    
+    // Filtrar por mes específico si se proporciona
+    let notas = res.data as NotaMensualResponse[];
     if (mesNombre && notas.length > 0) {
       notas = notas.filter((nota: any) => nota.mes === mesNombre);
     }
-
+    
     return notas;
   },
 
@@ -190,81 +169,17 @@ export const notasService = {
   /**
    * Obtener el formato de evaluación para una asignatura
    * Esto indica qué actividades se deben mostrar en el formulario
-   * Retorna diferentes formatos según el nivel educativo (BASICA o BACHILLERATO)
    */
-  async obtenerFormatoEvaluacion(
-    id_asignatura: number
-  ): Promise<FormatoEvaluacionResponse> {
-    const res = await api.get(
-      `${base}/formato-evaluacion/asignatura/${id_asignatura}`
-    );
-    return res.data as FormatoEvaluacionResponse;
+  async obtenerFormatoEvaluacion(id_asignatura: number): Promise<any> {
+    const res = await api.get(`${base}/formato-evaluacion/asignatura/${id_asignatura}`);
+    return res.data;
   },
 
   /**
    * Obtener tipos de actividad por asignatura
    */
   async obtenerTiposActividad(id_asignatura: number): Promise<any[]> {
-    const res = await api.get(
-      `${base}/tipos-actividad/asignatura/${id_asignatura}`
-    );
+    const res = await api.get(`${base}/tipos-actividad/asignatura/${id_asignatura}`);
     return res.data as any[];
   },
-
-  /**
-   * Obtener catálogo de tipos de actividad por asignatura
-   * Endpoint recomendado para mostrar las evaluaciones disponibles
-   * GET /sistema-evaluacion/catalogo/tipos-actividad/asignatura/:id_asignatura
-   */
-  async obtenerCatalogoTiposActividad(
-    id_asignatura: number
-  ): Promise<CatalogoTipoActividadResponse[]> {
-    const res = await api.get(
-      `${base}/catalogo/tipos-actividad/asignatura/${id_asignatura}`
-    );
-    return res.data as CatalogoTipoActividadResponse[];
-  },
 };
-
-// Interfaces para el formato de evaluación
-export interface TipoActividad {
-  id_tipo_actividad: number;
-  nombre: string;
-  numero_actividad?: number;
-  porcentaje?: number;
-}
-
-export interface ComponenteEvaluacion {
-  nombre: string;
-  porcentaje: number;
-  actividades: TipoActividad[];
-}
-
-export interface FormatoEvaluacionResponse {
-  nivel: 'BASICA' | 'BACHILLERATO';
-  id_asignatura: number;
-  nombre_asignatura: string;
-  id_sistema_evaluacion: number;
-  nombre_sistema: string;
-
-  // Para BASICA
-  actividades?: TipoActividad[];
-  porcentaje_actividades?: number; // 70%
-  porcentaje_examen?: number; // 30%
-
-  // Para BACHILLERATO
-  componentes?: ComponenteEvaluacion[];
-  incluye_examen_parcial?: boolean;
-  incluye_examen_periodo?: boolean;
-}
-
-// Interfaces para el catálogo de tipos de actividad
-export interface CatalogoTipoActividadResponse {
-  id_tipo_actividad: number;
-  nombre: string;
-  descripcion?: string;
-  categoria?: string;
-  numero_actividad?: number;
-  porcentaje?: number;
-  nivel_educativo?: 'BASICA' | 'BACHILLERATO';
-}
