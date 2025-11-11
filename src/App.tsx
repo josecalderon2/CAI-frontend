@@ -29,6 +29,7 @@ import { PerfilModule } from './components/PerfilModule';
 import { AsistenciaModuleNew } from './components/AsistenciaModuleNew';
 import { ConductaModule } from './components/ConductaModule';
 import { ConsultarEvaluacionesModule } from './components/ConsultarEvaluacionesModule';
+import { EvaluacionesModule } from './components/EvaluacionesModule';
 import { ReportesModule } from './components/ReportesModule';
 
 // ================= Helpers de auth =================
@@ -373,6 +374,15 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <ConsultarEvaluacionesModule />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/evaluaciones"
+          element={
+            <ProtectedRoute>
+              <EvaluacionesModule />
             </ProtectedRoute>
           }
         />
