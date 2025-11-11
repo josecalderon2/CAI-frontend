@@ -29,7 +29,6 @@ import { PerfilModule } from './components/PerfilModule';
 import { AsistenciaModuleNew } from './components/AsistenciaModuleNew';
 import { ConductaModule } from './components/ConductaModule';
 import { ReportesModule } from './components/ReportesModule';
-import NotasModule from './components/NotasModule';
 
 // ================= Helpers de auth =================
 function getUser() {
@@ -389,15 +388,6 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <ReportesModuleWrapper />
-            </ProtectedRoute>
-          }
-        />
-        
-        <Route
-          path="/notas"
-          element={
-            <ProtectedRoute>
-              <NotasModule />
             </ProtectedRoute>
           }
         />
