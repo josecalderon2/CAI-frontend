@@ -93,31 +93,21 @@ const convertirMesANombre = (mes: number): string => {
 export const notasService = {
   /**
    * Crear o actualizar una nota mensual
-   * Usa el endpoint POST /sistema-evaluacion/notas/simplificadas
+   * Usa el endpoint POST /sistema-evaluacion/nota-mensual
    */
   async crearNotaSimplificada(
     dto: CreateNotaSimplificadaDto
   ): Promise<NotaMensualResponse> {
-    // Formato exacto que el backend espera
-    const payload: any = {
+    // Usar directamente el formato simplificado que el backend acepta
+    const payload = {
       id_alumno: dto.id_alumno,
       id_asignatura: dto.id_asignatura,
-      mes_numerico: dto.mes, // numérico 1-12
+      mes: dto.mes, // numérico 1-12
       anio: dto.anio, // numérico 2025
-      actividades: dto.actividades.map((act) => ({
-        id_tipo_actividad: act.id_tipo_actividad,
-        numero_actividad: act.numero_actividad ?? null,
-        nota: act.nota,
-      })),
+      actividades: dto.actividades,
+      examen_mensual: dto.examen_mensual,
+      examen_parcial: dto.examen_parcial,
     };
-
-    // Agregar exámenes solo si tienen valor
-    if (dto.examen_mensual !== undefined) {
-      payload.examen_mensual = dto.examen_mensual;
-    }
-    if (dto.examen_parcial !== undefined) {
-      payload.examen_parcial = dto.examen_parcial;
-    }
 
     // Endpoint simplificado
     const res = await api.post(`${base}/notas/simplificadas`, payload);
@@ -224,14 +214,14 @@ export const notasService = {
   /**
    * Obtener catálogo de tipos de actividad por asignatura
    * Endpoint recomendado para mostrar las evaluaciones disponibles
-   * GET /sistema-evaluacion/catalogo/tipos-actividad?id_asignatura=X
+   * GET /sistema-evaluacion/catalogo/tipos-actividad/asignatura/:id_asignatura
    */
   async obtenerCatalogoTiposActividad(
     id_asignatura: number
   ): Promise<CatalogoTipoActividadResponse[]> {
-    const res = await api.get(`${base}/catalogo/tipos-actividad`, {
-      params: { id_asignatura },
-    });
+    const res = await api.get(
+      `${base}/catalogo/tipos-actividad/asignatura/${id_asignatura}`
+    );
     return res.data as CatalogoTipoActividadResponse[];
   },
 };
@@ -272,11 +262,9 @@ export interface FormatoEvaluacionResponse {
 export interface CatalogoTipoActividadResponse {
   id_tipo_actividad: number;
   nombre: string;
-  categoria?: string | null;
-  peso?: number | null;
-  activo: boolean;
-  orden: number;
-  nivel_educativo: 'BASICA' | 'BACHILLERATO';
-  permite_multiples_instancias: boolean;
   descripcion?: string;
+  categoria?: string;
+  numero_actividad?: number;
+  porcentaje?: number;
+  nivel_educativo?: 'BASICA' | 'BACHILLERATO';
 }

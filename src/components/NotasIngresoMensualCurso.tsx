@@ -215,34 +215,14 @@ export default function NotasIngresoMensualCurso() {
         );
 
         // construir columnas dinámicas desde el catálogo
-        const cols: CeldaNota[] = [];
-
-        catalogo.forEach((act) => {
-          if (act.permite_multiples_instancias) {
-            // Para actividades que permiten múltiples instancias (ej: Tarea)
-            // Crear dos instancias por defecto: Tarea 1, Tarea 2
-            cols.push({
-              key: `${act.id_tipo_actividad}-1`,
-              id_tipo_actividad: act.id_tipo_actividad,
-              numero_actividad: 1,
-              label: `${act.nombre} 1`,
-            });
-            cols.push({
-              key: `${act.id_tipo_actividad}-2`,
-              id_tipo_actividad: act.id_tipo_actividad,
-              numero_actividad: 2,
-              label: `${act.nombre} 2`,
-            });
-          } else {
-            // Actividades únicas (ej: Revisión de libros y cuadernos)
-            cols.push({
-              key: `${act.id_tipo_actividad}-0`,
-              id_tipo_actividad: act.id_tipo_actividad,
-              numero_actividad: undefined,
-              label: act.nombre,
-            });
-          }
-        });
+        const cols: CeldaNota[] = catalogo.map((act) => ({
+          key: `${act.id_tipo_actividad}-${act.numero_actividad || 0}`,
+          id_tipo_actividad: act.id_tipo_actividad,
+          numero_actividad: act.numero_actividad,
+          label: act.numero_actividad
+            ? `${act.nombre} ${act.numero_actividad}`
+            : act.nombre,
+        }));
 
         // Agregar columnas de exámenes según el nivel
         if (f.nivel === 'BASICA') {
