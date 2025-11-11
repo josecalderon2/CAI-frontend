@@ -4,12 +4,7 @@ import { Button } from './ui/button';
 import { Alert, AlertDescription } from './ui/alert';
 import { cursosService, type Curso } from '../api/services/cursosService';
 import asignacionesService from '../api/services/asignacionesService';
-import { 
-  notasService, 
-  type NotaMensualResponse, 
-  type CreateNotaSimplificadaDto,
-  type ActividadEvaluacion 
-} from '../api/services/notasService';
+import { notasService, type NotaMensualResponse, type CreateNotaMensualDto } from '../api/services/notasService';
 import {
   BookOpen,
   Save,
@@ -34,15 +29,11 @@ interface Asignatura {
   orden_en_reporte?: string | null;
 }
 
-interface ActividadFormulario {
-  id_tipo_actividad: number;
-  nombre: string;
-  numero_actividad?: number;
-  nota: string;
-}
-
 interface NotaFormulario {
-  actividades: ActividadFormulario[];
+  tarea_1: string;
+  revision_libros_cuadernos: string;
+  tarea_2: string;
+  laboratorio_escrito: string;
   examen_mensual: string;
 }
 
@@ -56,12 +47,12 @@ const NotasModule: React.FC = () => {
   const [asignaturaSeleccionada, setAsignaturaSeleccionada] = useState<number | null>(null);
   const [mesSeleccionado, setMesSeleccionado] = useState<number | null>(null);
   
-  // Estados de formato de evaluación
-  const [formatoEvaluacion, setFormatoEvaluacion] = useState<any>(null);
-  
   // Estados de formulario
   const [notas, setNotas] = useState<NotaFormulario>({
-    actividades: [],
+    tarea_1: '',
+    revision_libros_cuadernos: '',
+    tarea_2: '',
+    laboratorio_escrito: '',
     examen_mensual: '',
   });
   
@@ -107,25 +98,15 @@ const NotasModule: React.FC = () => {
     }
   }, [cursoSeleccionado]);
 
-  // Cargar formato de evaluación cuando se selecciona asignatura
-  useEffect(() => {
-    if (asignaturaSeleccionada) {
-      cargarFormatoEvaluacion(asignaturaSeleccionada);
-    } else {
-      setFormatoEvaluacion(null);
-      limpiarFormulario();
-    }
-  }, [asignaturaSeleccionada]);
-
   // Cargar notas cuando se selecciona alumno, asignatura o mes
   useEffect(() => {
-    if (alumnoSeleccionado && asignaturaSeleccionada && formatoEvaluacion) {
+    if (alumnoSeleccionado && asignaturaSeleccionada) {
       cargarNotasExistentes();
-    } else if (formatoEvaluacion && !alumnoSeleccionado) {
+    } else {
       limpiarFormulario();
       setNotaActual(null);
     }
-  }, [alumnoSeleccionado, asignaturaSeleccionada, mesActual, formatoEvaluacion]);
+  }, [alumnoSeleccionado, asignaturaSeleccionada, mesActual]);
 
   const cargarCursos = async () => {
     try {
