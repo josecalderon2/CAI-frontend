@@ -54,10 +54,7 @@ type RowNotas = {
   // datos calculados devueltos por backend
   calculos?: {
     promedio_puro_actividades?: number;
-    promedio_70_actividades?: number;
-    promedio_30_examen?: number;
     nota_mensual?: number;
-    porcentaje_aporte?: number;
     aporte_al_trimestre?: number;
   };
   // estados de guardado por fila
@@ -362,14 +359,9 @@ export default function NotasIngresoMensualCurso() {
       (nota as any).examen_parcial != null
         ? String((nota as any).examen_parcial)
         : row.examen_parcial;
-
-    // Mapear todos los cálculos disponibles
     row.calculos = {
       promedio_puro_actividades: nota.promedio_puro_actividades,
-      promedio_70_actividades: nota.promedio_70_actividades,
-      promedio_30_examen: nota.promedio_30_examen,
       nota_mensual: nota.nota_mensual,
-      porcentaje_aporte: nota.porcentaje_aporte,
       aporte_al_trimestre: nota.aporte_al_trimestre,
     };
   };
@@ -592,32 +584,6 @@ export default function NotasIngresoMensualCurso() {
         </Card>
       </div>
 
-      {/* Leyenda de cálculos */}
-      {cursoId && asignaturaId && formato && formato.nivel === 'BASICA' && (
-        <Card className="bg-blue-50 border-blue-200">
-          <CardContent className="py-3">
-            <div className="flex items-center gap-4 text-sm flex-wrap">
-              <span className="font-semibold text-blue-900">📊 Cálculos:</span>
-              <span className="text-blue-700">
-                <strong>Prom. Puro:</strong> Promedio simple de actividades
-              </span>
-              <span className="text-blue-700">
-                <strong>Prom. 70%:</strong> Prom. Puro × 0.70
-              </span>
-              <span className="text-blue-700">
-                <strong>Exam. 30%:</strong> Examen × 0.30
-              </span>
-              <span className="text-green-700">
-                <strong>Nota Mensual:</strong> Prom. 70% + Exam. 30%
-              </span>
-              <span className="text-yellow-700">
-                <strong>Aporte Trim.:</strong> Nota × % del mes
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Tabla de ingreso */}
       {cursoId && asignaturaId && formato && (
         <Card>
@@ -663,26 +629,12 @@ export default function NotasIngresoMensualCurso() {
                         {col.label}
                       </th>
                     ))}
-                    {/* Columnas de cálculos */}
-                    <th className="px-3 py-2 text-left whitespace-nowrap bg-blue-50">
-                      Prom. Puro
+                    <th className="px-3 py-2 text-left whitespace-nowrap">
+                      Promedio
                     </th>
                     {formato.nivel === 'BASICA' && (
-                      <>
-                        <th className="px-3 py-2 text-left whitespace-nowrap bg-blue-50">
-                          Prom. 70%
-                        </th>
-                        <th className="px-3 py-2 text-left whitespace-nowrap bg-blue-50">
-                          Exam. 30%
-                        </th>
-                      </>
-                    )}
-                    <th className="px-3 py-2 text-left whitespace-nowrap bg-green-50">
-                      Nota Mensual
-                    </th>
-                    {formato.nivel === 'BASICA' && (
-                      <th className="px-3 py-2 text-left whitespace-nowrap bg-yellow-50">
-                        Aporte Trim.
+                      <th className="px-3 py-2 text-left whitespace-nowrap">
+                        Aporte Trimestre
                       </th>
                     )}
                     <th className="px-3 py-2"></th>
@@ -716,33 +668,13 @@ export default function NotasIngresoMensualCurso() {
                           />
                         </td>
                       ))}
-                      {/* Celdas de cálculos */}
-                      <td className="px-3 py-2 text-sm bg-blue-50">
-                        {row.calculos?.promedio_puro_actividades != null
-                          ? row.calculos.promedio_puro_actividades.toFixed(2)
-                          : '-'}
-                      </td>
-                      {formato.nivel === 'BASICA' && (
-                        <>
-                          <td className="px-3 py-2 text-sm bg-blue-50">
-                            {row.calculos?.promedio_70_actividades != null
-                              ? row.calculos.promedio_70_actividades.toFixed(2)
-                              : '-'}
-                          </td>
-                          <td className="px-3 py-2 text-sm bg-blue-50">
-                            {row.calculos?.promedio_30_examen != null
-                              ? row.calculos.promedio_30_examen.toFixed(2)
-                              : '-'}
-                          </td>
-                        </>
-                      )}
-                      <td className="px-3 py-2 font-semibold text-green-700 bg-green-50">
+                      <td className="px-3 py-2 font-semibold text-blue-600">
                         {row.calculos?.nota_mensual != null
                           ? row.calculos.nota_mensual.toFixed(2)
                           : '-'}
                       </td>
                       {formato.nivel === 'BASICA' && (
-                        <td className="px-3 py-2 text-sm font-semibold text-yellow-700 bg-yellow-50">
+                        <td className="px-3 py-2">
                           {row.calculos?.aporte_al_trimestre != null
                             ? row.calculos.aporte_al_trimestre.toFixed(2)
                             : '-'}
@@ -779,11 +711,7 @@ export default function NotasIngresoMensualCurso() {
                   {rows.length === 0 && (
                     <tr>
                       <td
-                        colSpan={
-                          columnas.length +
-                          (formato.nivel === 'BASICA' ? 6 : 3) +
-                          2
-                        }
+                        colSpan={5 + columnas.length}
                         className="px-3 py-6 text-center text-gray-500"
                       >
                         No hay alumnos para este curso

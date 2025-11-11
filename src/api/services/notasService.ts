@@ -113,7 +113,7 @@ export const notasService = {
   /**
    * Consultar notas mensuales con filtros
    * Usa el endpoint GET /sistema-evaluacion/notas/simplificadas con query params
-   *
+   * 
    * Ejemplos de uso:
    * - Un alumno, una asignatura, un mes: { id_alumno: 1, id_asignatura: 1, mes: 11, anio: 2025 }
    * - Un alumno, una asignatura, todos los meses: { id_alumno: 1, id_asignatura: 1, anio: 2025 }
