@@ -141,12 +141,12 @@ export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
       stats: 'Gestionar conductas',
     },
     {
-      title: 'Tipos de Evaluación',
-      description: 'Gestionar tipos de evaluaciones para orientadores',
+      title: 'Consultar Evaluaciones',
+      description: 'Ver evaluaciones, calificaciones y promedios de cursos',
       icon: Calendar,
       color: 'bg-teal-600',
-      action: () => onNavigate('tipos-evaluacion'),
-      stats: 'Configurar evaluaciones',
+      action: () => onNavigate('consultar-evaluaciones'),
+      stats: 'Solo lectura',
     },
     {
       title: 'Reportes',

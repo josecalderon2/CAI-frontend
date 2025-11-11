@@ -33,6 +33,10 @@ import {
 type VistaActual = 'seleccion' | 'evaluaciones' | 'detalle' | 'promedios';
 
 export function ConsultarEvaluacionesModule() {
+  // Verificar permisos
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const tienePermiso = user.role === 'Admin' || user.role === 'P.A';
+
   // Estados principales
   const [loading, setLoading] = useState(false);
   const [vistaActual, setVistaActual] = useState<VistaActual>('seleccion');
@@ -56,7 +60,11 @@ export function ConsultarEvaluacionesModule() {
     useState<PromediosCursoResponse | null>(null);
 
   useEffect(() => {
-    cargarCursos();
+    if (!tienePermiso) {
+      toast.error('No tienes permisos para acceder a este módulo. Tu rol actual es: ' + user.role);
+    } else {
+      cargarCursos();
+    }
   }, []);
 
   const cargarCursos = async () => {
@@ -140,6 +148,32 @@ export function ConsultarEvaluacionesModule() {
     setDatosPromedios(null);
   };
 
+  // Verificar permisos
+  if (!tienePermiso) {
+    return (
+      <div className="p-6">
+        <Card className="border-red-500">
+          <CardContent className="p-6">
+            <div className="text-center">
+              <h2 className="text-2xl font-bold text-red-600 mb-4">
+                Acceso Denegado
+              </h2>
+              <p className="text-gray-700 mb-2">
+                No tienes permisos para acceder a este módulo.
+              </p>
+              <p className="text-gray-600">
+                Solo usuarios con rol <strong>Admin</strong> o <strong>Personal Administrativo</strong> pueden consultar evaluaciones.
+              </p>
+              <p className="text-sm text-gray-500 mt-4">
+                Tu rol actual: <strong>{user.role || 'No definido'}</strong>
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (loading && vistaActual === 'seleccion') {
     return (
       <div className="p-6">
@@ -160,7 +194,8 @@ export function ConsultarEvaluacionesModule() {
             Consultar Evaluaciones y Notas
           </h1>
           <p className="text-gray-600 mt-1">
-            Consulta evaluaciones, calificaciones y promedios de cualquier curso
+            Consulta evaluaciones, calificaciones y promedios de cualquier
+            curso
           </p>
         </div>
 
@@ -193,8 +228,7 @@ export function ConsultarEvaluacionesModule() {
                         key={curso.id_curso}
                         value={curso.id_curso!.toString()}
                       >
-                        {curso.nombre}{' '}
-                        {curso.seccion ? `- ${curso.seccion}` : ''}
+                        {curso.nombre} {curso.seccion ? `- ${curso.seccion}` : ''}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -448,17 +482,12 @@ export function ConsultarEvaluacionesModule() {
                           const total = evaluacion.notas.length;
 
                           return (
-                            <tr
-                              key={evaluacion.id_evaluacion}
-                              className="border-b hover:bg-gray-50"
-                            >
+                            <tr key={evaluacion.id_evaluacion} className="border-b hover:bg-gray-50">
                               <td className="py-2 px-3 font-medium">
                                 {evaluacion.nombre}
                               </td>
                               <td className="py-2 px-3">
-                                <Badge variant="outline">
-                                  {evaluacion.tipo}
-                                </Badge>
+                                <Badge variant="outline">{evaluacion.tipo}</Badge>
                               </td>
                               <td className="text-center py-2 px-3">
                                 {evaluacion.periodo}
@@ -488,9 +517,7 @@ export function ConsultarEvaluacionesModule() {
                                   size="sm"
                                   variant="ghost"
                                   onClick={() =>
-                                    handleVerDetalleEvaluacion(
-                                      evaluacion.id_evaluacion
-                                    )
+                                    handleVerDetalleEvaluacion(evaluacion.id_evaluacion)
                                   }
                                   className="text-blue-600 hover:text-blue-700"
                                 >
@@ -532,8 +559,8 @@ export function ConsultarEvaluacionesModule() {
               {datosDetalle.evaluacion.nombre}
             </h1>
             <p className="text-gray-600 mt-1">
-              {datosDetalle.asignatura.nombre} | {datosDetalle.curso.nombre} -{' '}
-              {datosDetalle.curso.seccion}
+              {datosDetalle.asignatura.nombre} |{' '}
+              {datosDetalle.curso.nombre} - {datosDetalle.curso.seccion}
             </p>
           </div>
         </div>
@@ -678,9 +705,7 @@ export function ConsultarEvaluacionesModule() {
                       </td>
                       <td className="py-3 px-4">
                         {cal.fechaRegistro
-                          ? new Date(cal.fechaRegistro).toLocaleDateString(
-                              'es-SV'
-                            )
+                          ? new Date(cal.fechaRegistro).toLocaleDateString('es-SV')
                           : '-'}
                       </td>
                     </tr>
@@ -740,7 +765,9 @@ export function ConsultarEvaluacionesModule() {
           <Card className="border-l-4 border-l-green-500">
             <CardContent className="p-6">
               <div className="text-center">
-                <p className="text-3xl font-bold text-green-600">{aprobados}</p>
+                <p className="text-3xl font-bold text-green-600">
+                  {aprobados}
+                </p>
                 <p className="text-sm text-gray-600 mt-1">Aprobados</p>
               </div>
             </CardContent>
@@ -749,7 +776,9 @@ export function ConsultarEvaluacionesModule() {
           <Card className="border-l-4 border-l-red-500">
             <CardContent className="p-6">
               <div className="text-center">
-                <p className="text-3xl font-bold text-red-600">{reprobados}</p>
+                <p className="text-3xl font-bold text-red-600">
+                  {reprobados}
+                </p>
                 <p className="text-sm text-gray-600 mt-1">Reprobados</p>
               </div>
             </CardContent>

@@ -28,7 +28,7 @@ import { AsignacionesModule } from './components/AsignacionesModule';
 import { PerfilModule } from './components/PerfilModule';
 import { AsistenciaModuleNew } from './components/AsistenciaModuleNew';
 import { ConductaModule } from './components/ConductaModule';
-import { TiposEvaluacionModule } from './components/TiposEvaluacionModule';
+import { ConsultarEvaluacionesModule } from './components/ConsultarEvaluacionesModule';
 import { ReportesModule } from './components/ReportesModule';
 
 // ================= Helpers de auth =================
@@ -366,10 +366,10 @@ function AppRoutes() {
         />
 
         <Route
-          path="/tipos-evaluacion"
+          path="/consultar-evaluaciones"
           element={
             <ProtectedRoute>
-              <TiposEvaluacionModule />
+              <ConsultarEvaluacionesModule />
             </ProtectedRoute>
           }
         />

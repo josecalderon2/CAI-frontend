@@ -61,7 +61,7 @@ export function Header({
     { id: 'cursos', label: 'Cursos', icon: School },
     { id: 'asignaciones', label: 'Asignaciones', icon: ClipboardList },
     { id: 'conductas', label: 'Conductas', icon: UserCheck },
-    { id: 'tipos-evaluacion', label: 'Evaluaciones', icon: Calendar },
+    { id: 'consultar-evaluaciones', label: 'Consultar Evaluaciones', icon: Calendar },
     { id: 'reportes', label: 'Reportes', icon: FileText },
   ];
 
@@ -80,6 +80,7 @@ export function Header({
     { id: 'grados-academicos', label: 'Grados', icon: Award },
     { id: 'cursos', label: 'Cursos', icon: School },
     { id: 'asignaciones', label: 'Asignaciones', icon: ClipboardList },
+    { id: 'consultar-evaluaciones', label: 'Consultar Evaluaciones', icon: Calendar },
     { id: 'reportes', label: 'Reportes', icon: FileText },
   ];
 
@@ -109,8 +110,8 @@ export function Header({
         return 'Asistencia';
       case 'conductas':
         return 'Conductas';
-      case 'tipos-evaluacion':
-        return 'Tipos de Evaluación';
+      case 'consultar-evaluaciones':
+        return 'Consultar Evaluaciones';
       default:
         return 'Dashboard';
     }
@@ -247,6 +248,11 @@ export function Header({
               window.location.pathname === '/conductas'
             ) {
               isActive = true;
+            } else if (
+              item.id === 'consultar-evaluaciones' &&
+              window.location.pathname === '/consultar-evaluaciones'
+            ) {
+              isActive = true;
             } else {
               isActive = currentSection === item.id;
             }
@@ -295,6 +301,11 @@ export function Header({
               } else if (
                 item.id === 'conductas' &&
                 window.location.pathname === '/conductas'
+              ) {
+                isActive = true;
+              } else if (
+                item.id === 'consultar-evaluaciones' &&
+                window.location.pathname === '/consultar-evaluaciones'
               ) {
                 isActive = true;
               } else {
