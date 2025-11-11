@@ -141,6 +141,14 @@ export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
       stats: 'Gestionar catálogo',
     },
     {
+      title: 'Consultar Evaluaciones',
+      description: 'Ver evaluaciones, calificaciones y promedios de cursos',
+      icon: Calendar,
+      color: 'bg-teal-600',
+      action: () => onNavigate('consultar-evaluaciones'),
+      stats: 'Solo lectura',
+    },
+    {
       title: 'Reportes',
       description: 'Generar reportes académicos en PDF y Excel',
       icon: FileText,
