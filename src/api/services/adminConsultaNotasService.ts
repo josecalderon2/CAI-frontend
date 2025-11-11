@@ -148,10 +148,13 @@ export const adminConsultaNotasService = {
     } catch (error: any) {
       console.error('Error al obtener evaluaciones del curso:', error);
       if (error.response?.status === 403) {
-        throw new Error('No tienes permisos para acceder a esta información. Solo usuarios Admin y Personal Administrativo pueden consultar evaluaciones.');
+        throw new Error(
+          'No tienes permisos para acceder a esta información. Solo usuarios Admin y Personal Administrativo pueden consultar evaluaciones.'
+        );
       }
       throw new Error(
-        error.response?.data?.message || 'Error al cargar evaluaciones del curso'
+        error.response?.data?.message ||
+          'Error al cargar evaluaciones del curso'
       );
     }
   },
@@ -177,10 +180,13 @@ export const adminConsultaNotasService = {
     } catch (error: any) {
       console.error('Error al obtener calificaciones de la evaluación:', error);
       if (error.response?.status === 403) {
-        throw new Error('No tienes permisos para acceder a esta información. Solo usuarios Admin y Personal Administrativo pueden consultar evaluaciones.');
+        throw new Error(
+          'No tienes permisos para acceder a esta información. Solo usuarios Admin y Personal Administrativo pueden consultar evaluaciones.'
+        );
       }
       throw new Error(
-        error.response?.data?.message || 'Error al cargar calificaciones de la evaluación'
+        error.response?.data?.message ||
+          'Error al cargar calificaciones de la evaluación'
       );
     }
   },
@@ -206,7 +212,9 @@ export const adminConsultaNotasService = {
     } catch (error: any) {
       console.error('Error al obtener promedios del curso:', error);
       if (error.response?.status === 403) {
-        throw new Error('No tienes permisos para acceder a esta información. Solo usuarios Admin y Personal Administrativo pueden consultar evaluaciones.');
+        throw new Error(
+          'No tienes permisos para acceder a esta información. Solo usuarios Admin y Personal Administrativo pueden consultar evaluaciones.'
+        );
       }
       throw new Error(
         error.response?.data?.message || 'Error al cargar promedios del curso'

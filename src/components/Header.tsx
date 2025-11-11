@@ -61,7 +61,11 @@ export function Header({
     { id: 'cursos', label: 'Cursos', icon: School },
     { id: 'asignaciones', label: 'Asignaciones', icon: ClipboardList },
     { id: 'conductas', label: 'Conductas', icon: UserCheck },
-    { id: 'consultar-evaluaciones', label: 'Consultar Evaluaciones', icon: Calendar },
+    {
+      id: 'consultar-evaluaciones',
+      label: 'Consultar Evaluaciones',
+      icon: Calendar,
+    },
     { id: 'reportes', label: 'Reportes', icon: FileText },
   ];
 
@@ -80,7 +84,11 @@ export function Header({
     { id: 'grados-academicos', label: 'Grados', icon: Award },
     { id: 'cursos', label: 'Cursos', icon: School },
     { id: 'asignaciones', label: 'Asignaciones', icon: ClipboardList },
-    { id: 'consultar-evaluaciones', label: 'Consultar Evaluaciones', icon: Calendar },
+    {
+      id: 'consultar-evaluaciones',
+      label: 'Consultar Evaluaciones',
+      icon: Calendar,
+    },
     { id: 'reportes', label: 'Reportes', icon: FileText },
   ];
 
