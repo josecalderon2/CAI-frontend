@@ -1,37 +1,20 @@
 import { api } from '../axiosConfig';
 
-// Interfaces para actividades de evaluación
-export interface ActividadEvaluacion {
-  id_tipo_actividad: number;
-  numero_actividad?: number;
-  nota: number;
-}
-
-export interface ActividadDetalleResponse {
-  id_tipo_actividad: number;
-  tipo_actividad_nombre: string;
-  numero_actividad?: number;
-  nombre_completo: string;
-  nota: number;
-}
-
-// Interfaces para notas mensuales (SISTEMA NUEVO)
+// Interfaces para notas mensuales
 export interface NotaMensual {
   id_nota_mensual?: number;
   id_alumno: number;
   id_asignatura: number;
   mes: number;
-  trimestre: number;
-  anio_academico: string;
-  actividades: ActividadDetalleResponse[];
+  anio: number;
+  tarea_1?: number | null;
+  revision_libros_cuadernos?: number | null;
+  tarea_2?: number | null;
+  laboratorio_escrito?: number | null;
   examen_mensual?: number | null;
-  promedio_puro_actividades?: number;
-  promedio_70_actividades?: number;
-  promedio_30_examen?: number;
-  nota_mensual?: number;
-  porcentaje_aporte_trimestre?: number;
-  aporte_al_trimestre?: number;
-  fecha_registro?: string;
+  promedio?: number | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface NotaMensualResponse extends NotaMensual {
@@ -46,140 +29,67 @@ export interface NotaMensualResponse extends NotaMensual {
   };
 }
 
-// DTO para crear/actualizar notas con el NUEVO sistema de evaluación
-export interface CalcularNotaMensualDto {
+export interface CreateNotaMensualDto {
   id_alumno: number;
   id_asignatura: number;
-  mes: string; // "Febrero", "Marzo", etc.
-  trimestre: number; // 1, 2, 3
-  anio_academico: string; // "2025"
-  actividades: ActividadEvaluacion[];
-  examen_mensual?: number;
-  examen_parcial?: number; // Para bachillerato
+  mes: number;
+  anio: number;
+  tarea_1?: number | null;
+  revision_libros_cuadernos?: number | null;
+  tarea_2?: number | null;
+  laboratorio_escrito?: number | null;
+  examen_mensual?: number | null;
 }
 
-// DTO simplificado (usa mes numérico y año numérico)
-export interface CreateNotaSimplificadaDto {
-  id_alumno: number;
-  id_asignatura: number;
-  mes: number; // 1-12
-  anio: number; // 2025
-  actividades: ActividadEvaluacion[];
-  examen_mensual?: number;
-  examen_parcial?: number;
+export interface UpdateNotaMensualDto {
+  tarea_1?: number | null;
+  revision_libros_cuadernos?: number | null;
+  tarea_2?: number | null;
+  laboratorio_escrito?: number | null;
+  examen_mensual?: number | null;
 }
 
-const base = '/sistema-evaluacion';
-
-// Función auxiliar para convertir mes numérico a nombre
-const convertirMesANombre = (mes: number): string => {
-  const meses = [
-    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
-  ];
-  return meses[mes - 1];
-};
-
-// Función auxiliar para calcular trimestre según mes
-const calcularTrimestre = (mes: number): number => {
-  if (mes >= 2 && mes <= 4) return 1;  // Febrero, Marzo, Abril
-  if (mes >= 5 && mes <= 7) return 2;  // Mayo, Junio, Julio
-  if (mes >= 8 && mes <= 10) return 3; // Agosto, Septiembre, Octubre
-  return 4; // Noviembre (solo para Bachillerato)
-};
+const base = '/notas-mensuales';
 
 export const notasService = {
-  /**
-   * Crear o actualizar una nota mensual
-   * Usa el endpoint POST /sistema-evaluacion/nota-mensual
-   */
-  async crearNotaSimplificada(dto: CreateNotaSimplificadaDto): Promise<NotaMensualResponse> {
-    // Convertir a formato que espera el backend
-    const payload: CalcularNotaMensualDto = {
-      id_alumno: dto.id_alumno,
-      id_asignatura: dto.id_asignatura,
-      mes: convertirMesANombre(dto.mes),
-      trimestre: calcularTrimestre(dto.mes),
-      anio_academico: dto.anio.toString(),
-      actividades: dto.actividades,
-      examen_mensual: dto.examen_mensual,
-      examen_parcial: dto.examen_parcial,
-    };
-    
-    // Endpoint correcto según el controlador
-    const res = await api.post(`${base}/nota-mensual`, payload);
+  // Crear una nota mensual
+  async createNotaMensual(dto: CreateNotaMensualDto): Promise<NotaMensualResponse> {
+    const res = await api.post(base, dto);
     return res.data as NotaMensualResponse;
   },
 
-  /**
-   * Consultar notas mensuales con filtros
-   * Usa el endpoint GET /sistema-evaluacion/notas-mensuales/:id_alumno/:id_asignatura
-   */
-  async consultarNotasSimplificadas(params: {
+  // Actualizar una nota mensual existente
+  async updateNotaMensual(id: number, dto: UpdateNotaMensualDto): Promise<NotaMensualResponse> {
+    const res = await api.patch(`${base}/${id}`, dto);
+    return res.data as NotaMensualResponse;
+  },
+
+  // Obtener notas mensuales por alumno, asignatura, mes y año
+  async getNotasMensuales(params: {
     id_alumno?: number;
     id_asignatura?: number;
-    mes?: number; // 1-12
-    anio?: number; // 2025
+    mes?: number;
+    anio?: number;
   }): Promise<NotaMensualResponse[]> {
-    if (!params.id_alumno || !params.id_asignatura) {
-      throw new Error('id_alumno e id_asignatura son requeridos');
-    }
-
-    // Convertir parámetros al formato del backend
-    const mesNombre = params.mes ? convertirMesANombre(params.mes) : undefined;
-    const trimestre = params.mes ? calcularTrimestre(params.mes) : undefined;
+    // Filtrar parámetros undefined para evitar enviar valores vacíos
+    const filteredParams: Record<string, number> = {};
+    if (params.id_alumno !== undefined) filteredParams.id_alumno = params.id_alumno;
+    if (params.id_asignatura !== undefined) filteredParams.id_asignatura = params.id_asignatura;
+    if (params.mes !== undefined) filteredParams.mes = params.mes;
+    if (params.anio !== undefined) filteredParams.anio = params.anio;
     
-    const queryParams: any = {};
-    if (trimestre) queryParams.trimestre = trimestre;
-    if (params.anio !== undefined) queryParams.anio_academico = params.anio.toString();
-    
-    // Endpoint correcto según el controlador: GET notas-mensuales/:id_alumno/:id_asignatura
-    const res = await api.get(
-      `${base}/notas-mensuales/${params.id_alumno}/${params.id_asignatura}`,
-      { params: queryParams }
-    );
-    
-    // Filtrar por mes específico si se proporciona
-    let notas = res.data as NotaMensualResponse[];
-    if (mesNombre && notas.length > 0) {
-      notas = notas.filter((nota: any) => nota.mes === mesNombre);
-    }
-    
-    return notas;
+    const res = await api.get(base, { params: filteredParams });
+    return res.data as NotaMensualResponse[];
   },
 
-  /**
-   * Obtener una nota mensual específica por alumno, asignatura, mes y año
-   */
-  async obtenerNotaSimplificadaPorId(
-    id_alumno: number,
-    id_asignatura: number,
-    mes: number,
-    anio: number
-  ): Promise<NotaMensualResponse | null> {
-    const notas = await this.consultarNotasSimplificadas({
-      id_alumno,
-      id_asignatura,
-      mes,
-      anio,
-    });
-    return notas.length > 0 ? notas[0] : null;
+  // Obtener una nota mensual específica
+  async getNotaMensual(id: number): Promise<NotaMensualResponse> {
+    const res = await api.get(`${base}/${id}`);
+    return res.data as NotaMensualResponse;
   },
 
-  /**
-   * Obtener el formato de evaluación para una asignatura
-   * Esto indica qué actividades se deben mostrar en el formulario
-   */
-  async obtenerFormatoEvaluacion(id_asignatura: number): Promise<any> {
-    const res = await api.get(`${base}/formato-evaluacion/asignatura/${id_asignatura}`);
-    return res.data;
-  },
-
-  /**
-   * Obtener tipos de actividad por asignatura
-   */
-  async obtenerTiposActividad(id_asignatura: number): Promise<any[]> {
-    const res = await api.get(`${base}/tipos-actividad/asignatura/${id_asignatura}`);
-    return res.data as any[];
+  // Eliminar una nota mensual
+  async deleteNotaMensual(id: number): Promise<void> {
+    await api.delete(`${base}/${id}`);
   },
 };
