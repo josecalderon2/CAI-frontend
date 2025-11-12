@@ -1,13 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from './ui/table';
 import { Button } from './ui/button';
 import {
   Calendar,
@@ -17,7 +9,10 @@ import {
   Plus,
   Trash2,
   Award,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
+import { useState } from 'react';
 
 interface EvaluacionPorMes {
   mes: number;
@@ -55,7 +50,40 @@ export function GrupoTrimestreCard({
   onAddEvaluacion,
   getNombreMes,
 }: Props) {
-  const totalMensual = grupo.evaluacionesMensuales.length > 0 ? 35 : 0;
+  // Estado para controlar qué meses están expandidos
+  const [mesesExpandidos, setMesesExpandidos] = useState<Set<number>>(
+    new Set(grupo.evaluacionesMensuales.map((m) => m.mes))
+  );
+
+  // Función para toggle expandir/contraer un mes
+  const toggleMes = (mes: number) => {
+    setMesesExpandidos((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(mes)) {
+        newSet.delete(mes);
+      } else {
+        newSet.add(mes);
+      }
+      return newSet;
+    });
+  };
+
+  // Calcular el porcentaje real de las evaluaciones mensuales
+  // Los 3 meses juntos representan el 35% del trimestre
+  // Si hay 3 meses completos (cada uno al 100% interno) = 35% del trimestre
+  // Si hay 1 mes completo = 35/3 = 11.67% del trimestre
+  // Si hay 2 meses completos = 35*2/3 = 23.33% del trimestre
+
+  // Cada mes tiene 35% interno, pero representa 35/3 del trimestre cuando está completo
+  const porcentajePorMesCompleto = 35 / 3; // ~11.67%
+  const totalMensual = grupo.evaluacionesMensuales.reduce((sum, mes) => {
+    // mes.porcentajeTotal está en escala de 35% (100% interno del mes)
+    // Lo convertimos a la proporción del trimestre
+    const proporcionDelTrimestre =
+      (mes.porcentajeTotal / 35) * porcentajePorMesCompleto;
+    return sum + proporcionDelTrimestre;
+  }, 0);
+
   const totalGeneral = totalMensual + grupo.porcentajeTotalTrimestral;
 
   return (
@@ -177,208 +205,335 @@ export function GrupoTrimestreCard({
         {/* EVALUACIONES MENSUALES */}
         {grupo.evaluacionesMensuales.length > 0 && (
           <div className="border-b">
-            <div className="bg-purple-50 px-4 py-2 border-b">
+            <div className="bg-purple-50 px-6 py-3 border-b">
               <h4 className="font-semibold text-purple-900">
                 Evaluaciones Mensuales (35% del trimestre)
               </h4>
             </div>
 
-            {grupo.evaluacionesMensuales.map((mes) => (
-              <div key={mes.mes} className="border-b last:border-b-0">
-                <div className="bg-purple-25 px-4 py-2 flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <Calendar className="w-4 h-4 text-purple-600" />
-                    <span className="font-medium text-purple-900">
-                      {getNombreMes(mes.mes)}
-                    </span>
-                    <Badge variant="outline" className="text-xs">
-                      {mes.porcentajeTotal}% / 35%
-                    </Badge>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        onAddEvaluacion(
-                          grupo.asignatura.id_asignatura,
-                          grupo.trimestre,
-                          null,
-                          mes.mes
-                        )
-                      }
-                      className="text-xs h-7 border-purple-300 text-purple-700 hover:bg-purple-50 hover:border-purple-400 font-medium shadow-sm hover:shadow transition-all duration-200"
-                    >
-                      <Plus className="w-3.5 h-3.5 mr-1" />
-                      Agregar evaluación
-                    </Button>
-                    {!mes.estaCompleto && (
-                      <span className="text-xs text-orange-600">
-                        Falta {(35 - mes.porcentajeTotal).toFixed(1)}%
+            {grupo.evaluacionesMensuales.map((mes) => {
+              const estaExpandido = mesesExpandidos.has(mes.mes);
+              return (
+                <div key={mes.mes} className="border-b last:border-b-0">
+                  <div className="bg-purple-25 px-6 py-3 flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => toggleMes(mes.mes)}
+                        className="p-1 hover:bg-purple-100 rounded transition-colors"
+                        title={estaExpandido ? 'Contraer' : 'Expandir'}
+                      >
+                        {estaExpandido ? (
+                          <ChevronDown className="w-4 h-4 text-purple-600" />
+                        ) : (
+                          <ChevronRight className="w-4 h-4 text-purple-600" />
+                        )}
+                      </button>
+                      <Calendar className="w-4 h-4 text-purple-600" />
+                      <span className="font-medium text-purple-900">
+                        {getNombreMes(mes.mes)}
                       </span>
-                    )}
+                      <Badge variant="outline" className="text-xs">
+                        {mes.porcentajeTotal}% / 35%
+                      </Badge>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() =>
+                          onAddEvaluacion(
+                            grupo.asignatura.id_asignatura,
+                            grupo.trimestre,
+                            null,
+                            mes.mes
+                          )
+                        }
+                        style={{
+                          backgroundColor: '#f3e8ff',
+                          color: '#7c3aed',
+                          padding: '6px 12px',
+                          borderRadius: '6px',
+                          border: '1px solid #d8b4fe',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          fontSize: '13px',
+                          fontWeight: '600',
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                          whiteSpace: 'nowrap',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = '#e9d5ff';
+                          e.currentTarget.style.borderColor = '#c084fc';
+                          e.currentTarget.style.boxShadow =
+                            '0 2px 4px rgba(124,58,237,0.15)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = '#f3e8ff';
+                          e.currentTarget.style.borderColor = '#d8b4fe';
+                          e.currentTarget.style.boxShadow =
+                            '0 1px 2px rgba(0,0,0,0.05)';
+                        }}
+                      >
+                        <Plus
+                          style={{
+                            width: '14px',
+                            height: '14px',
+                            color: '#7c3aed',
+                          }}
+                        />
+                        <span style={{ color: '#7c3aed' }}>
+                          Evaluación mensual de {getNombreMes(mes.mes)}
+                        </span>
+                      </button>
+                      {!mes.estaCompleto && (
+                        <span className="text-xs text-orange-600 font-medium">
+                          Falta {(35 - mes.porcentajeTotal).toFixed(1)}%
+                        </span>
+                      )}
+                    </div>
                   </div>
+
+                  {/* Mostrar tabla solo si está expandido */}
+                  {estaExpandido && (
+                    <>
+                      <div className="px-6">
+                        <table className="w-full table-fixed border-collapse">
+                          <thead>
+                            <tr className="bg-gray-50 border-b">
+                              <th className="w-[30%] text-left py-3 px-4 text-sm font-medium text-gray-700">
+                                Nombre
+                              </th>
+                              <th className="w-[20%] text-left py-3 px-4 text-sm font-medium text-gray-700">
+                                Tipo
+                              </th>
+                              <th className="w-[20%] text-left py-3 px-4 text-sm font-medium text-gray-700">
+                                Porcentaje
+                              </th>
+                              <th className="w-[20%] text-left py-3 px-4 text-sm font-medium text-gray-700">
+                                Puntaje
+                              </th>
+                              <th className="w-[10%] text-right py-3 px-4 text-sm font-medium text-gray-700">
+                                Acciones
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {mes.evaluaciones.map((evaluacion) => (
+                              <tr
+                                key={evaluacion.id_evaluacion}
+                                className="border-b hover:bg-gray-50"
+                              >
+                                <td className="py-3 px-4 font-medium">
+                                  {evaluacion.nombre}
+                                </td>
+                                <td className="py-3 px-4">
+                                  <Badge
+                                    variant="outline"
+                                    className="text-purple-700 border-purple-200 bg-purple-50"
+                                  >
+                                    {evaluacion.tipoEvaluacion.nombre}
+                                  </Badge>
+                                </td>
+                                <td className="py-3 px-4">
+                                  <div className="flex items-center space-x-2">
+                                    <div className="w-20 bg-gray-200 rounded-full h-2">
+                                      <div
+                                        className="h-2 rounded-full bg-purple-600"
+                                        style={{
+                                          width: `${evaluacion.tipoEvaluacion.porcentaje}%`,
+                                        }}
+                                      />
+                                    </div>
+                                    <span className="text-sm font-semibold">
+                                      {evaluacion.tipoEvaluacion.porcentaje}%
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="py-3 px-4">
+                                  <div className="flex items-center space-x-1">
+                                    <Award className="w-4 h-4 text-gray-400" />
+                                    <span className="text-sm">
+                                      {evaluacion.puntaje_minimo} -{' '}
+                                      {evaluacion.puntaje_maximo}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="py-3 px-4 text-right">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => onDelete(evaluacion)}
+                                    className="text-red-600 hover:text-red-700"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Tipos faltantes del mes */}
+                      {mes.tiposFaltantes.length > 0 && (
+                        <div className="px-6 py-2 bg-yellow-50">
+                          <p className="text-xs text-yellow-800">
+                            Faltan:{' '}
+                            {mes.tiposFaltantes
+                              .map((t) => `${t.nombre} (${t.porcentaje}%)`)
+                              .join(', ')}
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
-
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-gray-50">
-                      <TableHead>Nombre</TableHead>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead>Porcentaje</TableHead>
-                      <TableHead>Puntaje</TableHead>
-                      <TableHead className="text-right">Acciones</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {mes.evaluaciones.map((evaluacion) => (
-                      <TableRow key={evaluacion.id_evaluacion}>
-                        <TableCell className="font-medium">
-                          {evaluacion.nombre}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="outline"
-                            className="text-purple-700 border-purple-200 bg-purple-50"
-                          >
-                            {evaluacion.tipoEvaluacion.nombre}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center space-x-2">
-                            <div className="w-20 bg-gray-200 rounded-full h-2">
-                              <div
-                                className="h-2 rounded-full bg-purple-600"
-                                style={{
-                                  width: `${evaluacion.tipoEvaluacion.porcentaje}%`,
-                                }}
-                              />
-                            </div>
-                            <span className="text-sm font-semibold">
-                              {evaluacion.tipoEvaluacion.porcentaje}%
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center space-x-1">
-                            <Award className="w-4 h-4 text-gray-400" />
-                            <span className="text-sm">
-                              {evaluacion.puntaje_minimo} -{' '}
-                              {evaluacion.puntaje_maximo}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => onDelete(evaluacion)}
-                            className="text-red-600 hover:text-red-700"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-
-                {/* Tipos faltantes del mes */}
-                {mes.tiposFaltantes.length > 0 && (
-                  <div className="px-4 py-2 bg-yellow-50">
-                    <p className="text-xs text-yellow-800">
-                      Faltan:{' '}
-                      {mes.tiposFaltantes
-                        .map((t) => `${t.nombre} (${t.porcentaje}%)`)
-                        .join(', ')}
-                    </p>
-                  </div>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
         {/* EVALUACIONES TRIMESTRALES */}
         {grupo.evaluacionesTrimestrales.length > 0 && (
           <div>
-            <div className="bg-green-50 px-4 py-2 border-b">
+            <div className="bg-green-50 px-6 py-3 border-b">
               <div className="flex items-center justify-between">
-                <h4 className="font-semibold text-green-900">
-                  Evaluaciones Trimestrales (65% del trimestre)
-                </h4>
-                <Badge variant="outline" className="text-xs">
-                  {grupo.porcentajeTotalTrimestral}% / 65%
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <h4 className="font-semibold text-green-900">
+                    Evaluaciones Trimestrales (65% del trimestre)
+                  </h4>
+                  <Badge variant="outline" className="text-xs">
+                    {grupo.porcentajeTotalTrimestral}% / 65%
+                  </Badge>
+                </div>
+                <button
+                  onClick={() =>
+                    onAddEvaluacion(
+                      grupo.asignatura.id_asignatura,
+                      grupo.trimestre,
+                      grupo.periodo,
+                      null
+                    )
+                  }
+                  style={{
+                    backgroundColor: '#ecfdf5',
+                    color: '#047857',
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid #86efac',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                    whiteSpace: 'nowrap',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#d1fae5';
+                    e.currentTarget.style.borderColor = '#4ade80';
+                    e.currentTarget.style.boxShadow =
+                      '0 2px 4px rgba(4,120,87,0.15)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '#ecfdf5';
+                    e.currentTarget.style.borderColor = '#86efac';
+                    e.currentTarget.style.boxShadow =
+                      '0 1px 2px rgba(0,0,0,0.05)';
+                  }}
+                >
+                  <Plus
+                    style={{ width: '14px', height: '14px', color: '#047857' }}
+                  />
+                  <span style={{ color: '#047857' }}>
+                    Evaluación trimestral
+                  </span>
+                </button>
               </div>
             </div>
 
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-gray-50">
-                  <TableHead>Nombre</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Porcentaje</TableHead>
-                  <TableHead>Puntaje</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {grupo.evaluacionesTrimestrales.map((evaluacion) => (
-                  <TableRow key={evaluacion.id_evaluacion}>
-                    <TableCell className="font-medium">
-                      {evaluacion.nombre}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className="text-green-700 border-green-200 bg-green-50"
-                      >
-                        {evaluacion.tipoEvaluacion.nombre}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center space-x-2">
-                        <div className="w-20 bg-gray-200 rounded-full h-2">
-                          <div
-                            className="h-2 rounded-full bg-green-600"
-                            style={{
-                              width: `${evaluacion.tipoEvaluacion.porcentaje}%`,
-                            }}
-                          />
+            <div className="px-6">
+              <table className="w-full table-fixed border-collapse">
+                <thead>
+                  <tr className="bg-gray-50 border-b">
+                    <th className="w-[30%] text-left py-3 px-4 text-sm font-medium text-gray-700">
+                      Nombre
+                    </th>
+                    <th className="w-[20%] text-left py-3 px-4 text-sm font-medium text-gray-700">
+                      Tipo
+                    </th>
+                    <th className="w-[20%] text-left py-3 px-4 text-sm font-medium text-gray-700">
+                      Porcentaje
+                    </th>
+                    <th className="w-[20%] text-left py-3 px-4 text-sm font-medium text-gray-700">
+                      Puntaje
+                    </th>
+                    <th className="w-[10%] text-right py-3 px-4 text-sm font-medium text-gray-700">
+                      Acciones
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {grupo.evaluacionesTrimestrales.map((evaluacion) => (
+                    <tr
+                      key={evaluacion.id_evaluacion}
+                      className="border-b hover:bg-gray-50"
+                    >
+                      <td className="py-3 px-4 font-medium">
+                        {evaluacion.nombre}
+                      </td>
+                      <td className="py-3 px-4">
+                        <Badge
+                          variant="outline"
+                          className="text-green-700 border-green-200 bg-green-50"
+                        >
+                          {evaluacion.tipoEvaluacion.nombre}
+                        </Badge>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center space-x-2">
+                          <div className="w-20 bg-gray-200 rounded-full h-2">
+                            <div
+                              className="h-2 rounded-full bg-green-600"
+                              style={{
+                                width: `${evaluacion.tipoEvaluacion.porcentaje}%`,
+                              }}
+                            />
+                          </div>
+                          <span className="text-sm font-semibold">
+                            {evaluacion.tipoEvaluacion.porcentaje}%
+                          </span>
                         </div>
-                        <span className="text-sm font-semibold">
-                          {evaluacion.tipoEvaluacion.porcentaje}%
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center space-x-1">
-                        <Award className="w-4 h-4 text-gray-400" />
-                        <span className="text-sm">
-                          {evaluacion.puntaje_minimo} -{' '}
-                          {evaluacion.puntaje_maximo}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onDelete(evaluacion)}
-                        className="text-red-600 hover:text-red-700"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center space-x-1">
+                          <Award className="w-4 h-4 text-gray-400" />
+                          <span className="text-sm">
+                            {evaluacion.puntaje_minimo} -{' '}
+                            {evaluacion.puntaje_maximo}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => onDelete(evaluacion)}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
             {/* Tipos faltantes trimestrales */}
             {grupo.tiposFaltantesTrimestral.length > 0 && (
-              <div className="px-4 py-2 bg-yellow-50">
+              <div className="px-6 py-2 bg-yellow-50">
                 <p className="text-xs text-yellow-800">
                   Faltan:{' '}
                   {grupo.tiposFaltantesTrimestral

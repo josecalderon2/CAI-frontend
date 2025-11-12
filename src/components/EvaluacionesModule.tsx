@@ -25,7 +25,6 @@ import {
   AlertCircle,
   CheckCircle2,
   AlertTriangle,
-  Plus,
   Calendar,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -125,7 +124,7 @@ export function EvaluacionesModule() {
     fetchCatalogos();
   }, []);
 
-  // Cargar tipos de evaluación cuando cambia la asignatura seleccionada
+  // Cargar tipos de evaluación cuando cambia la asignatura seleccionada O el mes
   useEffect(() => {
     const fetchTiposEvaluacion = async () => {
       if (nuevaEvaluacion.id_asignatura === 0) {
@@ -141,7 +140,35 @@ export function EvaluacionesModule() {
 
         // Asegurar que tipos sea un array
         const tiposArray = Array.isArray(tipos) ? tipos : [];
-        setTiposEvaluacionFiltrados(tiposArray);
+
+        // Filtrar según si hay mes seleccionado (evaluaciones mensuales) o no (trimestrales)
+        // Los tipos mensuales suelen ser: Laboratorio, Tarea, Revisión de Cuaderno
+        // Los tipos trimestrales: Examen Trimestral, Actividad Integradora, Autoevaluación
+        const tiposMensuales = ['Laboratorio', 'Tarea', 'Revisión de Cuaderno'];
+        const tiposTrimestrales = [
+          'Examen Trimestral',
+          'Actividad Integradora',
+          'Autoevaluación',
+        ];
+
+        let tiposFiltrados = tiposArray;
+
+        if (nuevaEvaluacion.mes !== null && nuevaEvaluacion.mes !== undefined) {
+          // Si hay mes seleccionado, mostrar solo tipos mensuales
+          tiposFiltrados = tiposArray.filter((tipo) =>
+            tiposMensuales.some((nombre) => tipo.nombre.includes(nombre))
+          );
+        } else if (
+          nuevaEvaluacion.trimestre !== null ||
+          nuevaEvaluacion.periodo !== null
+        ) {
+          // Si hay trimestre/periodo pero NO mes, mostrar solo tipos trimestrales
+          tiposFiltrados = tiposArray.filter((tipo) =>
+            tiposTrimestrales.some((nombre) => tipo.nombre.includes(nombre))
+          );
+        }
+
+        setTiposEvaluacionFiltrados(tiposFiltrados);
       } catch (err) {
         console.error('Error cargando tipos de evaluación:', err);
         toast.error('No se pudieron cargar los tipos de evaluación');
@@ -153,7 +180,12 @@ export function EvaluacionesModule() {
 
     fetchTiposEvaluacion();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nuevaEvaluacion.id_asignatura]);
+  }, [
+    nuevaEvaluacion.id_asignatura,
+    nuevaEvaluacion.mes,
+    nuevaEvaluacion.trimestre,
+    nuevaEvaluacion.periodo,
+  ]);
 
   // Cargar evaluaciones
   const fetchEvaluaciones = async () => {
@@ -387,11 +419,38 @@ export function EvaluacionesModule() {
         tiposDelContextoTrim.values()
       ).filter((tipo) => !tiposExistentesTrim.has(tipo.id_tipo_evaluacion));
 
-      // 4. Verificar si está completo (35% mensuales + 65% trimestrales = 100%)
-      const totalMensuales = grupo.evaluacionesMensuales.length > 0 ? 35 : 0;
-      const totalTrimestrales = porcentajeTotalTrim;
-      grupo.estaCompleto =
-        Math.abs(totalMensuales + totalTrimestrales - 100) < 0.01;
+      // 4. Verificar si está completo
+      // Para BASICA: Debe tener los 3 meses del trimestre completos (cada uno al 35%) + trimestrales al 65%
+      // Para BACHILLERATO: Solo verificar que trimestrales estén al 100%
+
+      let estaCompletoMensuales = true;
+
+      if (grupo.trimestre) {
+        // BASICA - Verificar que TODOS los 3 meses del trimestre estén completos
+        const mesesDelTrimestre =
+          grupo.trimestre === 1
+            ? [2, 3, 4] // Febrero, Marzo, Abril
+            : grupo.trimestre === 2
+              ? [5, 6, 7] // Mayo, Junio, Julio
+              : [8, 9, 10]; // Agosto, Septiembre, Octubre
+
+        // Verificar que todos los meses existan y estén completos
+        estaCompletoMensuales = mesesDelTrimestre.every((numMes) => {
+          const mesEncontrado = grupo.evaluacionesMensuales.find(
+            (m) => m.mes === numMes
+          );
+          return mesEncontrado && mesEncontrado.estaCompleto;
+        });
+      }
+
+      // El trimestre está completo si:
+      // - Las evaluaciones mensuales están completas (para BASICA) o no hay trimestre (BACHILLERATO)
+      // - Las evaluaciones trimestrales están completas (65% para BASICA, 100% para BACHILLERATO)
+      const porcentajeEsperadoTrimestral = grupo.trimestre ? 65 : 100;
+      const estaCompletoTrimestrales =
+        Math.abs(porcentajeTotalTrim - porcentajeEsperadoTrimestral) < 0.01;
+
+      grupo.estaCompleto = estaCompletoMensuales && estaCompletoTrimestrales;
     });
 
     return Array.from(grupos.values())
@@ -430,21 +489,6 @@ export function EvaluacionesModule() {
     (a) =>
       !a.curso?.gradoAcademico?.nombre.toLowerCase().includes('bachillerato')
   );
-
-  // Abrir diálogo para agregar evaluación
-  const handleOpenAddDialog = () => {
-    setNuevaEvaluacion({
-      nombre: '',
-      puntaje_maximo: 10,
-      puntaje_minimo: 0,
-      id_tipo_evaluacion: 0,
-      id_asignatura: 0,
-      trimestre: null,
-      periodo: null,
-      mes: null,
-    });
-    setIsAddDialogOpen(true);
-  };
 
   // Abrir diálogo con datos precargados (desde botón en tarjeta)
   const handleOpenAddDialogWithData = (
@@ -494,6 +538,10 @@ export function EvaluacionesModule() {
 
     try {
       setSaving(true);
+
+      // Guardar la posición actual del scroll
+      const currentScrollPosition = window.scrollY;
+
       await evaluacionesService.create({
         nombre: nuevaEvaluacion.nombre,
         puntaje_maximo: nuevaEvaluacion.puntaje_maximo,
@@ -508,6 +556,14 @@ export function EvaluacionesModule() {
       toast.success('Evaluación creada correctamente');
       await fetchEvaluaciones();
       setIsAddDialogOpen(false);
+
+      // Restaurar la posición del scroll después de un pequeño delay
+      setTimeout(() => {
+        window.scrollTo({
+          top: currentScrollPosition,
+          behavior: 'smooth',
+        });
+      }, 100);
     } catch (err: any) {
       console.error(err);
       const msg =
@@ -552,11 +608,23 @@ export function EvaluacionesModule() {
 
     try {
       setDeleting(true);
+
+      // Guardar la posición actual del scroll
+      const currentScrollPosition = window.scrollY;
+
       await evaluacionesService.remove(deletingEvaluacion.id_evaluacion);
       toast.success('Evaluación eliminada correctamente');
       await fetchEvaluaciones();
       setIsDeleteDialogOpen(false);
       setDeletingEvaluacion(null);
+
+      // Restaurar la posición del scroll después de un pequeño delay
+      setTimeout(() => {
+        window.scrollTo({
+          top: currentScrollPosition,
+          behavior: 'smooth',
+        });
+      }, 100);
     } catch (err: any) {
       console.error(err);
       const msg =
@@ -985,52 +1053,58 @@ export function EvaluacionesModule() {
             {/* Mes (solo si hay trimestre Y es BÁSICA) */}
             {nuevaEvaluacion.trimestre && getNivelAcademico() === 'BASICA' && (
               <div className="space-y-2">
-                <Label htmlFor="mes">
-                  Mes (Opcional - para evaluaciones mensuales 35%)
-                </Label>
+                <Label htmlFor="mes">Tipo de evaluación</Label>
                 <Select
                   value={nuevaEvaluacion.mes?.toString() || 'none'}
                   onValueChange={(value) =>
                     setNuevaEvaluacion({
                       ...nuevaEvaluacion,
                       mes: value === 'none' ? null : parseInt(value),
+                      id_tipo_evaluacion: 0, // Resetear tipo al cambiar mes/trimestral
                     })
                   }
                 >
                   <SelectTrigger id="mes">
-                    <SelectValue placeholder="Ninguno (evaluación trimestral)" />
+                    <SelectValue placeholder="Seleccione el tipo" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">
-                      Ninguno (Trimestral 65%)
-                    </SelectItem>
+                    <SelectItem value="none">Trimestral (65%)</SelectItem>
                     {nuevaEvaluacion.trimestre === 1 && (
                       <>
-                        <SelectItem value="2">Febrero (Mensual 35%)</SelectItem>
-                        <SelectItem value="3">Marzo (Mensual 35%)</SelectItem>
-                        <SelectItem value="4">Abril (Mensual 35%)</SelectItem>
+                        <SelectItem value="2">
+                          Febrero - Mensual (35%)
+                        </SelectItem>
+                        <SelectItem value="3">Marzo - Mensual (35%)</SelectItem>
+                        <SelectItem value="4">Abril - Mensual (35%)</SelectItem>
                       </>
                     )}
                     {nuevaEvaluacion.trimestre === 2 && (
                       <>
-                        <SelectItem value="5">Mayo (Mensual 35%)</SelectItem>
-                        <SelectItem value="6">Junio (Mensual 35%)</SelectItem>
-                        <SelectItem value="7">Julio (Mensual 35%)</SelectItem>
+                        <SelectItem value="5">Mayo - Mensual (35%)</SelectItem>
+                        <SelectItem value="6">Junio - Mensual (35%)</SelectItem>
+                        <SelectItem value="7">Julio - Mensual (35%)</SelectItem>
                       </>
                     )}
                     {nuevaEvaluacion.trimestre === 3 && (
                       <>
-                        <SelectItem value="8">Agosto (Mensual 35%)</SelectItem>
+                        <SelectItem value="8">
+                          Agosto - Mensual (35%)
+                        </SelectItem>
                         <SelectItem value="9">
-                          Septiembre (Mensual 35%)
+                          Septiembre - Mensual (35%)
                         </SelectItem>
                         <SelectItem value="10">
-                          Octubre (Mensual 35%)
+                          Octubre - Mensual (35%)
                         </SelectItem>
                       </>
                     )}
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-gray-500">
+                  {nuevaEvaluacion.mes
+                    ? '📝 Evaluaciones mensuales: Laboratorio, Tarea, Revisión de Cuaderno'
+                    : '📚 Evaluaciones trimestrales: Examen Trimestral, Actividad Integradora, Autoevaluación'}
+                </p>
               </div>
             )}
 
@@ -1039,12 +1113,23 @@ export function EvaluacionesModule() {
               <Label htmlFor="tipo">Tipo de Evaluación *</Label>
               <Select
                 value={nuevaEvaluacion.id_tipo_evaluacion.toString()}
-                onValueChange={(value) =>
+                onValueChange={(value) => {
+                  const tipoSeleccionado = tiposEvaluacionFiltrados.find(
+                    (t) => t.id_tipo_evaluacion === parseInt(value)
+                  );
+
+                  // Si NO hay mes (es trimestral), autocompletar nombre con el tipo
+                  const nuevoNombre =
+                    !nuevaEvaluacion.mes && tipoSeleccionado
+                      ? tipoSeleccionado.nombre
+                      : nuevaEvaluacion.nombre;
+
                   setNuevaEvaluacion({
                     ...nuevaEvaluacion,
                     id_tipo_evaluacion: parseInt(value),
-                  })
-                }
+                    nombre: nuevoNombre,
+                  });
+                }}
                 disabled={nuevaEvaluacion.id_asignatura === 0 || loadingTipos}
               >
                 <SelectTrigger id="tipo">
@@ -1082,10 +1167,17 @@ export function EvaluacionesModule() {
 
             {/* Nombre */}
             <div className="space-y-2">
-              <Label htmlFor="nombre">Nombre de la Evaluación *</Label>
+              <Label htmlFor="nombre">
+                Nombre de la Evaluación{' '}
+                {nuevaEvaluacion.mes ? '*' : '(Autocompletado)'}
+              </Label>
               <Input
                 id="nombre"
-                placeholder="Ej: Examen Parcial, Tarea 1, etc."
+                placeholder={
+                  nuevaEvaluacion.mes
+                    ? 'Ej: Tarea 1, Laboratorio 2, etc.'
+                    : 'Se usará el nombre del tipo de evaluación'
+                }
                 value={nuevaEvaluacion.nombre}
                 onChange={(e) =>
                   setNuevaEvaluacion({
@@ -1093,7 +1185,17 @@ export function EvaluacionesModule() {
                     nombre: e.target.value,
                   })
                 }
+                disabled={!nuevaEvaluacion.mes}
+                className={
+                  !nuevaEvaluacion.mes ? 'bg-gray-100 cursor-not-allowed' : ''
+                }
               />
+              {!nuevaEvaluacion.mes && (
+                <p className="text-xs text-blue-600">
+                  💡 Para evaluaciones trimestrales, el nombre se toma
+                  automáticamente del tipo
+                </p>
+              )}
             </div>
 
             {/* Puntajes */}
