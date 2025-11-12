@@ -94,7 +94,10 @@ export const evaluacionesService = {
   /**
    * Actualizar una evaluación existente
    */
-  async update(id: number, evaluacion: UpdateEvaluacionDto): Promise<Evaluacion> {
+  async update(
+    id: number,
+    evaluacion: UpdateEvaluacionDto
+  ): Promise<Evaluacion> {
     const res = await api.patch(`${base}/${id}`, evaluacion);
     return res.data as Evaluacion;
   },
@@ -105,5 +108,15 @@ export const evaluacionesService = {
   async remove(id: number): Promise<{ message: string }> {
     const res = await api.delete(`${base}/${id}`);
     return res.data as { message: string };
+  },
+
+  /**
+   * Obtener tipos de evaluación válidos para una asignatura
+   */
+  async getTiposEvaluacionByAsignatura(
+    id_asignatura: number
+  ): Promise<TipoEvaluacion[]> {
+    const res = await api.get(`/tipos-evaluacion/asignatura/${id_asignatura}`);
+    return res.data as TipoEvaluacion[];
   },
 };

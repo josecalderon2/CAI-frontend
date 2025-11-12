@@ -13,6 +13,10 @@ export interface Asignatura {
     id_curso: number;
     nombre: string;
     seccion?: string;
+    gradoAcademico?: {
+      id_grado_academico: number;
+      nombre: string;
+    };
   };
   metodoEvaluacion?: {
     id_metodo_evaluacion: number;
