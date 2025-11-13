@@ -302,17 +302,10 @@ export function CursosModule() {
         'Quinto Grado',
         'Sexto Grado',
       ];
-    } else if (
-      nombreGrado.includes('secundaria') ||
-      nombreGrado.includes('bachillerato')
-    ) {
-      options = [
-        'Séptimo Grado',
-        'Octavo Grado',
-        'Noveno Grado',
-        'Primer Año de Bachillerato',
-        'Segundo Año de Bachillerato',
-      ];
+    } else if (nombreGrado.includes('secundaria')) {
+      options = ['Séptimo Grado', 'Octavo Grado', 'Noveno Grado'];
+    } else if (nombreGrado.includes('bachillerato')) {
+      options = ['Primer Año de Bachillerato', 'Segundo Año de Bachillerato'];
     } else {
       // Para cualquier otro tipo de grado académico
       options = [`Curso de ${gradoSeleccionado.nombre}`];
