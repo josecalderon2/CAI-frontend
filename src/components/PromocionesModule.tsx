@@ -44,6 +44,7 @@ import {
   type Curso as CursoAPI,
 } from '../api/services/cursosService';
 import promocionesService from '../api/services/promocionesService';
+import { adminConsultaNotasService } from '../api/services/adminConsultaNotasService';
 import { api } from '../api/axiosConfig';
 
 // Tipos que coinciden con el backend
@@ -56,6 +57,7 @@ interface AlumnoCurso {
   numero_matricula: string;
   estado: 'ACTIVO' | 'INACTIVO' | 'SUSPENDIDO';
   promedio_notas?: number | null;
+  estado_aprobacion?: 'APROBADO' | 'REPROBADO' | null; // Aprobación segun calificaciones
   anio_academico: string;
   curso_nombre?: string; // Cuando se obtienen todos los alumnos
   grado_academico?: string; // Cuando se obtienen todos los alumnos
@@ -100,6 +102,45 @@ const normalizeEstado = (estado: string | null): string => {
   };
 
   return estadosMap[estado.toUpperCase()] || estado;
+};
+
+// Función para extraer el nivel del NOMBRE DEL CURSO (no del grado académico)
+const obtenerNivelCurso = (nombreCurso: string): number => {
+  const nombre = nombreCurso.toLowerCase();
+
+  // Primera Infancia / Kinder (niveles 1-3)
+  if (nombre.includes('kinder 4')) return 1;
+  if (nombre.includes('kinder 5')) return 2;
+  if (nombre.includes('kinder 6')) return 3;
+
+  // Primaria (niveles 4-9)
+  if (nombre.includes('primer grado')) return 4;
+  if (nombre.includes('segundo grado')) return 5;
+  if (nombre.includes('tercer grado')) return 6;
+  if (nombre.includes('cuarto grado')) return 7;
+  if (nombre.includes('quinto grado')) return 8;
+  if (nombre.includes('sexto grado')) return 9;
+
+  // Secundaria (niveles 10-12)
+  if (nombre.includes('séptimo grado') || nombre.includes('septimo grado'))
+    return 10;
+  if (nombre.includes('octavo grado')) return 11;
+  if (nombre.includes('noveno grado')) return 12;
+
+  // Bachillerato (niveles 13-14)
+  if (
+    nombre.includes('primer año de bachillerato') ||
+    (nombre.includes('primer') && nombre.includes('bachillerato'))
+  )
+    return 13;
+  if (
+    nombre.includes('segundo año de bachillerato') ||
+    (nombre.includes('segundo') && nombre.includes('bachillerato'))
+  )
+    return 14;
+
+  console.warn('⚠️ Curso no reconocido en jerarquía:', nombreCurso);
+  return 0;
 };
 
 export function PromocionesModule() {
@@ -272,7 +313,59 @@ function AlumnosPorCursoTab({ defaultYear }: { defaultYear: string }) {
         if (cursoSeleccionado === 'todos') {
           const response =
             await promocionesService.getTodosLosAlumnos(anioAcademico);
-          setAlumnos(response.items);
+
+          // Completar promedios usando el origen oficial por cada curso
+          try {
+            const cursoIds = Array.from(
+              new Set(
+                (response.items || [])
+                  .map((it: any) => it.id_curso)
+                  .filter((id: number | undefined) => typeof id === 'number')
+              )
+            ) as number[];
+
+            // Traer promedios por curso en paralelo
+            const promsPorCurso = await Promise.all(
+              cursoIds.map((cid) =>
+                adminConsultaNotasService
+                  .obtenerPromediosCurso(cid, anioAcademico)
+                  .then((data) => ({ cid, data }))
+                  .catch(() => ({ cid, data: null }))
+              )
+            );
+
+            // Construir mapas alumnoId -> promedio y alumnoId -> estado de aprobación
+            const mapProm: Record<number, number | null> = {};
+            const mapEstado: Record<number, 'APROBADO' | 'REPROBADO' | null> =
+              {};
+            promsPorCurso.forEach((entry) => {
+              if (entry.data?.alumnos) {
+                entry.data.alumnos.forEach((a: any) => {
+                  mapProm[a.alumno.id] = a.promedioGeneral?.promedio ?? null;
+                  const est = (a.promedioGeneral?.estado || '').toUpperCase();
+                  mapEstado[a.alumno.id] =
+                    est === 'APROBADO' || est === 'REPROBADO'
+                      ? (est as any)
+                      : null;
+                });
+              }
+            });
+
+            const itemsConProm = (response.items || []).map(
+              (al: AlumnoCurso) => ({
+                ...al,
+                promedio_notas:
+                  mapProm[al.id_alumno] !== undefined
+                    ? mapProm[al.id_alumno]
+                    : (al.promedio_notas ?? null),
+                estado_aprobacion: mapEstado[al.id_alumno] ?? null,
+              })
+            );
+            setAlumnos(itemsConProm);
+          } catch (_) {
+            // Si algo falla, usamos tal cual
+            setAlumnos(response.items);
+          }
           setAlumnosSeleccionados([]);
         } else {
           // Endpoint normal para un curso específico
@@ -281,8 +374,37 @@ function AlumnosPorCursoTab({ defaultYear }: { defaultYear: string }) {
             anioAcademico
           );
 
-          // El servicio ya mapea la respuesta al formato esperado
-          setAlumnos(response.items);
+          // Intentar alinear promedios con el origen oficial del módulo de notas
+          try {
+            const promedios =
+              await adminConsultaNotasService.obtenerPromediosCurso(
+                parseInt(cursoSeleccionado),
+                anioAcademico
+              );
+            const mapProm: Record<number, number | null> = {};
+            const mapEstado: Record<number, 'APROBADO' | 'REPROBADO' | null> =
+              {};
+            promedios.alumnos.forEach((a) => {
+              mapProm[a.alumno.id] = a.promedioGeneral?.promedio ?? null;
+              const est = (a.promedioGeneral?.estado || '').toUpperCase();
+              mapEstado[a.alumno.id] =
+                est === 'APROBADO' || est === 'REPROBADO' ? (est as any) : null;
+            });
+
+            const itemsConProm = response.items.map((al: AlumnoCurso) => ({
+              ...al,
+              // Priorizar promedio oficial; si no existe, conservar el que viene del endpoint de promociones
+              promedio_notas:
+                mapProm[al.id_alumno] !== undefined
+                  ? mapProm[al.id_alumno]
+                  : (al.promedio_notas ?? null),
+              estado_aprobacion: mapEstado[al.id_alumno] ?? null,
+            }));
+            setAlumnos(itemsConProm);
+          } catch (e) {
+            // Si falla la consulta de promedios, usar los del endpoint de promociones
+            setAlumnos(response.items);
+          }
           setAlumnosSeleccionados([]);
         }
       }
@@ -322,9 +444,92 @@ function AlumnosPorCursoTab({ defaultYear }: { defaultYear: string }) {
     setShowTrasladadoDialog(true);
   };
 
-  const abrirDialogoFinalizar = (alumno: AlumnoCurso) => {
-    setAlumnoSeleccionado(alumno);
-    setShowFinalizarDialog(true);
+  const abrirDialogoFinalizar = async (alumno: AlumnoCurso) => {
+    console.log('🎓 Intentando graduar alumno:', alumno);
+
+    // Validar que el alumno esté en Segundo Año de Bachillerato
+    if (!alumno.curso_nombre || obtenerNivelCurso(alumno.curso_nombre) !== 14) {
+      toast.error(
+        'Solo se pueden graduar alumnos de Segundo Año de Bachillerato'
+      );
+      return;
+    }
+
+    // Obtener el curso actual del alumno - usar el curso seleccionado si no tiene id_curso
+    let cursoId = alumno.id_curso;
+
+    if (!cursoId && cursoSeleccionado && cursoSeleccionado !== 'todos') {
+      cursoId = parseInt(cursoSeleccionado);
+      console.log('📚 Usando curso seleccionado:', cursoId);
+    }
+
+    if (!cursoId) {
+      toast.error('No se pudo obtener la información del curso del alumno');
+      console.error('❌ No hay id_curso ni curso seleccionado');
+      return;
+    }
+
+    try {
+      console.log(
+        '📊 Consultando promedios para curso:',
+        cursoId,
+        'año:',
+        anioAcademico
+      );
+
+      // Obtener promedio y estado oficial del alumno
+      const promedios = await adminConsultaNotasService.obtenerPromediosCurso(
+        cursoId,
+        anioAcademico
+      );
+
+      console.log('📋 Promedios obtenidos:', promedios);
+
+      const alumnoData = promedios.alumnos?.find(
+        (a: any) => a.alumno.id === alumno.id_alumno
+      );
+
+      if (!alumnoData?.promedioGeneral) {
+        toast.error(
+          `No se encontró el promedio oficial del alumno ${alumno.nombre} ${alumno.apellido}. ` +
+            'Asegúrese de que las calificaciones estén cargadas y cerradas por el orientador.'
+        );
+        console.error(
+          '❌ No se encontró promedio para alumno:',
+          alumno.id_alumno
+        );
+        console.error(
+          '📋 Alumnos disponibles:',
+          promedios.alumnos?.map((a: any) => a.alumno.id)
+        );
+        return;
+      }
+
+      const estado = (alumnoData.promedioGeneral.estado || '').toUpperCase();
+      const promedio = alumnoData.promedioGeneral.promedio;
+      console.log('✅ Estado del alumno:', estado, '| Promedio:', promedio);
+
+      // Validar que el alumno esté APROBADO
+      if (estado !== 'APROBADO') {
+        toast.error(
+          `No se puede graduar al alumno ${alumno.nombre} ${alumno.apellido}. ` +
+            `Estado actual: ${estado}. Promedio: ${promedio?.toFixed(2) || 'N/A'}. ` +
+            'Solo se pueden graduar alumnos APROBADOS.'
+        );
+        return;
+      }
+
+      // Si todo está bien, abrir el diálogo
+      console.log('✅ Validación exitosa, abriendo diálogo de graduación');
+      setAlumnoSeleccionado(alumno);
+      setShowFinalizarDialog(true);
+    } catch (error: any) {
+      console.error('❌ Error al validar:', error);
+      const mensaje =
+        error.response?.data?.message ||
+        'Error al validar las calificaciones del alumno. Asegúrese de que las calificaciones estén cerradas por el orientador.';
+      toast.error(mensaje);
+    }
   };
 
   // Obtener alumnos paginados
@@ -472,7 +677,22 @@ function AlumnosPorCursoTab({ defaultYear }: { defaultYear: string }) {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          {alumno.promedio_notas?.toFixed(2) || '-'}
+                          <div className="flex items-center gap-2">
+                            <span>
+                              {alumno.promedio_notas?.toFixed(2) || '-'}
+                            </span>
+                            {alumno.estado_aprobacion && (
+                              <Badge
+                                variant={
+                                  alumno.estado_aprobacion === 'APROBADO'
+                                    ? 'success'
+                                    : 'destructive'
+                                }
+                              >
+                                {alumno.estado_aprobacion}
+                              </Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex flex-wrap gap-2 justify-end">
@@ -492,15 +712,19 @@ function AlumnosPorCursoTab({ defaultYear }: { defaultYear: string }) {
                               <Trash2 className="h-4 w-4 mr-1" />
                               Retirar
                             </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => abrirDialogoFinalizar(alumno)}
-                              className="bg-green-50 hover:bg-green-100 border-green-200"
-                            >
-                              <GraduationCap className="h-4 w-4 mr-1" />
-                              Graduado
-                            </Button>
+                            {/* Solo mostrar botón Graduado si está en Segundo Año de Bachillerato */}
+                            {alumno.curso_nombre &&
+                              obtenerNivelCurso(alumno.curso_nombre) === 14 && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => abrirDialogoFinalizar(alumno)}
+                                  className="bg-green-50 hover:bg-green-100 border-green-200"
+                                >
+                                  <GraduationCap className="h-4 w-4 mr-1" />
+                                  Graduado
+                                </Button>
+                              )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -626,6 +850,9 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
   );
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [cursosDestinoFiltrados, setCursosDestinoFiltrados] = useState<Curso[]>(
+    []
+  );
 
   // Estado para almacenar notas y observaciones por alumno
   const [alumnosData, setAlumnosData] = useState<{
@@ -650,9 +877,99 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
   useEffect(() => {
     if (cursos.length > 0 && !cursoOrigen) {
       setCursoOrigen(cursos[0].id_curso?.toString() || '');
-      setCursoDestino(cursos[1]?.id_curso?.toString() || '');
     }
   }, [cursos]);
+
+  // Filtrar cursos destino según el estado de los alumnos seleccionados
+  useEffect(() => {
+    if (!cursoOrigen || alumnosSeleccionados.length === 0) {
+      setCursosDestinoFiltrados([]);
+      return;
+    }
+
+    const cursoOrigenObj = cursos.find(
+      (c) => c.id_curso?.toString() === cursoOrigen
+    );
+    if (!cursoOrigenObj?.nombre) {
+      setCursosDestinoFiltrados([]);
+      return;
+    }
+
+    const nombreCursoOrigen = cursoOrigenObj.nombre;
+    const nivelOrigen = obtenerNivelCurso(nombreCursoOrigen);
+
+    if (nivelOrigen === 0) {
+      console.warn(
+        '⚠️ No se pudo determinar el nivel del curso origen:',
+        nombreCursoOrigen
+      );
+      setCursosDestinoFiltrados([]);
+      return;
+    }
+
+    console.log('🔍 Filtrado cursos destino - Promoción Masiva:');
+    console.log('  Curso Origen:', nombreCursoOrigen, '→ Nivel:', nivelOrigen);
+
+    // Verificar estados de alumnos seleccionados
+    const alumnosAprobados = alumnosSeleccionados.filter(
+      (id) => alumnosData[id]?.estado === 'APROBADO'
+    );
+    const alumnosReprobados = alumnosSeleccionados.filter(
+      (id) => alumnosData[id]?.estado === 'REPROBADO'
+    );
+
+    let cursosFiltrados: Curso[] = [];
+
+    // Si solo hay aprobados, mostrar SOLO el siguiente nivel (nivel + 1)
+    if (alumnosAprobados.length > 0 && alumnosReprobados.length === 0) {
+      const nivelSiguiente = nivelOrigen + 1;
+      cursosFiltrados = cursos.filter((c) => {
+        const nivelDestino = obtenerNivelCurso(c.nombre);
+        // Solo incluir si el nivel es exactamente el siguiente Y es válido (> 0)
+        const esValido = nivelDestino === nivelSiguiente && nivelDestino > 0;
+        if (esValido) {
+          console.log('  ✅', c.nombre, '→ Nivel:', nivelDestino);
+        } else if (nivelDestino > 0) {
+          console.log(
+            '  ❌ RECHAZADO:',
+            c.nombre,
+            '→ Nivel:',
+            nivelDestino,
+            '(se esperaba nivel',
+            nivelSiguiente + ')'
+          );
+        }
+        return esValido;
+      });
+      console.log(
+        `  Mostrando SOLO nivel ${nivelSiguiente} (siguiente a ${nivelOrigen})`
+      );
+    }
+    // Si solo hay reprobados, mostrar cursos del MISMO NIVEL
+    else if (alumnosReprobados.length > 0 && alumnosAprobados.length === 0) {
+      cursosFiltrados = cursos.filter((c) => {
+        const nivelDestino = obtenerNivelCurso(c.nombre);
+        const esValido = nivelDestino === nivelOrigen && nivelDestino > 0;
+        return esValido;
+      });
+      console.log(`  Mostrando SOLO nivel ${nivelOrigen} (mismo nivel)`);
+    }
+    // Si hay mezcla, no mostrar ningún curso (la validación bloqueará)
+    else {
+      cursosFiltrados = [];
+      console.log('  ⚠️ Mezcla de estados detectada - no se muestran cursos');
+    }
+
+    setCursosDestinoFiltrados(cursosFiltrados);
+
+    // Resetear curso destino si ya no está en los filtrados
+    if (
+      cursoDestino &&
+      !cursosFiltrados.find((c) => c.id_curso?.toString() === cursoDestino)
+    ) {
+      setCursoDestino('');
+    }
+  }, [cursoOrigen, alumnosSeleccionados, alumnosData, cursos, cursoDestino]);
 
   const loadCursos = async () => {
     try {
@@ -676,19 +993,57 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
         anioOrigen
       );
 
-      setAlumnos(response.items);
-      setAlumnosSeleccionados([]);
+      // Intentar alinear promedios con el origen oficial del módulo de notas
+      let itemsConProm = response.items;
+      try {
+        const promedios = await adminConsultaNotasService.obtenerPromediosCurso(
+          parseInt(cursoOrigen),
+          anioOrigen
+        );
+        const mapProm: Record<number, number | null> = {};
+        const mapEstado: Record<number, 'APROBADO' | 'REPROBADO'> = {};
+        promedios.alumnos.forEach((a) => {
+          mapProm[a.alumno.id] = a.promedioGeneral?.promedio ?? null;
+          const est = (a.promedioGeneral?.estado || '').toUpperCase();
+          if (est === 'APROBADO' || est === 'REPROBADO') {
+            mapEstado[a.alumno.id] = est as 'APROBADO' | 'REPROBADO';
+          }
+        });
+        itemsConProm = response.items.map((al: AlumnoCurso) => ({
+          ...al,
+          promedio_notas:
+            mapProm[al.id_alumno] !== undefined
+              ? mapProm[al.id_alumno]
+              : (al.promedio_notas ?? null),
+          // Guardamos un campo auxiliar opcional para estado calculado
+          // (no se expone fuera de alumnosData)
+        }));
+        // Inicializa estado de alumnosData basado en mapEstado
+        const initialData: { [id: number]: any } = {};
+        itemsConProm.forEach((al: AlumnoCurso) => {
+          initialData[al.id_alumno] = {
+            estado: mapEstado[al.id_alumno] || 'APROBADO',
+            nota_promedio: al.promedio_notas || undefined,
+            observaciones: '',
+          };
+        });
+        setAlumnosData(initialData);
+      } catch (_) {
+        // Si falla, seguimos con los del endpoint de promociones
+        itemsConProm = response.items;
+        const initialData: { [id: number]: any } = {};
+        itemsConProm.forEach((alumno: AlumnoCurso) => {
+          initialData[alumno.id_alumno] = {
+            estado: 'APROBADO',
+            nota_promedio: alumno.promedio_notas || undefined,
+            observaciones: '',
+          };
+        });
+        setAlumnosData(initialData);
+      }
 
-      // Inicializa el estado para cada alumno
-      const initialData: { [id: number]: any } = {};
-      response.items.forEach((alumno: AlumnoCurso) => {
-        initialData[alumno.id_alumno] = {
-          estado: 'APROBADO',
-          nota_promedio: alumno.promedio_notas || undefined,
-          observaciones: '',
-        };
-      });
-      setAlumnosData(initialData);
+      setAlumnos(itemsConProm);
+      setAlumnosSeleccionados([]);
     } catch (error) {
       toast.error('No se pudieron cargar los alumnos');
     } finally {
@@ -727,17 +1082,6 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
     }));
   };
 
-  const handleNotaChange = (id_alumno: number, nota: string) => {
-    const notaNumber = parseFloat(nota);
-    setAlumnosData((prev) => ({
-      ...prev,
-      [id_alumno]: {
-        ...prev[id_alumno],
-        nota_promedio: isNaN(notaNumber) ? undefined : notaNumber,
-      },
-    }));
-  };
-
   const handleObservacionesChange = (
     id_alumno: number,
     observaciones: string
@@ -751,23 +1095,67 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
     }));
   };
 
-  const aplicarEstadoMasivo = (
-    estado: 'APROBADO' | 'REPROBADO' | 'TRASLADADO'
-  ) => {
-    const newData = { ...alumnosData };
-    alumnosSeleccionados.forEach((id) => {
-      newData[id] = {
-        ...newData[id],
-        estado,
-      };
-    });
-    setAlumnosData(newData);
-  };
+  // No hay edición masiva de estado. Se deriva del promedio oficial.
 
   const handleSubmit = async () => {
     if (!cursoOrigen || !cursoDestino || alumnosSeleccionados.length === 0) {
       toast.error('Seleccione cursos origen y destino, y al menos un alumno');
       return;
+    }
+
+    // Validaciones de promoción basadas en grado académico
+    const cursoOrigenObj = cursos.find(
+      (c) => c.id_curso?.toString() === cursoOrigen
+    );
+    const cursoDestinoObj = cursos.find(
+      (c) => c.id_curso?.toString() === cursoDestino
+    );
+
+    if (!cursoOrigenObj || !cursoDestinoObj) {
+      toast.error('No se pudo verificar la información de los cursos');
+      return;
+    }
+
+    const nombreCursoOrigen = cursoOrigenObj.nombre;
+    const nombreCursoDestino = cursoDestinoObj.nombre;
+    const nivelOrigen = obtenerNivelCurso(nombreCursoOrigen);
+    const nivelDestino = obtenerNivelCurso(nombreCursoDestino);
+
+    // Verificar estados de alumnos seleccionados
+    const alumnosAprobados = alumnosSeleccionados.filter(
+      (id) => alumnosData[id]?.estado === 'APROBADO'
+    );
+    const alumnosReprobados = alumnosSeleccionados.filter(
+      (id) => alumnosData[id]?.estado === 'REPROBADO'
+    );
+
+    // No permitir mezclar aprobados y reprobados en una misma promoción
+    if (alumnosAprobados.length > 0 && alumnosReprobados.length > 0) {
+      toast.error(
+        'No puede promover simultáneamente alumnos APROBADOS y REPROBADOS. Separe las operaciones.'
+      );
+      return;
+    }
+
+    // Validar APROBADOS: deben ir EXACTAMENTE al siguiente nivel (nivel + 1)
+    if (alumnosAprobados.length > 0) {
+      const nivelEsperado = nivelOrigen + 1;
+      if (nivelDestino !== nivelEsperado) {
+        toast.error(
+          `Los alumnos APROBADOS deben avanzar exactamente al siguiente nivel. "${nombreCursoDestino}" (nivel ${nivelDestino}) no corresponde al nivel esperado ${nivelEsperado}.`
+        );
+        return;
+      }
+    }
+
+    // Validar REPROBADOS: deben repetir el mismo nivel
+    if (alumnosReprobados.length > 0) {
+      if (nivelOrigen !== nivelDestino) {
+        toast.error(
+          `Los alumnos REPROBADOS deben repetir el mismo nivel de curso (${nombreCursoOrigen}). No pueden cambiar de nivel.`
+        );
+        return;
+      }
     }
 
     try {
@@ -786,7 +1174,7 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
               return {
                 alumnoId: alumnoId,
                 estado: data.estado || 'APROBADO',
-                notaPromedio: data.nota_promedio,
+                // Nota promedio no editable ni enviada desde esta vista
                 observaciones: data.observaciones,
               };
             }),
@@ -876,16 +1264,30 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
                 <SelectValue placeholder="Seleccione un curso" />
               </SelectTrigger>
               <SelectContent>
-                {cursos.map((curso) => (
-                  <SelectItem
-                    key={`destino-${curso.id_curso}`}
-                    value={curso.id_curso?.toString() || ''}
-                  >
-                    {curso.nombre} {curso.seccion || ''}
+                {cursosDestinoFiltrados.length > 0 ? (
+                  cursosDestinoFiltrados.map((curso) => (
+                    <SelectItem
+                      key={`destino-${curso.id_curso}`}
+                      value={curso.id_curso?.toString() || ''}
+                    >
+                      {curso.nombre} {curso.seccion || ''} -{' '}
+                      {curso.gradoAcademico?.nombre || 'N/A'}
+                    </SelectItem>
+                  ))
+                ) : (
+                  <SelectItem value="_no_disponible" disabled>
+                    No hay cursos disponibles para esta selección
                   </SelectItem>
-                ))}
+                )}
               </SelectContent>
             </Select>
+            {alumnosSeleccionados.length > 0 &&
+              cursosDestinoFiltrados.length === 0 && (
+                <p className="text-xs text-amber-600 mt-1">
+                  ⚠️ No hay cursos válidos. Verifique el estado de los alumnos
+                  seleccionados.
+                </p>
+              )}
           </div>
 
           <div>
@@ -936,22 +1338,7 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
                   </label>
                 </div>
 
-                <div className="space-x-2">
-                  <Button
-                    variant="outline"
-                    disabled={alumnosSeleccionados.length === 0}
-                    onClick={() => aplicarEstadoMasivo('APROBADO')}
-                  >
-                    Aprobar Seleccionados
-                  </Button>
-                  <Button
-                    variant="outline"
-                    disabled={alumnosSeleccionados.length === 0}
-                    onClick={() => aplicarEstadoMasivo('REPROBADO')}
-                  >
-                    Reprobar Seleccionados
-                  </Button>
-                </div>
+                {/* Controles de estado masivo eliminados: el estado se deriva del promedio */}
               </div>
 
               <div className="rounded-md border overflow-x-auto">
@@ -990,6 +1377,7 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
                         </TableCell>
                         <TableCell>
                           <Select
+                            disabled
                             value={
                               alumnosData[alumno.id_alumno]?.estado ||
                               'APROBADO'
@@ -1024,10 +1412,9 @@ function PromocionMasivaTab({ defaultYear }: { defaultYear: string }) {
                                 alumno.id_alumno
                               ]?.nota_promedio?.toString() || ''
                             }
-                            onChange={(e) =>
-                              handleNotaChange(alumno.id_alumno, e.target.value)
-                            }
-                            className="w-[100px]"
+                            readOnly
+                            disabled
+                            className="w-[100px] bg-gray-50 cursor-not-allowed"
                           />
                         </TableCell>
                         <TableCell>
@@ -1521,15 +1908,46 @@ function PromocionDialog({
   const [estado, setEstado] = useState<'APROBADO' | 'REPROBADO' | 'TRASLADADO'>(
     tipo === 'promocion' ? 'APROBADO' : 'TRASLADADO'
   );
-  const [notaPromedio, setNotaPromedio] = useState<string>(
+  const [promedioOficial, setPromedioOficial] = useState<string>(
     alumno.promedio_notas?.toString() || ''
   );
   const [observaciones, setObservaciones] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [cursosDestinoFiltrados, setCursosDestinoFiltrados] = useState<Curso[]>(
+    []
+  );
 
   useEffect(() => {
     if (open) {
       loadCursos();
+      // Derivar promedio y estado oficial del alumno para el año/curso actual
+      if (cursoOrigen?.id_curso && anioOrigen && tipo === 'promocion') {
+        adminConsultaNotasService
+          .obtenerPromediosCurso(cursoOrigen.id_curso, anioOrigen)
+          .then((res) => {
+            const found = res.alumnos?.find(
+              (a: any) => a.alumno.id === alumno.id_alumno
+            );
+            if (found?.promedioGeneral) {
+              if (
+                typeof found.promedioGeneral.promedio === 'number' &&
+                !Number.isNaN(found.promedioGeneral.promedio)
+              ) {
+                setPromedioOficial(found.promedioGeneral.promedio.toString());
+              }
+              const est = (found.promedioGeneral.estado || '').toUpperCase();
+              if (est === 'APROBADO' || est === 'REPROBADO') {
+                setEstado(est);
+                // Año nuevo siempre es el siguiente al actual
+                const nextYear = (parseInt(anioOrigen) + 1).toString();
+                setAnioDestino(nextYear);
+              }
+            }
+          })
+          .catch(() => {
+            // ignorar errores: mostramos valores por defecto
+          });
+      }
     }
   }, [open]);
 
@@ -1542,10 +1960,121 @@ function PromocionDialog({
     }
   };
 
+  // Filtrar cursos destino según el estado del alumno
+  useEffect(() => {
+    if (!cursoOrigen?.nombre || cursos.length === 0) {
+      setCursosDestinoFiltrados([]);
+      return;
+    }
+
+    const nombreCursoOrigen = cursoOrigen.nombre;
+    const nivelOrigen = obtenerNivelCurso(nombreCursoOrigen);
+
+    if (nivelOrigen === 0) {
+      console.warn(
+        '⚠️ No se pudo determinar el nivel del curso origen:',
+        nombreCursoOrigen
+      );
+      setCursosDestinoFiltrados([]);
+      return;
+    }
+
+    let cursosFiltrados: Curso[] = [];
+
+    console.log('🔍 Filtrado de cursos - Diálogo:');
+    console.log('  Curso Origen:', nombreCursoOrigen, '→ Nivel:', nivelOrigen);
+    console.log('  Estado alumno:', estado);
+
+    // APROBADO: mostrar SOLO cursos del siguiente nivel (nivel + 1)
+    if (estado === 'APROBADO') {
+      const nivelSiguiente = nivelOrigen + 1;
+      cursosFiltrados = cursos.filter((c) => {
+        const nivelDestino = obtenerNivelCurso(c.nombre);
+        // Solo incluir si el nivel es exactamente el siguiente Y es válido (> 0)
+        const esValido = nivelDestino === nivelSiguiente && nivelDestino > 0;
+        if (esValido) {
+          console.log('  ✅', c.nombre, '→ Nivel:', nivelDestino);
+        } else if (nivelDestino > 0) {
+          console.log(
+            '  ❌ RECHAZADO:',
+            c.nombre,
+            '→ Nivel:',
+            nivelDestino,
+            '(se esperaba nivel',
+            nivelSiguiente + ')'
+          );
+        }
+        return esValido;
+      });
+      console.log(
+        `  Mostrando SOLO nivel ${nivelSiguiente} (siguiente a ${nivelOrigen})`
+      );
+    }
+    // REPROBADO: mostrar cursos del MISMO NIVEL
+    else if (estado === 'REPROBADO') {
+      cursosFiltrados = cursos.filter((c) => {
+        const nivelDestino = obtenerNivelCurso(c.nombre);
+        const esValido = nivelDestino === nivelOrigen && nivelDestino > 0;
+        return esValido;
+      });
+      console.log(`  Mostrando SOLO nivel ${nivelOrigen} (mismo nivel)`);
+    }
+    // TRASLADADO: mostrar todos los cursos
+    else {
+      cursosFiltrados = cursos;
+      console.log('  TRASLADADO: Mostrando todos los cursos');
+    }
+
+    console.log('  Total cursos filtrados:', cursosFiltrados.length);
+
+    setCursosDestinoFiltrados(cursosFiltrados);
+
+    // Resetear curso destino si ya no está en los filtrados
+    if (
+      cursoDestino &&
+      !cursosFiltrados.find((c) => c.id_curso?.toString() === cursoDestino)
+    ) {
+      setCursoDestino('');
+    }
+  }, [estado, cursoOrigen, cursos, cursoDestino]);
+
   const handleSubmit = async () => {
     if (!cursoDestino || !cursoOrigen?.id_curso) {
       toast.error('Seleccione un curso destino');
       return;
+    }
+
+    // Validaciones de promoción basadas en grado académico
+    const cursoDestinoObj = cursos.find(
+      (c) => c.id_curso?.toString() === cursoDestino
+    );
+
+    if (!cursoDestinoObj) {
+      toast.error('No se pudo verificar la información del curso destino');
+      return;
+    }
+
+    const nombreCursoOrigen = cursoOrigen.nombre;
+    const nombreCursoDestino = cursoDestinoObj.nombre;
+    const nivelOrigen = obtenerNivelCurso(nombreCursoOrigen);
+    const nivelDestino = obtenerNivelCurso(nombreCursoDestino);
+
+    // Validar según el estado del alumno
+    if (estado === 'APROBADO') {
+      const nivelEsperado = nivelOrigen + 1;
+      if (nivelDestino !== nivelEsperado) {
+        toast.error(
+          `El alumno APROBADO debe avanzar exactamente al siguiente nivel. "${nombreCursoDestino}" (nivel ${nivelDestino}) no corresponde al nivel esperado ${nivelEsperado}.`
+        );
+        return;
+      }
+    } else if (estado === 'REPROBADO') {
+      if (nivelOrigen !== nivelDestino) {
+        toast.error(
+          `El alumno REPROBADO debe repetir el mismo nivel de curso (${nombreCursoOrigen}). No puede cambiar de nivel.`
+        );
+        return;
+      }
     }
 
     try {
@@ -1559,7 +2088,7 @@ function PromocionDialog({
         anioDestino: anioDestino,
         estado: estado,
         observaciones: observaciones.trim() || undefined,
-        notaPromedio: notaPromedio ? parseFloat(notaPromedio) : undefined,
+        // Nota promedio no se envía desde esta UI
       };
 
       // Llamar al endpoint de promoción
@@ -1639,16 +2168,31 @@ function PromocionDialog({
                   <SelectValue placeholder="Seleccione un curso" />
                 </SelectTrigger>
                 <SelectContent>
-                  {cursos.map((curso) => (
-                    <SelectItem
-                      key={curso.id_curso}
-                      value={curso.id_curso?.toString() || ''}
-                    >
-                      {curso.nombre} {curso.seccion || ''}
+                  {cursosDestinoFiltrados.length > 0 ? (
+                    cursosDestinoFiltrados.map((curso) => (
+                      <SelectItem
+                        key={curso.id_curso}
+                        value={curso.id_curso?.toString() || ''}
+                      >
+                        {curso.nombre} {curso.seccion || ''} -{' '}
+                        {curso.gradoAcademico?.nombre || 'N/A'}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="_no_disponible" disabled>
+                      No hay cursos disponibles para{' '}
+                      {estado === 'APROBADO' ? 'promoción' : 'repetición'}
                     </SelectItem>
-                  ))}
+                  )}
                 </SelectContent>
               </Select>
+              {cursosDestinoFiltrados.length === 0 && (
+                <p className="text-xs text-amber-600 mt-1">
+                  ⚠️ No hay cursos de{' '}
+                  {estado === 'APROBADO' ? 'otro grado' : 'este mismo grado'}{' '}
+                  disponibles
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -1656,16 +2200,14 @@ function PromocionDialog({
                 <Label htmlFor="anio-destino" className="text-sm">
                   Año Nuevo
                 </Label>
-                <Select value={anioDestino} onValueChange={setAnioDestino}>
+                <Select value={anioDestino} disabled>
                   <SelectTrigger className="mt-1">
                     <SelectValue placeholder="Año" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={anioOrigen}>
-                      {anioOrigen} (Repite)
-                    </SelectItem>
                     <SelectItem value={(parseInt(anioOrigen) + 1).toString()}>
-                      {parseInt(anioOrigen) + 1} (Normal)
+                      {parseInt(anioOrigen) + 1}{' '}
+                      {estado === 'REPROBADO' ? '(Repite)' : '(Normal)'}
                     </SelectItem>
                   </SelectContent>
                 </Select>
@@ -1676,6 +2218,7 @@ function PromocionDialog({
                   Estado
                 </Label>
                 <Select
+                  disabled
                   value={estado}
                   onValueChange={(
                     value: 'APROBADO' | 'REPROBADO' | 'TRASLADADO'
@@ -1702,10 +2245,11 @@ function PromocionDialog({
                 min="0"
                 max="10"
                 step="0.1"
-                value={notaPromedio}
-                onChange={(e) => setNotaPromedio(e.target.value)}
+                value={promedioOficial}
+                readOnly
+                disabled
                 placeholder="Ej: 8.5"
-                className="mt-1"
+                className="mt-1 bg-gray-50 cursor-not-allowed"
               />
             </div>
 
@@ -1961,6 +2505,25 @@ function FinalizarDialog({
   const [observaciones, setObservaciones] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+
+  // Cargar promedio oficial cuando se abre el diálogo
+  useEffect(() => {
+    if (open && cursoActual?.id_curso) {
+      adminConsultaNotasService
+        .obtenerPromediosCurso(cursoActual.id_curso, anioActual)
+        .then((res) => {
+          const found = res.alumnos?.find(
+            (a: any) => a.alumno.id === alumno.id_alumno
+          );
+          if (found?.promedioGeneral?.promedio) {
+            setNotaPromedio(found.promedioGeneral.promedio.toString());
+          }
+        })
+        .catch(() => {
+          // Si falla, usar el promedio que viene del alumno
+        });
+    }
+  }, [open, cursoActual, anioActual, alumno.id_alumno]);
 
   const handleConfirm = () => {
     setShowConfirmDialog(true);

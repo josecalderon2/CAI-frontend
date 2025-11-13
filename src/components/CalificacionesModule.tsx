@@ -53,12 +53,17 @@ import {
   type AlumnoConCalificacion,
 } from '../api/services/evaluacionesService';
 import {
+  asignaturasService,
+  type Asignatura,
+} from '../api/services/asignaturasService';
+import {
   promediosService,
   type VerificacionCierreResponseDto,
 } from '../api/services/promediosService';
 
 export function CalificacionesModule() {
   const [evaluaciones, setEvaluaciones] = useState<Evaluacion[]>([]);
+  const [asignaturas, setAsignaturas] = useState<Asignatura[]>([]);
   const [asignaturaSeleccionada, setAsignaturaSeleccionada] =
     useState<string>('');
   const [evaluacionSeleccionada, setEvaluacionSeleccionada] =
@@ -94,6 +99,7 @@ export function CalificacionesModule() {
     nombre: string;
     trimestre?: number;
     periodo?: number;
+    cerrada?: boolean;
   } | null>(null);
 
   // Cargar evaluaciones del orientador y sus estados
@@ -101,6 +107,9 @@ export function CalificacionesModule() {
     const fetchEvaluaciones = async () => {
       try {
         setLoading(true);
+        const asignaturasData = await asignaturasService.findMisAsignaturas();
+        setAsignaturas(asignaturasData);
+
         const data = await evaluacionesService.findByMisAsignaturas();
         setEvaluaciones(data);
 
@@ -151,12 +160,40 @@ export function CalificacionesModule() {
     );
 
     if (primeraEvaluacion) {
-      setAsignaturaInfo({
-        id_asignatura: primeraEvaluacion.asignatura.id_asignatura,
-        nombre: primeraEvaluacion.asignatura.nombre,
-        trimestre: primeraEvaluacion.trimestre,
-        periodo: primeraEvaluacion.periodo,
-      });
+      // Verificar si está cerrada
+      const verificarEstadoCierre = async () => {
+        try {
+          const anioAcademico = new Date().getFullYear().toString();
+          const verificacion =
+            await promediosService.verificarEstadoParaCierreAsignatura(
+              primeraEvaluacion.asignatura.id_asignatura,
+              anioAcademico,
+              primeraEvaluacion.trimestre,
+              primeraEvaluacion.periodo
+            );
+
+          console.log('Verificación de cierre:', verificacion);
+
+          setAsignaturaInfo({
+            id_asignatura: primeraEvaluacion.asignatura.id_asignatura,
+            nombre: primeraEvaluacion.asignatura.nombre,
+            trimestre: primeraEvaluacion.trimestre,
+            periodo: primeraEvaluacion.periodo,
+            cerrada: verificacion.estaCerrado || false,
+          });
+        } catch (err) {
+          console.error('Error verificando estado de cierre:', err);
+          setAsignaturaInfo({
+            id_asignatura: primeraEvaluacion.asignatura.id_asignatura,
+            nombre: primeraEvaluacion.asignatura.nombre,
+            trimestre: primeraEvaluacion.trimestre,
+            periodo: primeraEvaluacion.periodo,
+            cerrada: false,
+          });
+        }
+      };
+
+      verificarEstadoCierre();
     }
   }, [asignaturaSeleccionada, evaluaciones]);
 
@@ -519,6 +556,11 @@ export function CalificacionesModule() {
 
       setShowCloseDialog(false);
 
+      // Actualizar el estado de asignaturaInfo para marcarla como cerrada
+      if (asignaturaInfo) {
+        setAsignaturaInfo({ ...asignaturaInfo, cerrada: true });
+      }
+
       if (resultado.alumnosCerrados === resultado.totalAlumnos) {
         toast.success(
           `Calificaciones de ${asignaturaInfo.nombre} cerradas exitosamente para ${resultado.alumnosCerrados} alumno${resultado.alumnosCerrados !== 1 ? 's' : ''}`
@@ -654,20 +696,6 @@ export function CalificacionesModule() {
     );
   };
 
-  // Obtener lista única de asignaturas
-  const asignaturasUnicas = evaluaciones.reduce(
-    (acc, evaluacion) => {
-      const existe = acc.find(
-        (a) => a.id_asignatura === evaluacion.asignatura.id_asignatura
-      );
-      if (!existe) {
-        acc.push(evaluacion.asignatura);
-      }
-      return acc;
-    },
-    [] as Array<{ id_asignatura: number; nombre: string }>
-  );
-
   // Filtrar evaluaciones por asignatura seleccionada, trimestre/periodo y mes
   const evaluacionesFiltradas = evaluaciones.filter((e) => {
     // Filtro por asignatura
@@ -759,23 +787,32 @@ export function CalificacionesModule() {
         {asignaturaSeleccionada &&
           asignaturaSeleccionada !== 'todas' &&
           asignaturaInfo && (
-            <Button
-              onClick={handleVerificarCierre}
-              disabled={loadingVerificacion}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              {loadingVerificacion ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Verificando...
-                </>
-              ) : (
-                <>
+            <>
+              {asignaturaInfo.cerrada ? (
+                <Badge className="bg-green-600 text-white px-4 py-2">
                   <Lock className="w-4 h-4 mr-2" />
-                  Cerrar Calificaciones
-                </>
+                  Calificaciones Cerradas
+                </Badge>
+              ) : (
+                <Button
+                  onClick={handleVerificarCierre}
+                  disabled={loadingVerificacion}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {loadingVerificacion ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Verificando...
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="w-4 h-4 mr-2" />
+                      Cerrar Calificaciones
+                    </>
+                  )}
+                </Button>
               )}
-            </Button>
+            </>
           )}
       </div>
 
@@ -800,12 +837,14 @@ export function CalificacionesModule() {
                   <SelectValue placeholder="Seleccione una asignatura" />
                 </SelectTrigger>
                 <SelectContent>
-                  {asignaturasUnicas.map((asignatura) => (
+                  {asignaturas.map((asignatura) => (
                     <SelectItem
                       key={asignatura.id_asignatura}
                       value={asignatura.id_asignatura.toString()}
                     >
-                      {asignatura.nombre}
+                      {asignatura.curso
+                        ? `${asignatura.nombre} - ${asignatura.curso.nombre} ${asignatura.curso.seccion || ''}`.trim()
+                        : asignatura.nombre}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1268,8 +1307,9 @@ export function CalificacionesModule() {
                               placeholder="0 - 10"
                               className="w-full"
                               disabled={
-                                alumno.tiene_calificacion &&
-                                !alumnosEnEdicion.has(alumno.id_alumno)
+                                asignaturaInfo?.cerrada ||
+                                (alumno.tiene_calificacion &&
+                                  !alumnosEnEdicion.has(alumno.id_alumno))
                               }
                             />
                           </TableCell>
@@ -1298,7 +1338,8 @@ export function CalificacionesModule() {
                               {alumno.calificacion !== undefined &&
                                 alumno.calificacion !== null &&
                                 (!alumno.tiene_calificacion ||
-                                  alumnosEnEdicion.has(alumno.id_alumno)) && (
+                                  alumnosEnEdicion.has(alumno.id_alumno)) &&
+                                !asignaturaInfo?.cerrada && (
                                   <Button
                                     variant="ghost"
                                     size="sm"
@@ -1319,6 +1360,7 @@ export function CalificacionesModule() {
 
                               {/* Botón de Editar/Cancelar */}
                               {alumno.tiene_calificacion &&
+                                !asignaturaInfo?.cerrada &&
                                 (alumnosEnEdicion.has(alumno.id_alumno) ? (
                                   <Button
                                     variant="ghost"

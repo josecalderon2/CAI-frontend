@@ -794,7 +794,9 @@ export function EvaluacionesModule() {
                     key={asignatura.id_asignatura}
                     value={asignatura.id_asignatura.toString()}
                   >
-                    {asignatura.nombre}
+                    {asignatura.curso
+                      ? `${asignatura.nombre} - ${asignatura.curso.nombre} ${asignatura.curso.seccion || ''}`.trim()
+                      : asignatura.nombre}
                   </SelectItem>
                 ))}
               </SelectContent>

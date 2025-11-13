@@ -44,6 +44,7 @@ export interface EstadisticasCierreDto {
 
 export interface VerificacionCierreResponseDto {
   puedesCerrar: boolean;
+  estaCerrado?: boolean;
   advertencias: AdvertenciaCierreDto[];
   estadisticas: EstadisticasCierreDto;
   mensaje: string;

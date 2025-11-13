@@ -11,6 +11,15 @@ export interface AsignaturaEvaluacion {
   id_asignatura: number;
   nombre: string;
   id_curso?: number;
+  curso?: {
+    id_curso: number;
+    nombre: string;
+    seccion: string;
+    gradoAcademico?: {
+      id_grado_academico: number;
+      nombre: string;
+    };
+  };
 }
 
 export interface OrientadorEvaluacion {
@@ -128,7 +137,9 @@ export const evaluacionesService = {
   async getAlumnosConCalificaciones(
     id_evaluacion: number
   ): Promise<AlumnosConCalificacionesResponse> {
-    const res = await api.get(`${base}/${id_evaluacion}/alumnos-con-calificaciones`);
+    const res = await api.get(
+      `${base}/${id_evaluacion}/alumnos-con-calificaciones`
+    );
     return res.data as AlumnosConCalificacionesResponse;
   },
 };
