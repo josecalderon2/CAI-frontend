@@ -32,6 +32,7 @@ import { CalificacionesModule } from './components/CalificacionesModule';
 import { ConsultarEvaluacionesModule } from './components/ConsultarEvaluacionesModule';
 import { EvaluacionesModule } from './components/EvaluacionesModule';
 import { ReportesModule } from './components/ReportesModule';
+import { BackupsModule } from './components/BackupsModule';
 
 // ================= Helpers de auth =================
 function getUser() {
@@ -418,6 +419,15 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <ReportesModuleWrapper />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/backups"
+          element={
+            <ProtectedRoute>
+              <BackupsModule />
             </ProtectedRoute>
           }
         />

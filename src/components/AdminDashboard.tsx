@@ -2,6 +2,14 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from './ui/dialog';
+import {
   Users,
   GraduationCap,
   BookOpen,
@@ -11,8 +19,14 @@ import {
   UserPlus,
   Calendar,
   Target,
+  HardDrive,
+  Shield,
+  Search,
+  Loader2,
+  Cloud,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { api } from '../api/axiosConfig';
 import {
   obtenerEstadisticasPersonal,
   obtenerTotalAlumnos,
@@ -53,6 +67,38 @@ export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Estado del modal de backups
+  const [backupModalOpen, setBackupModalOpen] = useState(false);
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [backupResult, setBackupResult] = useState<
+    | { success: true; url?: string }
+    | { success: false; error?: string }
+    | null
+  >(null);
+
+  const abrirModalBackup = () => {
+    setBackupResult(null);
+    setBackupModalOpen(true);
+  };
+
+  const ejecutarBackup = async () => {
+    setBackupLoading(true);
+    setBackupResult(null);
+    try {
+      const { data } = await api.post('/backup/ejecutar');
+      const result = (data ?? {}) as { success?: boolean; url?: string; error?: string };
+      if (result.success) {
+        setBackupResult({ success: true, url: result.url });
+      } else {
+        setBackupResult({ success: false, error: result.error || 'Error al ejecutar el respaldo' });
+      }
+    } catch (e) {
+      setBackupResult({ success: false, error: 'Error de conexión al ejecutar el respaldo' });
+    } finally {
+      setBackupLoading(false);
+    }
+  };
 
   useEffect(() => {
     const cargarDatosDashboard = async () => {
@@ -135,16 +181,16 @@ export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
     {
       title: 'Catálogo de Conductas',
       description: 'Gestionar infracciones y catálogo de conducta',
-      icon: UserPlus,
-      color: 'bg-pink-600',
+      icon: Shield,
+      color: 'bg-red-600',
       action: () => onNavigate('conductas'),
       stats: 'Gestionar catálogo',
     },
     {
       title: 'Consultar Evaluaciones',
       description: 'Ver evaluaciones, calificaciones y promedios de cursos',
-      icon: Calendar,
-      color: 'bg-teal-600',
+      icon: Search,
+      color: 'bg-blue-600',
       action: () => onNavigate('consultar-evaluaciones'),
       stats: 'Solo lectura',
     },
@@ -155,6 +201,14 @@ export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
       color: 'bg-indigo-600',
       action: () => onNavigate('reportes'),
       stats: `${stats.reportesGenerados} reportes generados`,
+    },
+    {
+      title: 'Respaldos (Backups)',
+      description: 'Gestión de respaldos de la base de datos',
+      icon: HardDrive,
+      color: 'bg-orange-600',
+      action: () => abrirModalBackup(),
+      stats: 'Sistema de respaldos automático',
     },
   ];
 
@@ -307,11 +361,13 @@ export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
             >
               <CardContent className="p-6">
                 <div className="flex items-start space-x-4">
-                  <div
-                    className={`${action.color} p-3 rounded-lg group-hover:scale-110 transition-transform`}
-                  >
-                    <action.icon className="w-6 h-6 text-white" />
-                  </div>
+                  {action.icon && (
+                    <div
+                      className={`${action.color} p-3 rounded-lg group-hover:scale-110 transition-transform`}
+                    >
+                      <action.icon className="w-6 h-6 text-white" />
+                    </div>
+                  )}
                   <div className="flex-1">
                     <h3 className="font-semibold mb-2 group-hover:text-blue-600 transition-colors">
                       {action.title}
@@ -416,6 +472,74 @@ export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Modal de confirmación de Backups */}
+      <Dialog open={backupModalOpen} onOpenChange={setBackupModalOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Ejecutar Respaldo (Backup)</DialogTitle>
+            <DialogDescription>
+              Se generará un respaldo completo de la base de datos y se subirá
+              automáticamente a Google Drive. Este proceso puede tardar
+              varios segundos y no debes cerrar la ventana.
+            </DialogDescription>
+          </DialogHeader>
+
+          {backupResult ? (
+            <div
+              className={
+                backupResult.success
+                  ? 'bg-green-50 border border-green-200 rounded-md p-3'
+                  : 'bg-red-50 border border-red-200 rounded-md p-3'
+              }
+            >
+              {backupResult.success ? (
+                <div className="text-green-800 text-sm">
+                  Respaldo generado y subido correctamente.
+                  {backupResult.url ? (
+                    <div className="mt-2">
+                      <a
+                        href={backupResult.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline inline-flex items-center"
+                      >
+                        <Cloud className="w-4 h-4 mr-1" /> Ver en Google Drive
+                      </a>
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="text-red-800 text-sm">{backupResult.error}</div>
+              )}
+            </div>
+          ) : null}
+
+          <DialogFooter className="pt-4">
+            <Button
+              variant="outline"
+              disabled={backupLoading}
+              onClick={() => setBackupModalOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={ejecutarBackup}
+              disabled={backupLoading}
+              className="bg-orange-600 hover:bg-orange-700"
+            >
+              {backupLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Ejecutando...
+                </>
+              ) : (
+                'Aceptar y Ejecutar'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
