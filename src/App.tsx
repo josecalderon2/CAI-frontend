@@ -28,6 +28,7 @@ import { AsignacionesModule } from './components/AsignacionesModule';
 import { PerfilModule } from './components/PerfilModule';
 import { AsistenciaModuleNew } from './components/AsistenciaModuleNew';
 import { ConductaModule } from './components/ConductaModule';
+import { CalificacionesModule } from './components/CalificacionesModule';
 import { ConsultarEvaluacionesModule } from './components/ConsultarEvaluacionesModule';
 import { EvaluacionesModule } from './components/EvaluacionesModule';
 import { ReportesModule } from './components/ReportesModule';
@@ -383,6 +384,15 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <EvaluacionesModule />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/calificaciones"
+          element={
+            <ProtectedRoute>
+              <CalificacionesModule />
             </ProtectedRoute>
           }
         />

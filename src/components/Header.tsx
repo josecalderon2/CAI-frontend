@@ -73,7 +73,7 @@ export function Header({
     { id: 'dashboard', label: 'Dashboard', icon: Home },
     { id: 'asistencia', label: 'Asistencia', icon: UserCheck },
     { id: 'evaluaciones', label: 'Evaluaciones', icon: Calendar },
-    { id: 'notas', label: 'Notas', icon: Edit },
+    { id: 'calificaciones', label: 'Notas', icon: Edit },
     { id: 'reportes', label: 'Reportes', icon: FileText },
   ];
 

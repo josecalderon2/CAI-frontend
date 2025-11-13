@@ -10,6 +10,7 @@ export interface TipoEvaluacion {
 export interface AsignaturaEvaluacion {
   id_asignatura: number;
   nombre: string;
+  id_curso?: number;
 }
 
 export interface OrientadorEvaluacion {
@@ -119,4 +120,43 @@ export const evaluacionesService = {
     const res = await api.get(`/tipos-evaluacion/asignatura/${id_asignatura}`);
     return res.data as TipoEvaluacion[];
   },
+
+  /**
+   * Obtener alumnos de una evaluación con sus calificaciones
+   * Incluye alumnos que ya tienen calificación y los que aún no
+   */
+  async getAlumnosConCalificaciones(
+    id_evaluacion: number
+  ): Promise<AlumnosConCalificacionesResponse> {
+    const res = await api.get(`${base}/${id_evaluacion}/alumnos-con-calificaciones`);
+    return res.data as AlumnosConCalificacionesResponse;
+  },
 };
+
+// Interface para el response del nuevo endpoint
+export interface AlumnoConCalificacion {
+  id_alumno: number;
+  nombre: string;
+  apellido: string;
+  genero?: string;
+  calificacion?: number;
+  id_nota?: number;
+  tiene_calificacion: boolean;
+}
+
+export interface AlumnosConCalificacionesResponse {
+  id_evaluacion: number;
+  nombre_evaluacion: string;
+  asignatura: {
+    id_asignatura: number;
+    nombre: string;
+  };
+  curso: {
+    id_curso: number;
+    nombre: string;
+    seccion: string;
+  };
+  total_alumnos: number;
+  alumnos_calificados: number;
+  alumnos: AlumnoConCalificacion[];
+}
