@@ -13,7 +13,14 @@ import {
   Plus,
   BarChart3,
   Shield,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import {
+  administrativoDashboardService,
+  type DashboardAdministrativoData,
+} from '../api/services/administrativoDashboardService';
 
 interface User {
   id: string;
@@ -31,35 +38,103 @@ export function AdministrativoDashboard({
   user,
   onNavigate,
 }: AdministrativoDashboardProps) {
+  // Estado para los datos del dashboard
+  const [dashboardData, setDashboardData] =
+    useState<DashboardAdministrativoData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Cargar datos del dashboard al montar el componente
+  useEffect(() => {
+    const cargarDatos = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const data =
+          await administrativoDashboardService.getDashboardData();
+
+        setDashboardData(data);
+      } catch (err) {
+        console.error('Error cargando datos del dashboard:', err);
+        setError(
+          'No se pudieron cargar los datos del dashboard. Por favor, intenta de nuevo.'
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    cargarDatos();
+  }, []);
+
+  // Mostrar loading
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600">Cargando dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Mostrar error
+  if (error || !dashboardData) {
+    return (
+      <div className="p-6">
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-6">
+            <div className="flex items-center space-x-3">
+              <AlertCircle className="w-6 h-6 text-red-600" />
+              <div>
+                <h3 className="font-semibold text-red-900">Error</h3>
+                <p className="text-red-700">
+                  {error || 'No se pudieron cargar los datos del dashboard'}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Extraer datos
+  const { estadisticas, actividadesRecientes, resumenMensual, tareasPendientes } =
+    dashboardData;
+
+  // Construir las cards de estadísticas con datos reales
   const statsCards = [
     {
       title: 'Total Alumnos',
-      value: '450',
-      change: '+12',
+      value: estadisticas.totalAlumnos.toString(),
+      change: `+${estadisticas.cambioAlumnos}`,
       changeType: 'positive' as const,
       icon: Users,
       description: 'Estudiantes activos',
     },
     {
       title: 'Cursos Activos',
-      value: '18',
-      change: '+2',
+      value: estadisticas.cursosActivos.toString(),
+      change: `+${estadisticas.cambioCursos}`,
       changeType: 'positive' as const,
       icon: School,
       description: 'Cursos en funcionamiento',
     },
     {
       title: 'Asignaturas',
-      value: '24',
-      change: '+1',
+      value: estadisticas.asignaturasTotal.toString(),
+      change: `+${estadisticas.cambioAsignaturas}`,
       changeType: 'positive' as const,
       icon: BookOpen,
       description: 'Materias registradas',
     },
     {
       title: 'Docentes',
-      value: '32',
-      change: '+3',
+      value: estadisticas.docentesActivos.toString(),
+      change: `+${estadisticas.cambioDocentes}`,
       changeType: 'positive' as const,
       icon: GraduationCap,
       description: 'Profesores activos',
@@ -78,7 +153,7 @@ export function AdministrativoDashboard({
       title: 'Ver Conducta',
       description: 'Consultar infracciones de alumnos',
       icon: Shield,
-      action: () => onNavigate('conducta'),
+      action: () => onNavigate('conductas'),
       color: 'bg-red-600 hover:bg-red-700',
     },
     {
@@ -104,50 +179,47 @@ export function AdministrativoDashboard({
     },
   ];
 
-  const recentActivities = [
-    {
-      type: 'alumno',
-      message: 'Nuevo alumno registrado: Juan Carlos Méndez',
-      time: 'Hace 2 horas',
-      icon: Users,
-    },
-    {
-      type: 'asignatura',
-      message: 'Asignatura creada: Educación Física',
-      time: 'Hace 4 horas',
-      icon: BookOpen,
-    },
-    {
-      type: 'curso',
-      message: 'Curso 9° Básico C configurado',
-      time: 'Hace 1 día',
-      icon: School,
-    },
-    {
-      type: 'asignacion',
-      message: 'Asignación completada: Prof. Ana - Matemáticas',
-      time: 'Hace 2 días',
-      icon: ClipboardList,
-    },
-  ];
+  // Mapear actividades recientes con iconos
+  const getIconForActivity = (tipo: string) => {
+    switch (tipo.toLowerCase()) {
+      case 'alumno':
+        return Users;
+      case 'asignatura':
+        return BookOpen;
+      case 'curso':
+        return School;
+      case 'asignacion':
+      case 'responsable':
+        return ClipboardList;
+      case 'nota':
+      case 'calificacion':
+        return FileText;
+      default:
+        return Calendar;
+    }
+  };
 
-  const pendingTasks = [
-    {
-      task: 'Revisar solicitudes de inscripción',
-      priority: 'high' as const,
-      count: 8,
-    },
-    {
-      task: 'Asignar docentes a nuevos cursos',
-      priority: 'medium' as const,
-      count: 3,
-    },
-    {
-      task: 'Actualizar información de asignaturas',
-      priority: 'low' as const,
-      count: 5,
-    },
-  ];
+  const formatearTiempoRelativo = (fecha: string | Date) => {
+    const ahora = new Date();
+    const fechaActividad = new Date(fecha);
+    const diffMs = ahora.getTime() - fechaActividad.getTime();
+    const diffMin = Math.floor(diffMs / 60000);
+    const diffHoras = Math.floor(diffMin / 60);
+    const diffDias = Math.floor(diffHoras / 24);
+
+    if (diffMin < 1) return 'Hace unos momentos';
+    if (diffMin < 60) return `Hace ${diffMin} minuto${diffMin > 1 ? 's' : ''}`;
+    if (diffHoras < 24) return `Hace ${diffHoras} hora${diffHoras > 1 ? 's' : ''}`;
+    if (diffDias < 7) return `Hace ${diffDias} día${diffDias > 1 ? 's' : ''}`;
+    return fechaActividad.toLocaleDateString('es-ES');
+  };
+
+  const recentActivities = actividadesRecientes.map((actividad) => ({
+    type: actividad.entidad || 'general',
+    message: actividad.descripcion,
+    time: formatearTiempoRelativo(actividad.fecha),
+    icon: getIconForActivity(actividad.entidad || 'general'),
+  }));
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -204,14 +276,6 @@ export function AdministrativoDashboard({
                   <p className="text-2xl font-bold text-gray-900">
                     {stat.value}
                   </p>
-                  <div className="flex items-center space-x-1 mt-1">
-                    <span
-                      className={`text-sm ${stat.changeType === 'positive' ? 'text-green-600' : 'text-red-600'}`}
-                    >
-                      {stat.change}
-                    </span>
-                    <span className="text-sm text-gray-500">este mes</span>
-                  </div>
                 </div>
                 <div className="p-3 bg-blue-100 rounded-full">
                   <stat.icon className="w-6 h-6 text-blue-600" />
@@ -268,7 +332,7 @@ export function AdministrativoDashboard({
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {pendingTasks.map((task, index) => (
+              {tareasPendientes.map((task, index) => (
                 <div
                   key={index}
                   className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
@@ -306,7 +370,7 @@ export function AdministrativoDashboard({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
+            <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
               {recentActivities.map((activity, index) => (
                 <div key={index} className="flex items-start space-x-3">
                   <div className="p-2 bg-blue-100 rounded-full">
@@ -334,25 +398,31 @@ export function AdministrativoDashboard({
             <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600">Nuevos Alumnos</span>
-                <span className="font-medium">12</span>
+                <span className="font-medium">{resumenMensual.nuevosAlumnos}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600">
                   Asignaturas Creadas
                 </span>
-                <span className="font-medium">3</span>
+                <span className="font-medium">
+                  {resumenMensual.asignaturasCreadas}
+                </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600">
                   Cursos Configurados
                 </span>
-                <span className="font-medium">2</span>
+                <span className="font-medium">
+                  {resumenMensual.cursosConfigurados}
+                </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600">
                   Reportes Generados
                 </span>
-                <span className="font-medium">25</span>
+                <span className="font-medium">
+                  {resumenMensual.reportesGenerados}
+                </span>
               </div>
             </div>
           </CardContent>
@@ -405,7 +475,7 @@ export function AdministrativoDashboard({
             <Button
               variant="outline"
               className="h-20 flex flex-col items-center justify-center space-y-2"
-              onClick={() => onNavigate('conducta')}
+              onClick={() => onNavigate('conductas')}
             >
               <Shield className="w-6 h-6" />
               <span>Conducta</span>

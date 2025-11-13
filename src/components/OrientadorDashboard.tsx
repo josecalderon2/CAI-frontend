@@ -11,7 +11,14 @@ import {
   Edit,
   Download,
   UserCheck,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import {
+  orientadorDashboardService,
+  type DashboardOrientadorData,
+} from '../api/services/orientadorDashboardService';
 
 interface User {
   id: string;
@@ -29,53 +36,77 @@ export function OrientadorDashboard({
   user,
   onNavigate,
 }: OrientadorDashboardProps) {
-  // Datos simulados para el dashboard del orientador
-  const stats = {
-    cursosAsignados: 4,
-    evaluacionesCreadas: 12,
-    notasPendientes: 6,
-    alumnosTotal: 120,
-    promedioGeneral: 7.8,
-    evaluacionesEstesMes: 8,
-  };
+  // Estado para los datos del dashboard
+  const [dashboardData, setDashboardData] =
+    useState<DashboardOrientadorData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const cursosAsignados = [
-    { id: 1, nombre: '3° Básico A', asignatura: 'Matemáticas', alumnos: 30 },
-    { id: 2, nombre: '4° Básico B', asignatura: 'Matemáticas', alumnos: 28 },
-    { id: 3, nombre: '5° Básico A', asignatura: 'Ciencias', alumnos: 32 },
-    { id: 4, nombre: '6° Básico C', asignatura: 'Ciencias', alumnos: 30 },
-  ];
+  // Cargar datos del dashboard al montar el componente
+  useEffect(() => {
+    const cargarDatos = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        // Obtener el ID del orientador del usuario
+        const orientadorId = parseInt(user.id);
+        
+        // Cargar todos los datos del dashboard
+        const data = await orientadorDashboardService.getDashboardData(
+          orientadorId
+        );
+        
+        setDashboardData(data);
+      } catch (err) {
+        console.error('Error cargando datos del dashboard:', err);
+        setError(
+          'No se pudieron cargar los datos del dashboard. Por favor, intenta de nuevo.'
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const evaluacionesRecientes = [
-    {
-      id: 1,
-      nombre: 'Prueba Unidad 3',
-      curso: '3° Básico A',
-      fecha: '2024-01-15',
-      estado: 'Completada',
-    },
-    {
-      id: 2,
-      nombre: 'Evaluación Formativa',
-      curso: '4° Básico B',
-      fecha: '2024-01-18',
-      estado: 'Pendiente',
-    },
-    {
-      id: 3,
-      nombre: 'Examen Semestral',
-      curso: '5° Básico A',
-      fecha: '2024-01-20',
-      estado: 'En Progreso',
-    },
-    {
-      id: 4,
-      nombre: 'Trabajo Práctico',
-      curso: '6° Básico C',
-      fecha: '2024-01-22',
-      estado: 'Planificada',
-    },
-  ];
+    cargarDatos();
+  }, [user.id]);
+
+  // Mostrar loading
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600">Cargando dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Mostrar error
+  if (error || !dashboardData) {
+    return (
+      <div className="p-6">
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-6">
+            <div className="flex items-center space-x-3">
+              <AlertCircle className="w-6 h-6 text-red-600" />
+              <div>
+                <h3 className="font-semibold text-red-900">Error</h3>
+                <p className="text-red-700">
+                  {error || 'No se pudieron cargar los datos del dashboard'}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Extraer datos del dashboard
+  const { estadisticas, cursosAsignados, evaluacionesRecientes } =
+    dashboardData;
 
   const quickActions = [
     {
@@ -97,7 +128,7 @@ export function OrientadorDashboard({
       description: 'Registrar calificaciones de evaluaciones',
       icon: Edit,
       color: 'bg-orange-600',
-      action: () => onNavigate('notas'),
+      action: () => onNavigate('calificaciones'),
     },
     {
       title: 'Generar Reportes',
@@ -134,7 +165,7 @@ export function OrientadorDashboard({
               <div>
                 <p className="text-sm text-gray-600">Cursos Asignados</p>
                 <p className="text-2xl font-bold text-blue-600">
-                  {stats.cursosAsignados}
+                  {estadisticas.cursosAsignados}
                 </p>
               </div>
               <BookOpen className="w-8 h-8 text-blue-600" />
@@ -148,7 +179,7 @@ export function OrientadorDashboard({
               <div>
                 <p className="text-sm text-gray-600">Total Alumnos</p>
                 <p className="text-2xl font-bold text-green-600">
-                  {stats.alumnosTotal}
+                  {estadisticas.alumnosTotal}
                 </p>
               </div>
               <Users className="w-8 h-8 text-green-600" />
@@ -162,7 +193,7 @@ export function OrientadorDashboard({
               <div>
                 <p className="text-sm text-gray-600">Evaluaciones</p>
                 <p className="text-2xl font-bold text-purple-600">
-                  {stats.evaluacionesCreadas}
+                  {estadisticas.evaluacionesCreadas}
                 </p>
               </div>
               <ClipboardList className="w-8 h-8 text-purple-600" />
@@ -176,7 +207,7 @@ export function OrientadorDashboard({
               <div>
                 <p className="text-sm text-gray-600">Notas Pendientes</p>
                 <p className="text-2xl font-bold text-orange-600">
-                  {stats.notasPendientes}
+                  {estadisticas.notasPendientes}
                 </p>
               </div>
               <Edit className="w-8 h-8 text-orange-600" />
@@ -229,25 +260,47 @@ export function OrientadorDashboard({
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {cursosAsignados.map((curso) => (
-                <div
-                  key={curso.id}
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                >
-                  <div>
-                    <p className="font-medium">{curso.nombre}</p>
-                    <p className="text-sm text-gray-600">{curso.asignatura}</p>
+              {cursosAsignados.length > 0 ? (
+                cursosAsignados.map((curso) => (
+                  <div
+                    key={curso.id_curso}
+                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                  >
+                    <div>
+                      <p className="font-medium">
+                        {curso.nombre}
+                        {curso.seccion ? ` - Sección ${curso.seccion}` : ''}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        {curso.asignaturas && curso.asignaturas.length > 0
+                          ? curso.asignaturas
+                              .map((a) => a.nombre)
+                              .join(', ')
+                          : 'Sin asignaturas'}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-medium">
+                        {curso.alumnosCount || 0} alumnos
+                      </p>
+                      <Badge
+                        variant="outline"
+                        className={
+                          curso.activo
+                            ? 'text-xs bg-green-50 text-green-700'
+                            : 'text-xs'
+                        }
+                      >
+                        {curso.activo ? 'Activo' : 'Inactivo'}
+                      </Badge>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-medium">
-                      {curso.alumnos} alumnos
-                    </p>
-                    <Badge variant="outline" className="text-xs">
-                      Activo
-                    </Badge>
-                  </div>
-                </div>
-              ))}
+                ))
+              ) : (
+                <p className="text-sm text-gray-500 text-center py-4">
+                  No tienes cursos asignados
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -262,34 +315,58 @@ export function OrientadorDashboard({
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {evaluacionesRecientes.map((evaluacion) => (
-                <div
-                  key={evaluacion.id}
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                >
-                  <div>
-                    <p className="font-medium">{evaluacion.nombre}</p>
-                    <p className="text-sm text-gray-600">{evaluacion.curso}</p>
-                    <p className="text-xs text-gray-500">{evaluacion.fecha}</p>
-                  </div>
-                  <Badge
-                    variant={
-                      evaluacion.estado === 'Completada' ? 'default' : 'outline'
-                    }
-                    className={
-                      evaluacion.estado === 'Completada'
-                        ? 'bg-green-100 text-green-800'
-                        : evaluacion.estado === 'En Progreso'
-                          ? 'bg-blue-100 text-blue-800'
-                          : evaluacion.estado === 'Pendiente'
-                            ? 'bg-yellow-100 text-yellow-800'
-                            : 'bg-gray-100 text-gray-800'
-                    }
+              {evaluacionesRecientes.length > 0 ? (
+                evaluacionesRecientes.map((evaluacion) => (
+                  <div
+                    key={evaluacion.id_evaluacion}
+                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
                   >
-                    {evaluacion.estado}
-                  </Badge>
-                </div>
-              ))}
+                    <div className="flex-1">
+                      <p className="font-medium">{evaluacion.nombre}</p>
+                      <p className="text-sm text-gray-600">
+                        {evaluacion.asignatura.nombre}
+                        {evaluacion.asignatura.curso
+                          ? ` - ${evaluacion.asignatura.curso.nombre}`
+                          : ''}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {new Date(evaluacion.createdAt).toLocaleDateString(
+                          'es-ES'
+                        )}
+                      </p>
+                      {evaluacion.notasIngresadas !== undefined &&
+                        evaluacion.totalAlumnos !== undefined && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            {evaluacion.notasIngresadas} /{' '}
+                            {evaluacion.totalAlumnos} calificaciones
+                          </p>
+                        )}
+                    </div>
+                    <Badge
+                      variant={
+                        evaluacion.estadoProgreso === 'Completada'
+                          ? 'default'
+                          : 'outline'
+                      }
+                      className={
+                        evaluacion.estadoProgreso === 'Completada'
+                          ? 'bg-green-100 text-green-800'
+                          : evaluacion.estadoProgreso === 'En Progreso'
+                            ? 'bg-blue-100 text-blue-800'
+                            : evaluacion.estadoProgreso === 'Pendiente'
+                              ? 'bg-yellow-100 text-yellow-800'
+                              : 'bg-gray-100 text-gray-800'
+                      }
+                    >
+                      {evaluacion.estadoProgreso || 'Pendiente'}
+                    </Badge>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-gray-500 text-center py-4">
+                  No hay evaluaciones recientes
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -336,7 +413,7 @@ export function OrientadorDashboard({
             <Button
               variant="outline"
               className="justify-start h-auto p-4"
-              onClick={() => onNavigate('notas')}
+              onClick={() => onNavigate('calificaciones')}
             >
               <div className="text-left">
                 <div className="flex items-center space-x-2 mb-1">
