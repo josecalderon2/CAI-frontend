@@ -50,6 +50,9 @@ export function GrupoTrimestreCard({
   onAddEvaluacion,
   getNombreMes,
 }: Props) {
+  // Determinar si es bachillerato (usa periodos en lugar de trimestres)
+  const esBachillerato = grupo.periodo !== null;
+
   // Estado para controlar qué meses están expandidos
   const [mesesExpandidos, setMesesExpandidos] = useState<Set<number>>(
     new Set(grupo.evaluacionesMensuales.map((m) => m.mes))
@@ -202,8 +205,8 @@ export function GrupoTrimestreCard({
       </CardHeader>
 
       <CardContent className="p-0">
-        {/* EVALUACIONES MENSUALES */}
-        {grupo.evaluacionesMensuales.length > 0 && (
+        {/* EVALUACIONES MENSUALES - Solo para trimestres (no bachillerato) */}
+        {!esBachillerato && grupo.evaluacionesMensuales.length > 0 && (
           <div className="border-b">
             <div className="bg-purple-50 px-6 py-3 border-b">
               <h4 className="font-semibold text-purple-900">
@@ -419,56 +422,65 @@ export function GrupoTrimestreCard({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <h4 className="font-semibold text-green-900">
-                    Evaluaciones Trimestrales (65% del trimestre)
+                    {esBachillerato
+                      ? `Evaluaciones del Periodo (100%)`
+                      : `Evaluaciones Trimestrales (65% del trimestre)`}
                   </h4>
                   <Badge variant="outline" className="text-xs">
-                    {grupo.porcentajeTotalTrimestral}% / 65%
+                    {grupo.porcentajeTotalTrimestral}% /{' '}
+                    {esBachillerato ? '100' : '65'}%
                   </Badge>
                 </div>
-                <button
-                  onClick={() =>
-                    onAddEvaluacion(
-                      grupo.asignatura.id_asignatura,
-                      grupo.trimestre,
-                      grupo.periodo,
-                      null
-                    )
-                  }
-                  style={{
-                    backgroundColor: '#ecfdf5',
-                    color: '#047857',
-                    padding: '6px 12px',
-                    borderRadius: '6px',
-                    border: '1px solid #86efac',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    fontSize: '13px',
-                    fontWeight: '600',
-                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                    whiteSpace: 'nowrap',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = '#d1fae5';
-                    e.currentTarget.style.borderColor = '#4ade80';
-                    e.currentTarget.style.boxShadow =
-                      '0 2px 4px rgba(4,120,87,0.15)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = '#ecfdf5';
-                    e.currentTarget.style.borderColor = '#86efac';
-                    e.currentTarget.style.boxShadow =
-                      '0 1px 2px rgba(0,0,0,0.05)';
-                  }}
-                >
-                  <Plus
-                    style={{ width: '14px', height: '14px', color: '#047857' }}
-                  />
-                  <span style={{ color: '#047857' }}>
-                    Evaluación trimestral
-                  </span>
-                </button>
+                {!esBachillerato && (
+                  <button
+                    onClick={() =>
+                      onAddEvaluacion(
+                        grupo.asignatura.id_asignatura,
+                        grupo.trimestre,
+                        grupo.periodo,
+                        null
+                      )
+                    }
+                    style={{
+                      backgroundColor: '#ecfdf5',
+                      color: '#047857',
+                      padding: '6px 12px',
+                      borderRadius: '6px',
+                      border: '1px solid #86efac',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                      whiteSpace: 'nowrap',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#d1fae5';
+                      e.currentTarget.style.borderColor = '#4ade80';
+                      e.currentTarget.style.boxShadow =
+                        '0 2px 4px rgba(4,120,87,0.15)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = '#ecfdf5';
+                      e.currentTarget.style.borderColor = '#86efac';
+                      e.currentTarget.style.boxShadow =
+                        '0 1px 2px rgba(0,0,0,0.05)';
+                    }}
+                  >
+                    <Plus
+                      style={{
+                        width: '14px',
+                        height: '14px',
+                        color: '#047857',
+                      }}
+                    />
+                    <span style={{ color: '#047857' }}>
+                      Evaluación trimestral
+                    </span>
+                  </button>
+                )}
               </div>
             </div>
 

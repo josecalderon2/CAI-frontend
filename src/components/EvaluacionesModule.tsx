@@ -153,16 +153,20 @@ export function EvaluacionesModule() {
 
         let tiposFiltrados = tiposArray;
 
-        if (nuevaEvaluacion.mes !== null && nuevaEvaluacion.mes !== undefined) {
+        // Si es periodo (bachillerato), mostrar todos los tipos sin filtrar
+        // porque bachillerato no tiene evaluaciones mensuales
+        if (nuevaEvaluacion.periodo !== null) {
+          tiposFiltrados = tiposArray;
+        } else if (
+          nuevaEvaluacion.mes !== null &&
+          nuevaEvaluacion.mes !== undefined
+        ) {
           // Si hay mes seleccionado, mostrar solo tipos mensuales
           tiposFiltrados = tiposArray.filter((tipo) =>
             tiposMensuales.some((nombre) => tipo.nombre.includes(nombre))
           );
-        } else if (
-          nuevaEvaluacion.trimestre !== null ||
-          nuevaEvaluacion.periodo !== null
-        ) {
-          // Si hay trimestre/periodo pero NO mes, mostrar solo tipos trimestrales
+        } else if (nuevaEvaluacion.trimestre !== null) {
+          // Si hay trimestre pero NO mes, mostrar solo tipos trimestrales
           tiposFiltrados = tiposArray.filter((tipo) =>
             tiposTrimestrales.some((nombre) => tipo.nombre.includes(nombre))
           );
