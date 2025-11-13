@@ -72,9 +72,7 @@ export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
   const [backupModalOpen, setBackupModalOpen] = useState(false);
   const [backupLoading, setBackupLoading] = useState(false);
   const [backupResult, setBackupResult] = useState<
-    | { success: true; url?: string }
-    | { success: false; error?: string }
-    | null
+    { success: true; url?: string } | { success: false; error?: string } | null
   >(null);
 
   const abrirModalBackup = () => {
@@ -87,14 +85,24 @@ export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
     setBackupResult(null);
     try {
       const { data } = await api.post('/backup/ejecutar');
-      const result = (data ?? {}) as { success?: boolean; url?: string; error?: string };
+      const result = (data ?? {}) as {
+        success?: boolean;
+        url?: string;
+        error?: string;
+      };
       if (result.success) {
         setBackupResult({ success: true, url: result.url });
       } else {
-        setBackupResult({ success: false, error: result.error || 'Error al ejecutar el respaldo' });
+        setBackupResult({
+          success: false,
+          error: result.error || 'Error al ejecutar el respaldo',
+        });
       }
     } catch (e) {
-      setBackupResult({ success: false, error: 'Error de conexión al ejecutar el respaldo' });
+      setBackupResult({
+        success: false,
+        error: 'Error de conexión al ejecutar el respaldo',
+      });
     } finally {
       setBackupLoading(false);
     }
@@ -480,8 +488,8 @@ export function AdminDashboard({ user, onNavigate }: AdminDashboardProps) {
             <DialogTitle>Ejecutar Respaldo (Backup)</DialogTitle>
             <DialogDescription>
               Se generará un respaldo completo de la base de datos y se subirá
-              automáticamente a Google Drive. Este proceso puede tardar
-              varios segundos y no debes cerrar la ventana.
+              automáticamente a Google Drive. Este proceso puede tardar varios
+              segundos y no debes cerrar la ventana.
             </DialogDescription>
           </DialogHeader>
 

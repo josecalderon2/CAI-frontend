@@ -73,7 +73,10 @@ export function BackupsModule() {
             Gestión de copias de seguridad de la base de datos
           </p>
         </div>
-        <Badge variant="outline" className="bg-cyan-50 text-cyan-700 border-cyan-200">
+        <Badge
+          variant="outline"
+          className="bg-cyan-50 text-cyan-700 border-cyan-200"
+        >
           <Database className="w-4 h-4 mr-1" />
           Backups Automáticos
         </Badge>
@@ -94,18 +97,26 @@ export function BackupsModule() {
                 </p>
                 <ul className="list-disc list-inside space-y-1 ml-2">
                   <li>
-                    <strong>Localmente (servidor):</strong> Se guardan temporalmente en la carpeta{' '}
+                    <strong>Localmente (servidor):</strong> Se guardan
+                    temporalmente en la carpeta{' '}
                     <code className="bg-blue-100 px-2 py-0.5 rounded">
                       /backups
                     </code>{' '}
-                    del servidor backend. Estos archivos se eliminan automáticamente después de subirlos a Drive para ahorrar espacio.
+                    del servidor backend. Estos archivos se eliminan
+                    automáticamente después de subirlos a Drive para ahorrar
+                    espacio.
                   </li>
                   <li>
-                    <strong>Google Drive (nube):</strong> Se suben automáticamente a Google Drive en la carpeta configurada por el administrador del sistema. Los backups en Drive se mantienen permanentemente y <strong>NO se eliminan automáticamente</strong>.
+                    <strong>Google Drive (nube):</strong> Se suben
+                    automáticamente a Google Drive en la carpeta configurada por
+                    el administrador del sistema. Los backups en Drive se
+                    mantienen permanentemente y{' '}
+                    <strong>NO se eliminan automáticamente</strong>.
                   </li>
                 </ul>
                 <p className="mt-3">
-                  <strong>Formato del archivo:</strong> Los backups se generan en formato SQL con el nombre{' '}
+                  <strong>Formato del archivo:</strong> Los backups se generan
+                  en formato SQL con el nombre{' '}
                   <code className="bg-blue-100 px-2 py-0.5 rounded">
                     backup-YYYY-MM-DD-HH-MM-SS.sql
                   </code>
@@ -128,9 +139,10 @@ export function BackupsModule() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-gray-600">
-              Genera un respaldo completo de la base de datos PostgreSQL y lo sube automáticamente a Google Drive.
+              Genera un respaldo completo de la base de datos PostgreSQL y lo
+              sube automáticamente a Google Drive.
             </p>
-            
+
             <Button
               onClick={ejecutarBackup}
               disabled={loading}
@@ -213,7 +225,8 @@ export function BackupsModule() {
                     /ruta/del/servidor/backups/
                   </code>
                   <p className="text-xs text-gray-500 mt-2">
-                    ⚠️ Los archivos locales se eliminan automáticamente después de subirlos a Drive.
+                    ⚠️ Los archivos locales se eliminan automáticamente después
+                    de subirlos a Drive.
                   </p>
                 </div>
               </div>
@@ -231,7 +244,8 @@ export function BackupsModule() {
                     Los backups se almacenan permanentemente en Google Drive.
                   </p>
                   <p className="text-xs text-green-600 mt-2">
-                    ✅ Los backups en Drive NO se eliminan automáticamente y están disponibles siempre.
+                    ✅ Los backups en Drive NO se eliminan automáticamente y
+                    están disponibles siempre.
                   </p>
                 </div>
               </div>
@@ -250,10 +264,22 @@ export function BackupsModule() {
                 ⚠️ Recomendaciones Importantes
               </h3>
               <ul className="text-sm text-amber-800 space-y-1 list-disc list-inside ml-2">
-                <li>Se recomienda generar backups antes de realizar cambios importantes en el sistema</li>
-                <li>Los backups automáticos se ejecutan según la configuración del servidor</li>
-                <li>Verifica periódicamente que los backups se estén generando correctamente</li>
-                <li>Mantén acceso a la cuenta de Google Drive configurada para los backups</li>
+                <li>
+                  Se recomienda generar backups antes de realizar cambios
+                  importantes en el sistema
+                </li>
+                <li>
+                  Los backups automáticos se ejecutan según la configuración del
+                  servidor
+                </li>
+                <li>
+                  Verifica periódicamente que los backups se estén generando
+                  correctamente
+                </li>
+                <li>
+                  Mantén acceso a la cuenta de Google Drive configurada para los
+                  backups
+                </li>
               </ul>
             </div>
           </div>
