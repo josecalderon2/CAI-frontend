@@ -297,22 +297,32 @@ export function GrupoTrimestreCard({
                   {estaExpandido && (
                     <>
                       <div className="px-6">
-                        <table className="w-full table-fixed border-collapse">
+                        <table
+                          className="w-full border-collapse"
+                          style={{ tableLayout: 'fixed' }}
+                        >
+                          <colgroup>
+                            <col style={{ width: '30%' }} />
+                            <col style={{ width: '20%' }} />
+                            <col style={{ width: '20%' }} />
+                            <col style={{ width: '20%' }} />
+                            <col style={{ width: '10%' }} />
+                          </colgroup>
                           <thead>
                             <tr className="bg-gray-50 border-b">
-                              <th className="w-[30%] text-left py-3 px-4 text-sm font-medium text-gray-700">
+                              <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">
                                 Nombre
                               </th>
-                              <th className="w-[20%] text-left py-3 px-4 text-sm font-medium text-gray-700">
+                              <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">
                                 Tipo
                               </th>
-                              <th className="w-[20%] text-left py-3 px-4 text-sm font-medium text-gray-700">
+                              <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">
                                 Porcentaje
                               </th>
-                              <th className="w-[20%] text-left py-3 px-4 text-sm font-medium text-gray-700">
+                              <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">
                                 Puntaje
                               </th>
-                              <th className="w-[10%] text-right py-3 px-4 text-sm font-medium text-gray-700">
+                              <th className="text-right py-3 px-4 text-sm font-medium text-gray-700">
                                 Acciones
                               </th>
                             </tr>
@@ -323,7 +333,7 @@ export function GrupoTrimestreCard({
                                 key={evaluacion.id_evaluacion}
                                 className="border-b hover:bg-gray-50"
                               >
-                                <td className="py-3 px-4 font-medium">
+                                <td className="py-3 px-4 font-medium overflow-hidden">
                                   {evaluacion.nombre}
                                 </td>
                                 <td className="py-3 px-4">
@@ -336,7 +346,7 @@ export function GrupoTrimestreCard({
                                 </td>
                                 <td className="py-3 px-4">
                                   <div className="flex items-center space-x-2">
-                                    <div className="w-20 bg-gray-200 rounded-full h-2">
+                                    <div className="w-20 bg-gray-200 rounded-full h-2 flex-shrink-0">
                                       <div
                                         className="h-2 rounded-full bg-purple-600"
                                         style={{
@@ -344,15 +354,24 @@ export function GrupoTrimestreCard({
                                         }}
                                       />
                                     </div>
-                                    <span className="text-sm font-semibold">
-                                      {evaluacion.tipoEvaluacion.porcentaje}%
+                                    <span className="text-sm font-semibold whitespace-nowrap">
+                                      {evaluacion.tipoEvaluacion.porcentaje %
+                                        1 ===
+                                      0
+                                        ? evaluacion.tipoEvaluacion.porcentaje.toFixed(
+                                            0
+                                          )
+                                        : evaluacion.tipoEvaluacion.porcentaje
+                                            .toFixed(2)
+                                            .replace(/\.?0+$/, '')}
+                                      %
                                     </span>
                                   </div>
                                 </td>
                                 <td className="py-3 px-4">
                                   <div className="flex items-center space-x-1">
-                                    <Award className="w-4 h-4 text-gray-400" />
-                                    <span className="text-sm">
+                                    <Award className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                                    <span className="text-sm whitespace-nowrap">
                                       {evaluacion.puntaje_minimo} -{' '}
                                       {evaluacion.puntaje_maximo}
                                     </span>
@@ -454,22 +473,32 @@ export function GrupoTrimestreCard({
             </div>
 
             <div className="px-6">
-              <table className="w-full table-fixed border-collapse">
+              <table
+                className="w-full border-collapse"
+                style={{ tableLayout: 'fixed' }}
+              >
+                <colgroup>
+                  <col style={{ width: '30%' }} />
+                  <col style={{ width: '20%' }} />
+                  <col style={{ width: '20%' }} />
+                  <col style={{ width: '20%' }} />
+                  <col style={{ width: '10%' }} />
+                </colgroup>
                 <thead>
                   <tr className="bg-gray-50 border-b">
-                    <th className="w-[30%] text-left py-3 px-4 text-sm font-medium text-gray-700">
+                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">
                       Nombre
                     </th>
-                    <th className="w-[20%] text-left py-3 px-4 text-sm font-medium text-gray-700">
+                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">
                       Tipo
                     </th>
-                    <th className="w-[20%] text-left py-3 px-4 text-sm font-medium text-gray-700">
+                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">
                       Porcentaje
                     </th>
-                    <th className="w-[20%] text-left py-3 px-4 text-sm font-medium text-gray-700">
+                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">
                       Puntaje
                     </th>
-                    <th className="w-[10%] text-right py-3 px-4 text-sm font-medium text-gray-700">
+                    <th className="text-right py-3 px-4 text-sm font-medium text-gray-700">
                       Acciones
                     </th>
                   </tr>
@@ -480,7 +509,7 @@ export function GrupoTrimestreCard({
                       key={evaluacion.id_evaluacion}
                       className="border-b hover:bg-gray-50"
                     >
-                      <td className="py-3 px-4 font-medium">
+                      <td className="py-3 px-4 font-medium overflow-hidden">
                         {evaluacion.nombre}
                       </td>
                       <td className="py-3 px-4">
@@ -493,7 +522,7 @@ export function GrupoTrimestreCard({
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center space-x-2">
-                          <div className="w-20 bg-gray-200 rounded-full h-2">
+                          <div className="w-20 bg-gray-200 rounded-full h-2 flex-shrink-0">
                             <div
                               className="h-2 rounded-full bg-green-600"
                               style={{
@@ -501,15 +530,15 @@ export function GrupoTrimestreCard({
                               }}
                             />
                           </div>
-                          <span className="text-sm font-semibold">
+                          <span className="text-sm font-semibold whitespace-nowrap">
                             {evaluacion.tipoEvaluacion.porcentaje}%
                           </span>
                         </div>
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center space-x-1">
-                          <Award className="w-4 h-4 text-gray-400" />
-                          <span className="text-sm">
+                          <Award className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                          <span className="text-sm whitespace-nowrap">
                             {evaluacion.puntaje_minimo} -{' '}
                             {evaluacion.puntaje_maximo}
                           </span>

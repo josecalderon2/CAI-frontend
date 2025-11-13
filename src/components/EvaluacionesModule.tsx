@@ -350,9 +350,47 @@ export function EvaluacionesModule() {
         const tiposExistentes = new Map<number, Evaluacion>();
         let porcentajeTotal = 0;
 
+        // Contar cuántas evaluaciones hay de cada tipo
+        const conteoPorTipo = new Map<number, number>();
         mes.evaluaciones.forEach((ev) => {
-          tiposExistentes.set(ev.tipoEvaluacion.id_tipo_evaluacion, ev);
-          porcentajeTotal += ev.tipoEvaluacion.porcentaje;
+          const idTipo = ev.tipoEvaluacion.id_tipo_evaluacion;
+          conteoPorTipo.set(idTipo, (conteoPorTipo.get(idTipo) || 0) + 1);
+        });
+
+        // Ajustar el porcentaje de cada evaluación según la cantidad del mismo tipo
+        mes.evaluaciones = mes.evaluaciones.map((ev) => {
+          const idTipo = ev.tipoEvaluacion.id_tipo_evaluacion;
+          const cantidad = conteoPorTipo.get(idTipo) || 1;
+          const porcentajeIndividual = ev.tipoEvaluacion.porcentaje / cantidad;
+
+          return {
+            ...ev,
+            tipoEvaluacion: {
+              ...ev.tipoEvaluacion,
+              porcentaje: porcentajeIndividual,
+            },
+          };
+        });
+
+        // Calcular porcentaje total sumando el porcentaje base de cada TIPO (no de cada evaluación)
+        const tiposSumados = new Set<number>();
+        mes.evaluaciones.forEach((ev) => {
+          const idTipo = ev.tipoEvaluacion.id_tipo_evaluacion;
+
+          // Solo sumar el porcentaje del tipo una vez
+          if (!tiposSumados.has(idTipo)) {
+            // Buscar la evaluación original para obtener el porcentaje base
+            const evaluacionOriginal = mes.evaluaciones.find(
+              (e) => e.tipoEvaluacion.id_tipo_evaluacion === idTipo
+            );
+            if (evaluacionOriginal) {
+              tiposExistentes.set(idTipo, evaluacionOriginal);
+              porcentajeTotal +=
+                evaluacionOriginal.tipoEvaluacion.porcentaje *
+                (conteoPorTipo.get(idTipo) || 1);
+            }
+            tiposSumados.add(idTipo);
+          }
         });
 
         mes.tiposExistentes = tiposExistentes;
