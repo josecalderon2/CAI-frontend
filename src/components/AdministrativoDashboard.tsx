@@ -51,8 +51,7 @@ export function AdministrativoDashboard({
         setLoading(true);
         setError(null);
 
-        const data =
-          await administrativoDashboardService.getDashboardData();
+        const data = await administrativoDashboardService.getDashboardData();
 
         setDashboardData(data);
       } catch (err) {
@@ -102,8 +101,12 @@ export function AdministrativoDashboard({
   }
 
   // Extraer datos
-  const { estadisticas, actividadesRecientes, resumenMensual, tareasPendientes } =
-    dashboardData;
+  const {
+    estadisticas,
+    actividadesRecientes,
+    resumenMensual,
+    tareasPendientes,
+  } = dashboardData;
 
   // Construir las cards de estadísticas con datos reales
   const statsCards = [
@@ -209,7 +212,8 @@ export function AdministrativoDashboard({
 
     if (diffMin < 1) return 'Hace unos momentos';
     if (diffMin < 60) return `Hace ${diffMin} minuto${diffMin > 1 ? 's' : ''}`;
-    if (diffHoras < 24) return `Hace ${diffHoras} hora${diffHoras > 1 ? 's' : ''}`;
+    if (diffHoras < 24)
+      return `Hace ${diffHoras} hora${diffHoras > 1 ? 's' : ''}`;
     if (diffDias < 7) return `Hace ${diffDias} día${diffDias > 1 ? 's' : ''}`;
     return fechaActividad.toLocaleDateString('es-ES');
   };
@@ -286,35 +290,79 @@ export function AdministrativoDashboard({
         ))}
       </div>
 
+      {/* Acciones Rápidas */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center space-x-2">
+            <Plus className="w-5 h-5" />
+            <span>Acciones Rápidas</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+            {quickActions.map((action, index) => (
+              <div
+                key={index}
+                className="p-4 border rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+                onClick={action.action}
+              >
+                <div className="flex items-center space-x-3">
+                  <div className={`p-2 rounded-lg ${action.color}`}>
+                    <action.icon className="w-5 h-5 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-medium text-gray-900">
+                      {action.title}
+                    </h4>
+                    <p className="text-sm text-gray-600">
+                      {action.description}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Acciones Rápidas */}
+        {/* Actividad Reciente */}
         <Card>
-          <CardHeader>
+          <CardHeader className="pb-2">
             <CardTitle className="flex items-center space-x-2">
-              <Plus className="w-5 h-5" />
-              <span>Acciones Rápidas</span>
+              <Calendar className="w-5 h-5" />
+              <span>Actividad Reciente</span>
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {quickActions.map((action, index) => (
+          <CardContent className="p-0">
+            <div
+              className="h-[180px] overflow-y-auto"
+              style={{
+                overflowY: 'auto',
+                maxHeight: '180px',
+                padding: '1rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '1rem',
+              }}
+            >
+              {recentActivities.slice(0, 4).map((activity, index) => (
                 <div
                   key={index}
-                  className="p-4 border rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
-                  onClick={action.action}
+                  className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg"
                 >
-                  <div className="flex items-center space-x-3">
-                    <div className={`p-2 rounded-lg ${action.color}`}>
-                      <action.icon className="w-5 h-5 text-white" />
-                    </div>
-                    <div className="flex-1">
-                      <h4 className="font-medium text-gray-900">
-                        {action.title}
-                      </h4>
-                      <p className="text-sm text-gray-600">
-                        {action.description}
-                      </p>
-                    </div>
+                  <div
+                    className={`w-2 h-2 rounded-full ${
+                      activity.type === 'alumno'
+                        ? 'bg-green-500'
+                        : activity.type === 'curso'
+                          ? 'bg-yellow-500'
+                          : 'bg-blue-500'
+                    }`}
+                  />
+                  <div className="flex-1">
+                    <p className="text-sm">{activity.message}</p>
+                    <p className="text-xs text-gray-500">{activity.time}</p>
                   </div>
                 </div>
               ))}
@@ -330,9 +378,19 @@ export function AdministrativoDashboard({
               <span>Tareas Pendientes</span>
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {tareasPendientes.map((task, index) => (
+          <CardContent className="p-0">
+            <div
+              className="h-[180px] overflow-y-auto"
+              style={{
+                overflowY: 'auto',
+                maxHeight: '180px',
+                padding: '1rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '1rem',
+              }}
+            >
+              {tareasPendientes.slice(0, 4).map((task, index) => (
                 <div
                   key={index}
                   className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
@@ -359,130 +417,6 @@ export function AdministrativoDashboard({
           </CardContent>
         </Card>
       </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Actividad Reciente */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <Calendar className="w-5 h-5" />
-              <span>Actividad Reciente</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
-              {recentActivities.map((activity, index) => (
-                <div key={index} className="flex items-start space-x-3">
-                  <div className="p-2 bg-blue-100 rounded-full">
-                    <activity.icon className="w-4 h-4 text-blue-600" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-900">{activity.message}</p>
-                    <p className="text-xs text-gray-500">{activity.time}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Resumen Mensual */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <BarChart3 className="w-5 h-5" />
-              <span>Resumen del Mes</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">Nuevos Alumnos</span>
-                <span className="font-medium">{resumenMensual.nuevosAlumnos}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">
-                  Asignaturas Creadas
-                </span>
-                <span className="font-medium">
-                  {resumenMensual.asignaturasCreadas}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">
-                  Cursos Configurados
-                </span>
-                <span className="font-medium">
-                  {resumenMensual.cursosConfigurados}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">
-                  Reportes Generados
-                </span>
-                <span className="font-medium">
-                  {resumenMensual.reportesGenerados}
-                </span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Módulos Principales */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Módulos Administrativos</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            <Button
-              variant="outline"
-              className="h-20 flex flex-col items-center justify-center space-y-2"
-              onClick={() => onNavigate('alumnos')}
-            >
-              <Users className="w-6 h-6" />
-              <span>Gestión de Alumnos</span>
-            </Button>
-
-            <Button
-              variant="outline"
-              className="h-20 flex flex-col items-center justify-center space-y-2"
-              onClick={() => onNavigate('asignaturas')}
-            >
-              <BookOpen className="w-6 h-6" />
-              <span>Asignaturas</span>
-            </Button>
-
-            <Button
-              variant="outline"
-              className="h-20 flex flex-col items-center justify-center space-y-2"
-              onClick={() => onNavigate('cursos')}
-            >
-              <School className="w-6 h-6" />
-              <span>Cursos</span>
-            </Button>
-
-            <Button
-              variant="outline"
-              className="h-20 flex flex-col items-center justify-center space-y-2"
-              onClick={() => onNavigate('asignaciones')}
-            >
-              <ClipboardList className="w-6 h-6" />
-              <span>Asignaciones</span>
-            </Button>
-
-            <Button
-              variant="outline"
-              className="h-20 flex flex-col items-center justify-center space-y-2"
-              onClick={() => onNavigate('conductas')}
-            >
-              <Shield className="w-6 h-6" />
-              <span>Conducta</span>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
