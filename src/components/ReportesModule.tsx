@@ -1,12 +1,124 @@
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
-import { FileText, Calendar, BarChart3 } from 'lucide-react';
+import {
+  FileText,
+  Calendar,
+  BarChart3,
+  BookOpen,
+  User,
+  ClipboardList,
+} from 'lucide-react';
+import { getUser } from '../utils/auth';
+import { ReportesOrientadorModule } from './ReportesOrientadorModule';
+import { ReportesAdminModule } from './ReportesAdminModule';
 
 interface ReportesModuleProps {
   onNavigate: (section: string) => void;
 }
 
 export function ReportesModule({ onNavigate }: ReportesModuleProps) {
+  const user = getUser();
+  const isOrientador =
+    user?.role === 'Orientador' || user?.role === 'orientador';
+  const isAdminOrPA = user?.role === 'Admin' || user?.role === 'P.A';
+  const [vistaActiva, setVistaActiva] = useState<
+    'asistencia' | 'notas' | 'institucionales'
+  >('asistencia');
+
+  // Si es Admin o PA, mostrar todas las opciones incluyendo reportes institucionales
+  if (isAdminOrPA) {
+    return (
+      <div className="p-6 space-y-6 bg-gradient-to-br from-gray-50 to-blue-50 min-h-screen">
+        {/* Header con tabs */}
+        <div className="bg-white rounded-lg shadow-sm p-6 border-l-4 border-l-purple-600">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+            Centro de Reportes
+          </h1>
+          <p className="text-gray-600 mt-2 flex items-center">
+            <FileText className="w-4 h-4 mr-2 text-purple-600" />
+            Accede a todos los reportes del sistema
+          </p>
+
+          {/* Tabs */}
+          <div className="flex gap-2 mt-4">
+            <Button
+              variant={vistaActiva === 'asistencia' ? 'default' : 'outline'}
+              onClick={() => setVistaActiva('asistencia')}
+              className="flex items-center gap-2"
+            >
+              <Calendar className="w-4 h-4" />
+              Asistencia y Conducta
+            </Button>
+            <Button
+              variant={
+                vistaActiva === 'institucionales' ? 'default' : 'outline'
+              }
+              onClick={() => setVistaActiva('institucionales')}
+              className="flex items-center gap-2"
+            >
+              <BarChart3 className="w-4 h-4" />
+              Reportes Institucionales
+            </Button>
+          </div>
+        </div>
+
+        {/* Contenido según tab activo */}
+        {vistaActiva === 'asistencia' ? (
+          <ReportesAsistenciaConducta onNavigate={onNavigate} />
+        ) : (
+          <ReportesAdminModule />
+        )}
+      </div>
+    );
+  }
+
+  // Si es orientador, mostrar ambas opciones
+  if (isOrientador) {
+    return (
+      <div className="p-6 space-y-6 bg-gradient-to-br from-gray-50 to-blue-50 min-h-screen">
+        {/* Header con tabs */}
+        <div className="bg-white rounded-lg shadow-sm p-6 border-l-4 border-l-purple-600">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+            Centro de Reportes
+          </h1>
+          <p className="text-gray-600 mt-2 flex items-center">
+            <FileText className="w-4 h-4 mr-2 text-purple-600" />
+            Accede a todos tus reportes académicos y de conducta
+          </p>
+
+          {/* Tabs */}
+          <div className="flex gap-2 mt-4">
+            <Button
+              variant={vistaActiva === 'asistencia' ? 'default' : 'outline'}
+              onClick={() => setVistaActiva('asistencia')}
+              className="flex items-center gap-2"
+            >
+              <Calendar className="w-4 h-4" />
+              Reportes de Asistencia y Conducta
+            </Button>
+            <Button
+              variant={vistaActiva === 'notas' ? 'default' : 'outline'}
+              onClick={() => setVistaActiva('notas')}
+              className="flex items-center gap-2"
+            >
+              <BookOpen className="w-4 h-4" />
+              Reportes de Notas y Evaluaciones
+            </Button>
+          </div>
+        </div>
+
+        {/* Contenido según tab activo */}
+        {vistaActiva === 'asistencia' ? (
+          <ReportesAsistenciaConducta onNavigate={onNavigate} />
+        ) : (
+          <ReportesOrientadorModule />
+        )}
+      </div>
+    );
+  }
+
+  // Para otros roles, solo mostrar reportes de asistencia
   return (
     <div className="p-6 space-y-6 bg-gradient-to-br from-gray-50 to-blue-50 min-h-screen">
       {/* Header */}
@@ -19,6 +131,21 @@ export function ReportesModule({ onNavigate }: ReportesModuleProps) {
           Genera reportes mensuales, trimestrales y anuales de tus cursos
         </p>
       </div>
+
+      <ReportesAsistenciaConducta onNavigate={onNavigate} />
+    </div>
+  );
+}
+
+// Componente separado para los reportes de asistencia y conducta
+function ReportesAsistenciaConducta({
+  onNavigate,
+}: {
+  onNavigate: (section: string) => void;
+}) {
+  return (
+    <>
+      {/* Reportes de Asistencia y Conducta */}
 
       {/* Reportes de Asistencia y Conducta */}
       <Card className="border-t-4 border-t-purple-600">
@@ -158,6 +285,6 @@ export function ReportesModule({ onNavigate }: ReportesModuleProps) {
           </div>
         </CardContent>
       </Card>
-    </div>
+    </>
   );
 }
