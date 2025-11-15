@@ -24,7 +24,7 @@ import type { Alumno } from '../../types';
 import { cursosService, type Curso } from '../../api/services/cursosService';
 import {
   reportesOrientadorService,
-  type ReporteDetalladoAlumno,
+  type BoletaMensualResponse,
 } from '../../api/services/reportesOrientadorService';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -35,18 +35,33 @@ interface Props {
   onVolver: () => void;
 }
 
-export function ReporteDetalladoAlumnoView({ alumnos, onVolver }: Props) {
+const MESES = [
+  { valor: 1, nombre: 'Enero' },
+  { valor: 2, nombre: 'Febrero' },
+  { valor: 3, nombre: 'Marzo' },
+  { valor: 4, nombre: 'Abril' },
+  { valor: 5, nombre: 'Mayo' },
+  { valor: 6, nombre: 'Junio' },
+  { valor: 7, nombre: 'Julio' },
+  { valor: 8, nombre: 'Agosto' },
+  { valor: 9, nombre: 'Septiembre' },
+  { valor: 10, nombre: 'Octubre' },
+  { valor: 11, nombre: 'Noviembre' },
+  { valor: 12, nombre: 'Diciembre' },
+];
+
+export function BoletaMensualView({ alumnos, onVolver }: Props) {
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState<string>('');
   const [anio, setAnio] = useState<string>('2025');
-  const [periodoSeleccionado, setPeriodoSeleccionado] = useState<string>('');
-  const [reporte, setReporte] = useState<ReporteDetalladoAlumno | null>(null);
+  const [mesSeleccionado, setMesSeleccionado] = useState<string>('');
+  const [boleta, setBoleta] = useState<BoletaMensualResponse | null>(null);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cursos, setCursos] = useState<Curso[]>([]);
   const [cursoSeleccionado, setCursoSeleccionado] = useState<string>('');
   const [alumnosFiltrados, setAlumnosFiltrados] = useState<Alumno[]>(alumnos);
 
-  // Cargar cursos del orientador y preparar alumnos filtrados
+  // Cargar cursos del orientador
   useEffect(() => {
     const cargarCursos = async () => {
       try {
@@ -59,7 +74,7 @@ export function ReporteDetalladoAlumnoView({ alumnos, onVolver }: Props) {
     cargarCursos();
   }, []);
 
-  // Cuando cambia el curso seleccionado, filtrar alumnos por curso
+  // Cuando cambia el curso, filtrar alumnos
   useEffect(() => {
     const filtrarAlumnos = async () => {
       if (!cursoSeleccionado) {
@@ -70,7 +85,6 @@ export function ReporteDetalladoAlumnoView({ alumnos, onVolver }: Props) {
         const lista = await cursosService.getAlumnosPorCurso(
           parseInt(cursoSeleccionado)
         );
-        // Mapear a tipo Alumno mínimo necesario para el selector
         const mapped: Alumno[] = lista.map((a) => ({
           id_alumno: a.id_alumno,
           nombre: a.nombre,
@@ -85,57 +99,18 @@ export function ReporteDetalladoAlumnoView({ alumnos, onVolver }: Props) {
         setAlumnosFiltrados(alumnos);
       }
     };
-    // Reiniciar selección de alumno y reporte cuando cambia curso
     setAlumnoSeleccionado('');
-    setReporte(null);
+    setBoleta(null);
     filtrarAlumnos();
   }, [cursoSeleccionado, alumnos]);
 
-  // Calcular promedio general del periodo si no viene del backend o es inválido
-  const calcularPromedioGeneral = (): number | null => {
-    if (!reporte) return null;
-
-    const asignaturasConPromedio = reporte.asignaturas.filter(
-      (asig) => asig.promedio_periodo !== null && !isNaN(asig.promedio_periodo)
-    );
-
-    if (asignaturasConPromedio.length === 0) return null;
-
-    const suma = asignaturasConPromedio.reduce(
-      (total, asig) => total + (asig.promedio_periodo || 0),
-      0
-    );
-
-    return suma / asignaturasConPromedio.length;
-  };
-
-  const promedioGeneralMostrar = (): string => {
-    // Intentar usar el promedio del backend primero
-    if (
-      reporte?.promedio_general_periodo !== null &&
-      reporte?.promedio_general_periodo !== undefined &&
-      !isNaN(reporte.promedio_general_periodo)
-    ) {
-      return reporte.promedio_general_periodo.toFixed(2);
-    }
-
-    // Si no hay promedio del backend, calcular localmente
-    const promedioCalculado = calcularPromedioGeneral();
-    if (promedioCalculado !== null && !isNaN(promedioCalculado)) {
-      return promedioCalculado.toFixed(2);
-    }
-
-    return 'N/A';
-  };
-
-  const cargarReporte = async () => {
+  const cargarBoleta = async () => {
     if (!alumnoSeleccionado) {
       setError('Debe seleccionar un alumno');
       return;
     }
-
-    if (!periodoSeleccionado) {
-      setError('Debe seleccionar un trimestre/periodo');
+    if (!mesSeleccionado) {
+      setError('Debe seleccionar un mes');
       return;
     }
 
@@ -143,48 +118,19 @@ export function ReporteDetalladoAlumnoView({ alumnos, onVolver }: Props) {
       setCargando(true);
       setError(null);
 
-      // Determinar si es trimestre o periodo basado en el reporte anterior
-      const params: { anio?: string; trimestre?: number; periodo?: number } = {
-        anio,
-      };
-
-      // Si el alumno ya tiene un reporte cargado, usar es_bachillerato
-      // Si no, asumimos que el selector muestra el tipo correcto
-      if (reporte?.curso.es_bachillerato) {
-        params.periodo = parseInt(periodoSeleccionado);
-      } else if (reporte && !reporte.curso.es_bachillerato) {
-        params.trimestre = parseInt(periodoSeleccionado);
-      } else {
-        // Primera carga - intentar con trimestre por defecto (la mayoría son básica)
-        params.trimestre = parseInt(periodoSeleccionado);
-      }
-
-      const data = await reportesOrientadorService.getReporteDetalladoAlumno(
+      const data = await reportesOrientadorService.getBoletaMensual(
         parseInt(alumnoSeleccionado),
-        params
+        {
+          mes: parseInt(mesSeleccionado),
+          anio,
+        }
       );
 
-      setReporte(data);
+      setBoleta(data);
     } catch (err: any) {
-      console.error('Error al cargar reporte:', err);
-
-      // Si falló con trimestre, intentar con periodo
-      if (err?.response?.status === 400 && !reporte) {
-        try {
-          const data =
-            await reportesOrientadorService.getReporteDetalladoAlumno(
-              parseInt(alumnoSeleccionado),
-              { anio, periodo: parseInt(periodoSeleccionado) }
-            );
-          setReporte(data);
-          return;
-        } catch (secondErr) {
-          console.error('Error en segundo intento:', secondErr);
-        }
-      }
-
+      console.error('Error al cargar boleta mensual:', err);
       setError(
-        'Error al cargar el reporte del alumno. Por favor, intenta de nuevo.'
+        'Error al cargar la boleta mensual. Por favor, intenta de nuevo.'
       );
     } finally {
       setCargando(false);
@@ -192,44 +138,54 @@ export function ReporteDetalladoAlumnoView({ alumnos, onVolver }: Props) {
   };
 
   const exportarPDF = () => {
-    if (!reporte) return;
+    if (!boleta) return;
 
     const doc = new jsPDF();
 
     // Encabezado
     doc.setFontSize(18);
-    doc.text('REPORTE DETALLADO DEL ALUMNO', 105, 15, { align: 'center' });
+    doc.text('BOLETA MENSUAL', 105, 15, { align: 'center' });
     doc.setFontSize(10);
-    doc.text(
-      `${reporte.periodo_academico.nombre} - ${reporte.periodo_academico.anio}`,
-      105,
-      22,
-      {
-        align: 'center',
-      }
-    );
+    doc.text(boleta.periodo_academico.descripcion, 105, 22, {
+      align: 'center',
+    });
 
     // Información del alumno
     doc.setFontSize(12);
     doc.text('Información del Alumno', 14, 32);
     doc.setFontSize(10);
     doc.text(
-      `Nombre: ${reporte.alumno.nombre} ${reporte.alumno.apellido}`,
+      `Nombre: ${boleta.alumno.nombre} ${boleta.alumno.apellido}`,
       14,
       38
     );
-    doc.text(`Matrícula: ${reporte.alumno.numeroMatricula}`, 14, 44);
-    doc.text(`Curso: ${reporte.curso.nombre}`, 14, 50);
+    doc.text(`Matrícula: ${boleta.alumno.numeroMatricula}`, 14, 44);
+    doc.text(`Curso: ${boleta.curso.nombre}`, 14, 50);
+    doc.text(`Orientador: ${boleta.curso.orientador}`, 14, 56);
 
-    let currentY = 60;
+    let currentY = 66;
+
+    // Promedio general del mes
+    doc.setFontSize(12);
+    doc.text(
+      `Promedio General del Mes: ${boleta.promedio_general_mes?.toFixed(2) || 'N/A'}`,
+      14,
+      currentY
+    );
+    currentY += 10;
 
     // Asignaturas y evaluaciones
-    reporte.asignaturas.forEach((asignatura) => {
+    boleta.asignaturas.forEach((asignatura) => {
+      if (currentY > 250) {
+        doc.addPage();
+        currentY = 20;
+      }
+
       doc.setFontSize(12);
       doc.text(asignatura.nombre, 14, currentY);
       currentY += 6;
       doc.setFontSize(9);
-      doc.text(`Orientador: ${asignatura.orientador || 'N/A'}`, 14, currentY);
+      doc.text(`Orientador: ${asignatura.orientador}`, 14, currentY);
       currentY += 4;
 
       const evaluacionesData = asignatura.evaluaciones.map((evaluacion) => [
@@ -254,52 +210,113 @@ export function ReporteDetalladoAlumnoView({ alumnos, onVolver }: Props) {
       currentY = (doc as any).lastAutoTable.finalY + 4;
       doc.setFontSize(10);
       doc.text(
-        `Promedio: ${asignatura.promedio_periodo?.toFixed(2) || 'N/A'}`,
+        `Promedio Mensual: ${asignatura.promedio_mensual?.toFixed(2) || 'N/A'}`,
         14,
         currentY
       );
       currentY += 8;
-
-      // Nueva página si es necesario
-      if (currentY > 250) {
-        doc.addPage();
-        currentY = 20;
-      }
     });
 
-    // Promedio general
+    // Asistencia
+    if (currentY > 230) {
+      doc.addPage();
+      currentY = 20;
+    }
     doc.setFontSize(12);
+    doc.text('Asistencia del Mes', 14, currentY);
+    currentY += 6;
+    doc.setFontSize(9);
+    doc.text(`Total Días: ${boleta.asistencia.total_dias}`, 14, currentY);
+    currentY += 5;
+    doc.text(`Presentes: ${boleta.asistencia.presentes}`, 14, currentY);
+    currentY += 5;
+    doc.text(`Ausentes: ${boleta.asistencia.ausentes}`, 14, currentY);
+    currentY += 5;
+    doc.text(`Tardanzas: ${boleta.asistencia.tardanzas}`, 14, currentY);
+    currentY += 5;
     doc.text(
-      `Promedio General del ${reporte.periodo_academico.nombre}: ${promedioGeneralMostrar()}`,
+      `% Asistencia: ${boleta.asistencia.porcentaje_asistencia?.toFixed(1) || 0}%`,
       14,
       currentY
     );
+    currentY += 10;
+
+    // Conducta
+    if (currentY > 230) {
+      doc.addPage();
+      currentY = 20;
+    }
+    doc.setFontSize(12);
+    doc.text('Registro de Conducta del Mes', 14, currentY);
+    currentY += 6;
+    doc.setFontSize(9);
+    doc.text(`Total infracciones: ${boleta.conductas.total}`, 14, currentY);
+    currentY += 5;
+    doc.text(
+      `Puntos acumulados: ${boleta.conductas.puntos_acumulados}`,
+      14,
+      currentY
+    );
+    currentY += 6;
+
+    if (boleta.conductas.detalles.length > 0) {
+      const conductasData = boleta.conductas.detalles.map((conducta) => [
+        new Date(conducta.fecha).toLocaleDateString(),
+        conducta.infraccion.categoria.replace('_', ' '),
+        conducta.infraccion.articulo,
+        conducta.infraccion.descripcion,
+        conducta.infraccion.puntos.toString(),
+        conducta.observacion,
+      ]);
+
+      autoTable(doc, {
+        startY: currentY,
+        head: [
+          [
+            'Fecha',
+            'Categoría',
+            'Artículo',
+            'Descripción',
+            'Puntos',
+            'Observación',
+          ],
+        ],
+        body: conductasData,
+        theme: 'striped',
+        headStyles: { fillColor: [220, 38, 38], fontSize: 8 },
+        styles: { fontSize: 7 },
+      });
+    } else {
+      doc.setFontSize(9);
+      doc.text('✓ Sin registros de conducta en este mes', 14, currentY);
+    }
 
     doc.save(
-      `reporte_${reporte.alumno.numeroMatricula}_${reporte.alumno.nombre}_${reporte.alumno.apellido}_${reporte.periodo_academico.nombre}.pdf`
+      `boleta_mensual_${boleta.alumno.numeroMatricula}_${boleta.periodo_academico.nombre_mes}_${boleta.periodo_academico.anio}.pdf`
     );
   };
 
   const exportarExcel = () => {
-    if (!reporte) return;
+    if (!boleta) return;
 
     const worksheetData = [
-      ['REPORTE DETALLADO DEL ALUMNO'],
-      [
-        `${reporte.periodo_academico.nombre} - ${reporte.periodo_academico.anio}`,
-      ],
+      ['BOLETA MENSUAL'],
+      [boleta.periodo_academico.descripcion],
       [],
       ['INFORMACIÓN DEL ALUMNO'],
-      ['Nombre:', `${reporte.alumno.nombre} ${reporte.alumno.apellido}`],
-      ['Matrícula:', reporte.alumno.numeroMatricula],
-      ['Curso:', reporte.curso.nombre],
+      ['Nombre:', `${boleta.alumno.nombre} ${boleta.alumno.apellido}`],
+      ['Matrícula:', boleta.alumno.numeroMatricula],
+      ['Curso:', boleta.curso.nombre],
+      ['Orientador:', boleta.curso.orientador],
+      [],
+      ['PROMEDIO GENERAL DEL MES:', boleta.promedio_general_mes || 'N/A'],
       [],
     ];
 
-    reporte.asignaturas.forEach((asignatura) => {
+    boleta.asignaturas.forEach((asignatura) => {
       worksheetData.push(
         [`ASIGNATURA: ${asignatura.nombre}`],
-        [`Orientador: ${asignatura.orientador || 'N/A'}`],
+        [`Orientador: ${asignatura.orientador}`],
         [],
         ['Evaluación', 'Tipo', 'Porcentaje', 'Nota', 'Fecha'],
         ...asignatura.evaluaciones.map((evaluacion) => [
@@ -312,31 +329,26 @@ export function ReporteDetalladoAlumnoView({ alumnos, onVolver }: Props) {
             : '-',
         ]),
         [],
-        [
-          'Promedio de la asignatura:',
-          asignatura.promedio_periodo?.toString() || 'N/A',
-        ],
+        ['Promedio Mensual:', asignatura.promedio_mensual?.toString() || 'N/A'],
         []
       );
     });
 
     worksheetData.push(
       [],
-      ['PROMEDIO GENERAL DEL PERIODO:', promedioGeneralMostrar()],
-      [],
-      ['ASISTENCIA'],
-      ['Total registros:', reporte.asistencia.total_registros.toString()],
-      ['Presentes:', reporte.asistencia.presentes.toString()],
-      ['Ausentes:', reporte.asistencia.ausentes.toString()],
-      ['Tardanzas:', reporte.asistencia.tardanzas.toString()],
-      ['Porcentaje:', `${reporte.asistencia.porcentaje_asistencia || 0}%`],
+      ['ASISTENCIA DEL MES'],
+      ['Total Días:', boleta.asistencia.total_dias.toString()],
+      ['Presentes:', boleta.asistencia.presentes.toString()],
+      ['Ausentes:', boleta.asistencia.ausentes.toString()],
+      ['Tardanzas:', boleta.asistencia.tardanzas.toString()],
+      ['Porcentaje:', `${boleta.asistencia.porcentaje_asistencia || 0}%`],
       [],
       ['CONDUCTA'],
-      ['Total infracciones:', reporte.conductas.total.toString()],
-      ['Puntos acumulados:', reporte.conductas.puntos_acumulados.toString()]
+      ['Total infracciones:', boleta.conductas.total.toString()],
+      ['Puntos acumulados:', boleta.conductas.puntos_acumulados.toString()]
     );
 
-    if (reporte.conductas.detalles.length > 0) {
+    if (boleta.conductas.detalles.length > 0) {
       worksheetData.push(
         [],
         [
@@ -347,7 +359,7 @@ export function ReporteDetalladoAlumnoView({ alumnos, onVolver }: Props) {
           'Puntos',
           'Observación',
         ],
-        ...reporte.conductas.detalles.map((c) => [
+        ...boleta.conductas.detalles.map((c) => [
           new Date(c.fecha).toLocaleDateString(),
           c.infraccion.categoria,
           c.infraccion.articulo,
@@ -360,10 +372,10 @@ export function ReporteDetalladoAlumnoView({ alumnos, onVolver }: Props) {
 
     const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Reporte');
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Boleta');
     XLSX.writeFile(
       workbook,
-      `reporte_${reporte.alumno.numeroMatricula}_${reporte.alumno.nombre}_${reporte.alumno.apellido}_${reporte.periodo_academico.nombre}.xlsx`
+      `boleta_mensual_${boleta.alumno.numeroMatricula}_${boleta.periodo_academico.nombre_mes}_${boleta.periodo_academico.anio}.xlsx`
     );
   };
 
@@ -377,11 +389,9 @@ export function ReporteDetalladoAlumnoView({ alumnos, onVolver }: Props) {
             Volver
           </Button>
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">
-              Reporte Detallado del Alumno
-            </h2>
+            <h2 className="text-2xl font-bold text-gray-900">Boleta Mensual</h2>
             <p className="text-gray-600 mt-1">
-              Consulta todas las evaluaciones del trimestre/periodo
+              Consulta todas las evaluaciones, notas y asistencia del mes
             </p>
           </div>
         </div>
@@ -398,12 +408,10 @@ export function ReporteDetalladoAlumnoView({ alumnos, onVolver }: Props) {
               <label className="text-sm font-medium mb-2 block">Curso</label>
               <Select
                 value={cursoSeleccionado}
-                onValueChange={(value) => {
-                  setCursoSeleccionado(value);
-                }}
+                onValueChange={setCursoSeleccionado}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecciona un curso" />
+                  <SelectValue placeholder="Selecciona un curso (opcional)" />
                 </SelectTrigger>
                 <SelectContent>
                   {cursos.map((curso) => (
@@ -419,13 +427,13 @@ export function ReporteDetalladoAlumnoView({ alumnos, onVolver }: Props) {
               </Select>
             </div>
 
-            <div className="md:col-span-4">
+            <div className="md:col-span-3">
               <label className="text-sm font-medium mb-2 block">Alumno</label>
               <Select
                 value={alumnoSeleccionado}
                 onValueChange={(value) => {
                   setAlumnoSeleccionado(value);
-                  setReporte(null); // Reset reporte cuando cambia alumno
+                  setBoleta(null);
                 }}
               >
                 <SelectTrigger>
@@ -438,6 +446,25 @@ export function ReporteDetalladoAlumnoView({ alumnos, onVolver }: Props) {
                       value={alumno.id_alumno!.toString()}
                     >
                       {alumno.nombre} {alumno.apellido}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="text-sm font-medium mb-2 block">Mes</label>
+              <Select
+                value={mesSeleccionado}
+                onValueChange={setMesSeleccionado}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona mes" />
+                </SelectTrigger>
+                <SelectContent>
+                  {MESES.map((mes) => (
+                    <SelectItem key={mes.valor} value={mes.valor.toString()}>
+                      {mes.nombre}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -461,43 +488,11 @@ export function ReporteDetalladoAlumnoView({ alumnos, onVolver }: Props) {
             </div>
 
             <div className="md:col-span-2">
-              <label className="text-sm font-medium mb-2 block">
-                {reporte?.curso.es_bachillerato ? 'Periodo' : 'Trimestre'}
-              </label>
-              <Select
-                value={periodoSeleccionado}
-                onValueChange={setPeriodoSeleccionado}
-              >
-                <SelectTrigger>
-                  <SelectValue
-                    placeholder={`Selecciona ${reporte?.curso.es_bachillerato ? 'periodo' : 'trimestre'}`}
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {reporte?.curso.es_bachillerato ? (
-                    <>
-                      <SelectItem value="1">Periodo 1</SelectItem>
-                      <SelectItem value="2">Periodo 2</SelectItem>
-                      <SelectItem value="3">Periodo 3</SelectItem>
-                      <SelectItem value="4">Periodo 4</SelectItem>
-                    </>
-                  ) : (
-                    <>
-                      <SelectItem value="1">Trimestre 1</SelectItem>
-                      <SelectItem value="2">Trimestre 2</SelectItem>
-                      <SelectItem value="3">Trimestre 3</SelectItem>
-                    </>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="md:col-span-1">
               <label className="text-sm font-medium mb-2 block text-transparent select-none">
                 Acción
               </label>
               <Button
-                onClick={cargarReporte}
+                onClick={cargarBoleta}
                 className="w-full"
                 disabled={cargando}
               >
@@ -509,7 +504,7 @@ export function ReporteDetalladoAlumnoView({ alumnos, onVolver }: Props) {
                 ) : (
                   <>
                     <FileText className="w-4 h-4 mr-2" />
-                    Generar Reporte
+                    Generar Boleta
                   </>
                 )}
               </Button>
@@ -531,7 +526,7 @@ export function ReporteDetalladoAlumnoView({ alumnos, onVolver }: Props) {
       )}
 
       {/* Resultado */}
-      {reporte && (
+      {boleta && (
         <>
           {/* Botones de exportación */}
           <div className="flex justify-end gap-2">
@@ -564,24 +559,23 @@ export function ReporteDetalladoAlumnoView({ alumnos, onVolver }: Props) {
                 <div>
                   <p className="text-sm text-gray-600">Nombre Completo</p>
                   <p className="font-semibold">
-                    {reporte.alumno.nombre} {reporte.alumno.apellido}
+                    {boleta.alumno.nombre} {boleta.alumno.apellido}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Número de Matrícula</p>
                   <p className="font-semibold">
-                    {reporte.alumno.numeroMatricula}
+                    {boleta.alumno.numeroMatricula}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Curso</p>
-                  <p className="font-semibold">{reporte.curso.nombre}</p>
+                  <p className="font-semibold">{boleta.curso.nombre}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Periodo Académico</p>
+                  <p className="text-sm text-gray-600">Periodo</p>
                   <p className="font-semibold">
-                    {reporte.periodo_academico.nombre} -{' '}
-                    {reporte.periodo_academico.anio}
+                    {boleta.periodo_academico.descripcion}
                   </p>
                 </div>
               </div>
@@ -595,18 +589,18 @@ export function ReporteDetalladoAlumnoView({ alumnos, onVolver }: Props) {
                 <div className="flex items-center space-x-2">
                   <TrendingUp className="w-6 h-6 text-blue-600" />
                   <span className="font-semibold text-lg">
-                    Promedio General del {reporte.periodo_academico.nombre}:
+                    Promedio General del Mes:
                   </span>
                 </div>
                 <span className="font-bold text-3xl text-blue-600">
-                  {promedioGeneralMostrar()}
+                  {boleta.promedio_general_mes?.toFixed(2) || 'N/A'}
                 </span>
               </div>
             </CardContent>
           </Card>
 
           {/* Asignaturas con evaluaciones */}
-          {reporte.asignaturas.map((asignatura) => (
+          {boleta.asignaturas.map((asignatura) => (
             <Card key={asignatura.id_asignatura}>
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
@@ -615,14 +609,12 @@ export function ReporteDetalladoAlumnoView({ alumnos, onVolver }: Props) {
                     <span>{asignatura.nombre}</span>
                   </div>
                   <Badge variant="outline" className="text-blue-600">
-                    Promedio: {asignatura.promedio_periodo?.toFixed(2) || 'N/A'}
+                    Promedio: {asignatura.promedio_mensual?.toFixed(2) || 'N/A'}
                   </Badge>
                 </CardTitle>
-                {asignatura.orientador && (
-                  <p className="text-sm text-gray-600">
-                    Orientador: {asignatura.orientador}
-                  </p>
-                )}
+                <p className="text-sm text-gray-600">
+                  Orientador: {asignatura.orientador}
+                </p>
               </CardHeader>
               <CardContent>
                 <div className="overflow-x-auto">
@@ -705,6 +697,45 @@ export function ReporteDetalladoAlumnoView({ alumnos, onVolver }: Props) {
                     </tbody>
                   </table>
                 </div>
+
+                {/* Desglose de promedio */}
+                {(asignatura.desglose_promedio.tareas !== null ||
+                  asignatura.desglose_promedio.revisiones !== null ||
+                  asignatura.desglose_promedio.laboratorios !== null) && (
+                  <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                    <p className="text-sm font-semibold mb-2">
+                      Desglose del Promedio Mensual:
+                    </p>
+                    <div className="grid grid-cols-3 gap-4 text-sm">
+                      {asignatura.desglose_promedio.tareas !== null && (
+                        <div>
+                          <span className="text-gray-600">Tareas: </span>
+                          <span className="font-semibold">
+                            {asignatura.desglose_promedio.tareas.toFixed(2)}
+                          </span>
+                        </div>
+                      )}
+                      {asignatura.desglose_promedio.revisiones !== null && (
+                        <div>
+                          <span className="text-gray-600">Revisiones: </span>
+                          <span className="font-semibold">
+                            {asignatura.desglose_promedio.revisiones.toFixed(2)}
+                          </span>
+                        </div>
+                      )}
+                      {asignatura.desglose_promedio.laboratorios !== null && (
+                        <div>
+                          <span className="text-gray-600">Laboratorios: </span>
+                          <span className="font-semibold">
+                            {asignatura.desglose_promedio.laboratorios.toFixed(
+                              2
+                            )}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}
@@ -714,39 +745,39 @@ export function ReporteDetalladoAlumnoView({ alumnos, onVolver }: Props) {
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
                 <Calendar className="w-5 h-5" />
-                <span>Resumen de Asistencia (Año Completo)</span>
+                <span>Asistencia del Mes</span>
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <div className="p-4 bg-gray-50 rounded-lg">
-                  <p className="text-sm text-gray-600">Total Registros</p>
+                  <p className="text-sm text-gray-600">Total Días</p>
                   <p className="font-bold text-2xl">
-                    {reporte.asistencia.total_registros}
+                    {boleta.asistencia.total_dias}
                   </p>
                 </div>
                 <div className="p-4 bg-green-50 rounded-lg">
                   <p className="text-sm text-gray-600">Presentes</p>
                   <p className="font-bold text-2xl text-green-600">
-                    {reporte.asistencia.presentes}
+                    {boleta.asistencia.presentes}
                   </p>
                 </div>
                 <div className="p-4 bg-red-50 rounded-lg">
                   <p className="text-sm text-gray-600">Ausentes</p>
                   <p className="font-bold text-2xl text-red-600">
-                    {reporte.asistencia.ausentes}
+                    {boleta.asistencia.ausentes}
                   </p>
                 </div>
                 <div className="p-4 bg-yellow-50 rounded-lg">
                   <p className="text-sm text-gray-600">Tardanzas</p>
                   <p className="font-bold text-2xl text-yellow-600">
-                    {reporte.asistencia.tardanzas}
+                    {boleta.asistencia.tardanzas}
                   </p>
                 </div>
                 <div className="p-4 bg-blue-50 rounded-lg">
                   <p className="text-sm text-gray-600">Porcentaje</p>
                   <p className="font-bold text-2xl text-blue-600">
-                    {reporte.asistencia.porcentaje_asistencia?.toFixed(1) ||
+                    {boleta.asistencia.porcentaje_asistencia?.toFixed(1) ||
                       '0.0'}
                     %
                   </p>
@@ -759,19 +790,19 @@ export function ReporteDetalladoAlumnoView({ alumnos, onVolver }: Props) {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
-                <span>Registro de Conducta</span>
+                <span>Registro de Conducta del Mes</span>
                 <div className="flex gap-2">
                   <Badge variant="outline" className="text-red-600">
-                    {reporte.conductas.total} infracciones
+                    {boleta.conductas.total} infracciones
                   </Badge>
                   <Badge variant="outline" className="text-orange-600">
-                    {reporte.conductas.puntos_acumulados} puntos
+                    {boleta.conductas.puntos_acumulados} puntos
                   </Badge>
                 </div>
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {reporte.conductas.detalles.length > 0 ? (
+              {boleta.conductas.detalles.length > 0 ? (
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
@@ -790,13 +821,10 @@ export function ReporteDetalladoAlumnoView({ alumnos, onVolver }: Props) {
                         <th className="text-left p-3 font-semibold">
                           Observación
                         </th>
-                        <th className="text-left p-3 font-semibold">
-                          Orientador
-                        </th>
                       </tr>
                     </thead>
                     <tbody>
-                      {reporte.conductas.detalles.map((conducta) => (
+                      {boleta.conductas.detalles.map((conducta) => (
                         <tr
                           key={conducta.id_conducta}
                           className="border-b hover:bg-gray-50"
@@ -814,11 +842,9 @@ export function ReporteDetalladoAlumnoView({ alumnos, onVolver }: Props) {
                           <td className="p-3">
                             <Badge
                               className={
-                                conducta.infraccion.categoria === 'MUY_GRAVE'
+                                conducta.infraccion.categoria.includes('GRAVE')
                                   ? 'bg-red-600 text-white'
-                                  : conducta.infraccion.categoria === 'GRAVE'
-                                    ? 'bg-red-100 text-red-800'
-                                    : 'bg-yellow-100 text-yellow-800'
+                                  : 'bg-yellow-100 text-yellow-800'
                               }
                             >
                               {conducta.infraccion.categoria.replace('_', ' ')}
@@ -838,9 +864,6 @@ export function ReporteDetalladoAlumnoView({ alumnos, onVolver }: Props) {
                           <td className="p-3 text-sm">
                             {conducta.observacion}
                           </td>
-                          <td className="p-3 text-sm">
-                            {conducta.orientador || 'N/A'}
-                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -849,7 +872,7 @@ export function ReporteDetalladoAlumnoView({ alumnos, onVolver }: Props) {
               ) : (
                 <div className="p-8 text-center bg-green-50 rounded-lg">
                   <p className="text-green-800 font-medium">
-                    ✓ El alumno no tiene registros de conducta en este periodo
+                    ✓ El alumno no tiene registros de conducta en este mes
                   </p>
                 </div>
               )}

@@ -19,14 +19,14 @@ import type { Alumno } from '../types';
 
 // Subcomponentes (importaremos después)
 import { EvaluacionesPorAsignaturaView } from './reportes/EvaluacionesPorAsignaturaView.tsx';
-import { NotasAlumnoView } from './reportes/NotasAlumnoView.tsx';
 import { ReporteDetalladoAlumnoView } from './reportes/ReporteDetalladoAlumnoView.tsx';
+import { BoletaMensualView } from './reportes/BoletaMensualView.tsx';
 
 type VistaReporte =
   | 'menu'
   | 'evaluaciones-asignatura'
-  | 'notas-alumno'
-  | 'reporte-detallado';
+  | 'reporte-detallado'
+  | 'boleta-mensual';
 
 export function ReportesOrientadorModule() {
   const [vistaActual, setVistaActual] = useState<VistaReporte>('menu');
@@ -74,12 +74,12 @@ export function ReportesOrientadorModule() {
     setVistaActual('evaluaciones-asignatura');
   };
 
-  const irANotasAlumno = () => {
-    setVistaActual('notas-alumno');
-  };
-
   const irAReporteDetallado = () => {
     setVistaActual('reporte-detallado');
+  };
+
+  const irABoletaMensual = () => {
+    setVistaActual('boleta-mensual');
   };
 
   // Renderizar menú principal
@@ -183,40 +183,6 @@ export function ReportesOrientadorModule() {
               </CardContent>
             </Card>
 
-            {/* Reporte: Historial de Notas por Alumno */}
-            <Card
-              className="hover:shadow-md transition-all cursor-pointer group border-l-4 border-l-green-500 hover:border-l-green-600 hover:bg-green-50"
-              onClick={irANotasAlumno}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4 flex-1">
-                    <div className="bg-green-100 p-3 rounded-lg group-hover:bg-green-200 transition-colors">
-                      <FileText className="w-6 h-6 text-green-600" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-lg font-bold text-gray-900 group-hover:text-green-600 transition-colors">
-                        Historial de Notas del Alumno
-                      </h3>
-                      <p className="text-sm text-gray-600 mt-1">
-                        Visualiza el historial completo de notas de un alumno en
-                        tus asignaturas
-                      </p>
-                      <Badge className="bg-green-100 text-green-800 mt-2">
-                        {alumnos.length} alumnos
-                      </Badge>
-                    </div>
-                  </div>
-                  <Button
-                    size="sm"
-                    className="bg-green-600 hover:bg-green-700 ml-4 hidden sm:flex"
-                  >
-                    Generar
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
             {/* Reporte: Detallado por Trimestre/Periodo */}
             <Card
               className="hover:shadow-md transition-all cursor-pointer group border-l-4 border-l-indigo-500 hover:border-l-indigo-600 hover:bg-indigo-50"
@@ -249,6 +215,45 @@ export function ReportesOrientadorModule() {
                   <Button
                     size="sm"
                     className="bg-indigo-600 hover:bg-indigo-700 ml-4 hidden sm:flex"
+                  >
+                    Generar
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Reporte: Boleta Mensual */}
+            <Card
+              className="hover:shadow-md transition-all cursor-pointer group border-l-4 border-l-purple-500 hover:border-l-purple-600 hover:bg-purple-50"
+              onClick={irABoletaMensual}
+            >
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4 flex-1">
+                    <div className="bg-purple-100 p-3 rounded-lg group-hover:bg-purple-200 transition-colors">
+                      <FileText className="w-6 h-6 text-purple-600" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-bold text-gray-900 group-hover:text-purple-600 transition-colors">
+                        Boleta Mensual
+                      </h3>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Consulta todas las evaluaciones, notas, asistencia y
+                        conducta de un mes específico
+                      </p>
+                      <div className="flex gap-2 mt-2">
+                        <Badge className="bg-purple-100 text-purple-800">
+                          Para Padres
+                        </Badge>
+                        <Badge className="bg-purple-100 text-purple-800">
+                          Mensual
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="bg-purple-600 hover:bg-purple-700 ml-4 hidden sm:flex"
                   >
                     Generar
                   </Button>
@@ -307,8 +312,6 @@ export function ReportesOrientadorModule() {
             onVolver={volverAlMenu}
           />
         );
-      case 'notas-alumno':
-        return <NotasAlumnoView alumnos={alumnos} onVolver={volverAlMenu} />;
       case 'reporte-detallado':
         return (
           <ReporteDetalladoAlumnoView
@@ -316,6 +319,8 @@ export function ReportesOrientadorModule() {
             onVolver={volverAlMenu}
           />
         );
+      case 'boleta-mensual':
+        return <BoletaMensualView alumnos={alumnos} onVolver={volverAlMenu} />;
       default:
         return renderMenu();
     }

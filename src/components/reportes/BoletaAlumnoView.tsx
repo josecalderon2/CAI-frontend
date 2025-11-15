@@ -353,11 +353,17 @@ export function BoletaAlumnoView({ alumnos, onVolver }: Props) {
         <>
           {/* Botones de exportación */}
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={exportarPDF}>
+            <Button
+              onClick={exportarPDF}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
               <Download className="w-4 h-4 mr-2" />
               Exportar a PDF
             </Button>
-            <Button variant="outline" onClick={exportarExcel}>
+            <Button
+              onClick={exportarExcel}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
               <Download className="w-4 h-4 mr-2" />
               Exportar a Excel
             </Button>

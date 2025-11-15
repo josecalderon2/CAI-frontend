@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
+import { cursosService, type Curso } from '../../api/services/cursosService';
 import {
   Select,
   SelectContent,
@@ -20,7 +21,9 @@ import type { Alumno } from '../../types';
 import {
   reportesOrientadorService,
   type ReporteNotasAlumno,
+  type ReporteBoletaAlumno,
 } from '../../api/services/reportesOrientadorService';
+import { api } from '../../api/axiosConfig';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
@@ -31,17 +34,68 @@ interface Props {
 }
 
 export function NotasAlumnoView({ alumnos, onVolver }: Props) {
+  const [cursoSeleccionado, setCursoSeleccionado] = useState<string>('');
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState<string>('');
   const [anio, setAnio] = useState<string>('2025');
+  const [cursos, setCursos] = useState<Curso[]>([]);
+  const [alumnosFiltrados, setAlumnosFiltrados] = useState<Alumno[]>([]);
+  const [cargandoCursos, setCargandoCursos] = useState(false);
   const [reporte, setReporte] = useState<ReporteNotasAlumno | null>(null);
   const [alumnoInfo, setAlumnoInfo] = useState<{
     nombre: string;
     apellido: string;
   } | null>(null);
+  const [conductasResumen, setConductasResumen] = useState<
+    ReporteBoletaAlumno['conductasResumen'] | null
+  >(null);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Cargar cursos al montar
+  useEffect(() => {
+    const cargarCursos = async () => {
+      try {
+        setCargandoCursos(true);
+        const data = await cursosService.list({ activo: true, limit: 100 });
+        setCursos(data.items);
+      } catch (err) {
+        console.error('Error al cargar cursos:', err);
+      } finally {
+        setCargandoCursos(false);
+      }
+    };
+    cargarCursos();
+  }, []);
+
+  // Filtrar alumnos cuando cambia el curso seleccionado
+  useEffect(() => {
+    const filtrarAlumnos = async () => {
+      if (!cursoSeleccionado) {
+        setAlumnosFiltrados([]);
+        setAlumnoSeleccionado('');
+        return;
+      }
+
+      try {
+        // Obtener alumnos del curso seleccionado
+        const data = await cursosService.getAlumnosPorCurso(
+          parseInt(cursoSeleccionado)
+        );
+        setAlumnosFiltrados(data as any);
+        setAlumnoSeleccionado(''); // Reset alumno al cambiar curso
+      } catch (err) {
+        console.error('Error al cargar alumnos del curso:', err);
+        setAlumnosFiltrados([]);
+      }
+    };
+    filtrarAlumnos();
+  }, [cursoSeleccionado]);
+
   const cargarReporte = async () => {
+    if (!cursoSeleccionado) {
+      setError('Debe seleccionar un curso');
+      return;
+    }
     if (!alumnoSeleccionado) {
       setError('Debe seleccionar un alumno');
       return;
@@ -50,10 +104,18 @@ export function NotasAlumnoView({ alumnos, onVolver }: Props) {
     try {
       setCargando(true);
       setError(null);
-      const data = await reportesOrientadorService.getNotasAlumno(
-        parseInt(alumnoSeleccionado),
-        parseInt(anio)
-      );
+
+      // Cargar notas y conductas en paralelo
+      const [data, boletaData] = await Promise.all([
+        reportesOrientadorService.getNotasAlumno(
+          parseInt(alumnoSeleccionado),
+          parseInt(anio)
+        ),
+        reportesOrientadorService.getBoletaAlumno(
+          parseInt(alumnoSeleccionado),
+          parseInt(anio)
+        ),
+      ]);
 
       // ReporteNotasAlumno es un array directo
       if (!Array.isArray(data)) {
@@ -61,6 +123,7 @@ export function NotasAlumnoView({ alumnos, onVolver }: Props) {
       }
 
       setReporte(data);
+      setConductasResumen(boletaData.conductasResumen);
 
       // Extraer info del alumno seleccionado
       const alumno = alumnos.find(
@@ -94,59 +157,49 @@ export function NotasAlumnoView({ alumnos, onVolver }: Props) {
 
     // Tabla de notas
     const tableData = reporte.map((nota) => [
-      nota.asignatura.nombre,
-      nota.evaluacion.nombre,
-      nota.evaluacion.tipoEvaluacion.nombre,
-      nota.calificacion.toFixed(1),
-      `${nota.evaluacion.tipoEvaluacion.porcentaje}%`,
-      `T${nota.evaluacion.trimestre || 'N/A'}`,
-      new Date(nota.fecha_registro).toLocaleDateString(),
-    ]);
+        // Legacy component refactored: delegates to new HistorialNotasPage architecture
+        // Kept only for backward compatibility with existing imports
+        import { HistorialNotasPage } from '../historial-notas/HistorialNotasPage';
 
-    autoTable(doc, {
-      startY: 40,
+        interface Props {
+          onVolver: () => void;
+        }
+
+        export function NotasAlumnoView({ onVolver }: Props) {
+          return <HistorialNotasPage onVolver={onVolver} />;
       head: [
         ['Asignatura', 'Evaluación', 'Tipo', 'Nota', '%', 'Trim.', 'Fecha'],
-      ],
-      body: tableData,
-      theme: 'striped',
-      headStyles: { fillColor: [59, 130, 246] },
-      styles: { fontSize: 8 },
-    });
-
-    doc.save(`notas_${alumnoInfo.nombre}_${alumnoInfo.apellido}_${anio}.pdf`);
-  };
-
-  const exportarExcel = () => {
-    if (!reporte || reporte.length === 0 || !alumnoInfo) return;
-
-    const worksheetData = [
-      ['Historial de Notas del Alumno'],
+      ]),
       [],
-      ['Alumno:', `${alumnoInfo.nombre} ${alumnoInfo.apellido}`],
-      ['Año Académico:', anio],
-      ['Total de Notas:', reporte.length],
+      ['Registro de Conducta'],
+      [],
+      ['Total de Infracciones:', conductasResumen?.total || 0],
+      [
+        'Puntos Acumulados:',
+        conductasResumen?.detalles.reduce(
+          (sum, c) => sum + c.infraccion.puntos,
+          0
+        ) || 0,
+      ],
       [],
       [
-        'Asignatura',
-        'Evaluación',
-        'Tipo',
-        'Nota',
-        'Porcentaje',
-        'Trimestre',
-        'Mes',
         'Fecha',
+        'Categoría',
+        'Artículo',
+        'Descripción',
+        'Puntos',
+        'Observación',
       ],
-      ...reporte.map((nota) => [
-        nota.asignatura.nombre,
-        nota.evaluacion.nombre,
-        nota.evaluacion.tipoEvaluacion.nombre,
-        nota.calificacion,
-        nota.evaluacion.tipoEvaluacion.porcentaje,
-        `T${nota.evaluacion.trimestre || 'N/A'}`,
-        `Mes ${nota.evaluacion.mes || 'N/A'}`,
-        new Date(nota.fecha_registro).toLocaleDateString(),
-      ]),
+      ...(conductasResumen && conductasResumen.detalles.length > 0
+        ? conductasResumen.detalles.map((conducta) => [
+            new Date(conducta.fecha).toLocaleDateString('es-ES'),
+            conducta.infraccion.categoria,
+            conducta.infraccion.articulo,
+            conducta.infraccion.descripcion,
+            conducta.infraccion.puntos,
+            conducta.observacion || 'Sin observación',
+          ])
+        : [['No hay infracciones registradas', '', '', '', '', '']]),
     ];
 
     const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
@@ -188,7 +241,7 @@ export function NotasAlumnoView({ alumnos, onVolver }: Props) {
               Historial de Notas del Alumno
             </h2>
             <p className="text-gray-600 mt-1">
-              Consulta todas las notas de un alumno en tus asignaturas
+              Selecciona un curso y luego un alumno para ver su historial
             </p>
           </div>
         </div>
@@ -201,17 +254,47 @@ export function NotasAlumnoView({ alumnos, onVolver }: Props) {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-            <div className="md:col-span-5">
+            <div className="md:col-span-4">
+              <label className="text-sm font-medium mb-2 block">Curso</label>
+              <Select
+                value={cursoSeleccionado}
+                onValueChange={setCursoSeleccionado}
+                disabled={cargandoCursos}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona un curso" />
+                </SelectTrigger>
+                <SelectContent>
+                  {cursos.map((curso) => (
+                    <SelectItem
+                      key={curso.id_curso}
+                      value={curso.id_curso!.toString()}
+                    >
+                      {curso.gradoAcademico?.nombre} "{curso.seccion}"
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="md:col-span-4">
               <label className="text-sm font-medium mb-2 block">Alumno</label>
               <Select
                 value={alumnoSeleccionado}
                 onValueChange={setAlumnoSeleccionado}
+                disabled={!cursoSeleccionado || alumnosFiltrados.length === 0}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecciona un alumno" />
+                  <SelectValue
+                    placeholder={
+                      !cursoSeleccionado
+                        ? 'Primero selecciona un curso'
+                        : 'Selecciona un alumno'
+                    }
+                  />
                 </SelectTrigger>
                 <SelectContent>
-                  {alumnos.map((alumno) => (
+                  {alumnosFiltrados.map((alumno) => (
                     <SelectItem
                       key={alumno.id_alumno}
                       value={alumno.id_alumno!.toString()}
@@ -223,7 +306,7 @@ export function NotasAlumnoView({ alumnos, onVolver }: Props) {
               </Select>
             </div>
 
-            <div className="md:col-span-4">
+            <div className="md:col-span-2">
               <label className="text-sm font-medium mb-2 block">
                 Año Académico
               </label>
@@ -239,11 +322,11 @@ export function NotasAlumnoView({ alumnos, onVolver }: Props) {
               </Select>
             </div>
 
-            <div className="md:col-span-3">
+            <div className="md:col-span-2">
               <Button
                 onClick={cargarReporte}
                 className="w-full"
-                disabled={cargando}
+                disabled={cargando || !cursoSeleccionado || !alumnoSeleccionado}
               >
                 {cargando ? (
                   <>
@@ -282,11 +365,19 @@ export function NotasAlumnoView({ alumnos, onVolver }: Props) {
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Resumen del Reporte</CardTitle>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={exportarPDF}>
+                <Button
+                  size="sm"
+                  onClick={exportarPDF}
+                  className="bg-red-600 hover:bg-red-700 text-white"
+                >
                   <Download className="w-4 h-4 mr-2" />
                   PDF
                 </Button>
-                <Button variant="outline" size="sm" onClick={exportarExcel}>
+                <Button
+                  size="sm"
+                  onClick={exportarExcel}
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                >
                   <Download className="w-4 h-4 mr-2" />
                   Excel
                 </Button>
@@ -397,6 +488,107 @@ export function NotasAlumnoView({ alumnos, onVolver }: Props) {
                   Este alumno no tiene notas registradas en tus asignaturas para
                   el año {anio}.
                 </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Sección de Conductas */}
+          {conductasResumen && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span>Registro de Conducta</span>
+                  <div className="flex gap-2">
+                    <Badge variant="outline">
+                      {conductasResumen.total} infracciones
+                    </Badge>
+                    <Badge variant="destructive">
+                      {conductasResumen.detalles.reduce(
+                        (sum, c) => sum + c.infraccion.puntos,
+                        0
+                      )}{' '}
+                      puntos
+                    </Badge>
+                  </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {conductasResumen.detalles.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="text-left p-3 font-semibold">Fecha</th>
+                          <th className="text-left p-3 font-semibold">
+                            Categoría
+                          </th>
+                          <th className="text-left p-3 font-semibold">
+                            Artículo
+                          </th>
+                          <th className="text-left p-3 font-semibold">
+                            Descripción
+                          </th>
+                          <th className="text-left p-3 font-semibold">
+                            Puntos
+                          </th>
+                          <th className="text-left p-3 font-semibold">
+                            Observación
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {conductasResumen.detalles.map((conducta) => (
+                          <tr
+                            key={conducta.id_conducta}
+                            className="border-b hover:bg-gray-50"
+                          >
+                            <td className="p-3">
+                              {new Date(conducta.fecha).toLocaleDateString(
+                                'es-ES',
+                                {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric',
+                                }
+                              )}
+                            </td>
+                            <td className="p-3">
+                              <Badge
+                                variant={
+                                  conducta.infraccion.categoria === 'MUY_GRAVE'
+                                    ? 'destructive'
+                                    : conducta.infraccion.categoria === 'GRAVE'
+                                      ? 'destructive'
+                                      : 'outline'
+                                }
+                              >
+                                {conducta.infraccion.categoria}
+                              </Badge>
+                            </td>
+                            <td className="p-3">
+                              {conducta.infraccion.articulo}
+                            </td>
+                            <td className="p-3">
+                              {conducta.infraccion.descripcion}
+                            </td>
+                            <td className="p-3">
+                              <span className="font-semibold text-red-600">
+                                {conducta.infraccion.puntos}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              {conducta.observacion || 'Sin observación'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="p-4 text-center text-green-600 bg-green-50 rounded-lg">
+                    ✓ El alumno no tiene infracciones registradas
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}

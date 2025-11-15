@@ -303,11 +303,19 @@ export function EvaluacionesPorAsignaturaView({
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Resumen del Reporte</CardTitle>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={exportarPDF}>
+                <Button
+                  size="sm"
+                  onClick={exportarPDF}
+                  className="bg-red-600 hover:bg-red-700 text-white"
+                >
                   <Download className="w-4 h-4 mr-2" />
                   PDF
                 </Button>
-                <Button variant="outline" size="sm" onClick={exportarExcel}>
+                <Button
+                  size="sm"
+                  onClick={exportarExcel}
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                >
                   <Download className="w-4 h-4 mr-2" />
                   Excel
                 </Button>

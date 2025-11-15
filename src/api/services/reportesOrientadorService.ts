@@ -299,6 +299,74 @@ export interface ReporteDetalladoAlumno {
   };
 }
 
+// Interfaces para la boleta mensual
+export interface BoletaMensualResponse {
+  alumno: {
+    id_alumno: number;
+    nombre: string;
+    apellido: string;
+    numeroMatricula: string;
+  };
+  curso: {
+    id_curso: number;
+    nombre: string;
+    grado: string;
+    es_bachillerato: boolean;
+    orientador: string;
+  };
+  periodo_academico: {
+    anio: string;
+    mes: number;
+    nombre_mes: string;
+    trimestre: number | null;
+    periodo: number | null;
+    descripcion: string;
+  };
+  asignaturas: Array<{
+    id_asignatura: number;
+    nombre: string;
+    orientador: string;
+    evaluaciones: Array<{
+      id_evaluacion: number;
+      nombre: string;
+      tipo: string;
+      porcentaje: number;
+      nota: number | null;
+      fecha_registro: string | null;
+    }>;
+    promedio_mensual: number | null;
+    desglose_promedio: {
+      tareas: number | null;
+      revisiones: number | null;
+      laboratorios: number | null;
+    };
+  }>;
+  promedio_general_mes: number | null;
+  conductas: {
+    total: number;
+    puntos_acumulados: number;
+    detalles: Array<{
+      id_conducta: number;
+      fecha: string;
+      observacion: string;
+      orientador: string | null;
+      infraccion: {
+        categoria: string;
+        articulo: string;
+        descripcion: string;
+        puntos: number;
+      };
+    }>;
+  };
+  asistencia: {
+    total_dias: number;
+    presentes: number;
+    ausentes: number;
+    tardanzas: number;
+    porcentaje_asistencia: number | null;
+  };
+}
+
 const base = '/reportes-notas';
 
 export const reportesOrientadorService = {
@@ -444,6 +512,31 @@ export const reportesOrientadorService = {
     });
     console.log(
       `📊 ${data.periodo_academico.nombre} - ${data.asignaturas.length} asignaturas, Promedio: ${data.promedio_general_periodo?.toFixed(2) || 'N/A'}`
+    );
+    return data;
+  },
+
+  /**
+   * Obtener boleta mensual de un alumno (para padres)
+   * Endpoint: GET /reportes-notas/boleta/alumno/:id/mensual?mes=X&anio=YYYY
+   * Estructura: { alumno, curso, periodo_academico, asignaturas[], promedio_general_mes, conductas, asistencia }
+   */
+  async getBoletaMensual(
+    idAlumno: number,
+    params: { mes: number; anio?: string }
+  ): Promise<BoletaMensualResponse> {
+    console.log(
+      '🔍 Llamando a:',
+      `${base}/boleta/alumno/${idAlumno}/mensual`,
+      params
+    );
+    const res = await api.get(`${base}/boleta/alumno/${idAlumno}/mensual`, {
+      params,
+    });
+    const data = res.data as BoletaMensualResponse;
+    console.log('✅ Respuesta getBoletaMensual:', data);
+    console.log(
+      `📊 ${data.periodo_academico.nombre_mes} ${data.periodo_academico.anio} - ${data.asignaturas.length} asignaturas, Promedio: ${data.promedio_general_mes?.toFixed(2) || 'N/A'}`
     );
     return data;
   },

@@ -263,7 +263,9 @@ export function DistribucionAsignaturaView({ asignaturas, onVolver }: Props) {
             </div>
 
             <div className="flex flex-col md:items-end">
-              <label className="text-sm font-medium mb-2 block invisible select-none">Acción</label>
+              <label className="text-sm font-medium mb-2 block invisible select-none">
+                Acción
+              </label>
               <Button
                 onClick={cargarDistribucion}
                 className="w-full bg-indigo-600 hover:bg-indigo-700"
@@ -327,19 +329,17 @@ export function DistribucionAsignaturaView({ asignaturas, onVolver }: Props) {
               <CardTitle>Estadísticas de Distribución</CardTitle>
               <div className="flex gap-2">
                 <Button
-                  variant="outline"
                   size="sm"
                   onClick={exportarPDF}
-                  className="border-indigo-600 text-indigo-600 hover:bg-indigo-50"
+                  className="bg-red-600 hover:bg-red-700 text-white"
                 >
                   <Download className="w-4 h-4 mr-2" />
                   PDF
                 </Button>
                 <Button
-                  variant="outline"
                   size="sm"
                   onClick={exportarExcel}
-                  className="border-indigo-600 text-indigo-600 hover:bg-indigo-50"
+                  className="bg-green-600 hover:bg-green-700 text-white"
                 >
                   <Download className="w-4 h-4 mr-2" />
                   Excel

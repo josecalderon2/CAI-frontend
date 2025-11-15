@@ -244,7 +244,9 @@ export function PendientesEvaluacionView({ evaluaciones, onVolver }: Props) {
             </div>
 
             <div className="flex flex-col md:items-end md:justify-start">
-              <label className="text-sm font-medium mb-2 block invisible select-none">Acción</label>
+              <label className="text-sm font-medium mb-2 block invisible select-none">
+                Acción
+              </label>
               <Button
                 onClick={cargarReporte}
                 className="w-full md:w-auto min-w-[180px] bg-indigo-600 hover:bg-indigo-700 focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2"
