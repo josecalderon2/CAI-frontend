@@ -575,40 +575,81 @@ export interface ResumenAnualResponse {
 }
 
 // ✅ NUEVO: DTO para Resumen Trimestral Consolidado Anual
+// ⚠️ Actualizado: DTO para Resumen Trimestral Consolidado (por curso, no por alumno)
 export interface ResumenTrimestralConsolidadoDto {
   cursoId: number;
-  anio: number;
+  anio?: number | string; // opcional, backend usa año actual por defecto
 }
 
-// ✅ NUEVO: Response de Resumen Trimestral Consolidado Anual
-export interface ResumenTrimestralConsolidadoResponse {
+// ✅ Nuevas interfaces para el consolidado por trimestre
+export type EstadoConsolidado = 'P' | 'E' | 'SP' | 'A';
+
+export interface DetalleAlumnoTrimestre {
   id_alumno: number;
   nombre: string;
   apellido: string;
-  trimestre1: {
-    justificadas: number;
-    injustificadas: number;
-    infracciones: InfraccionResumen[];
-    puntajeConducta: number;
-  };
-  trimestre2: {
-    justificadas: number;
-    injustificadas: number;
-    infracciones: InfraccionResumen[];
-    puntajeConducta: number;
-  };
-  trimestre3: {
-    justificadas: number;
-    injustificadas: number;
-    infracciones: InfraccionResumen[];
-    puntajeConducta: number;
-  };
+  P: number;
+  E: number;
+  SP: number;
+  A: number;
+  total_registros: number;
+  porcentaje_asistencia: number;
+}
+
+export interface ResumenTrimestralItem {
+  trimestre: 1 | 2 | 3;
+  P: number;
+  E: number;
+  SP: number;
+  A: number;
+  total_registros: number;
+  porcentaje_asistencia: number; // 2 decimales
+  alumnos?: DetalleAlumnoTrimestre[]; // opcional: detalle por alumno
+}
+
+export interface ResumenTrimestralConsolidado {
+  cursoId: number;
+  anio: string;
+  trimestres: ResumenTrimestralItem[];
+  totales: Omit<ResumenTrimestralItem, 'trimestre'>;
+}
+
+// 🆕 Consolidado por Alumno (asistencia + conducta)
+export interface ResumenTrimestralConsolidadoAlumnoDto {
+  cursoId: number;
+  alumnoId: number;
+  anio?: number | string;
+}
+
+export interface ConductaTrimestreResumen {
+  trimestre: 1 | 2 | 3;
+  menos_graves: number;
+  graves: number;
+  muy_graves: number;
+  puntos: number;
+  detalles: InfraccionResumen[];
+}
+
+export interface ConductaTrimestresResumen {
+  trimestres: ConductaTrimestreResumen[];
   totales: {
-    justificadas: number;
-    injustificadas: number;
-    totalInfracciones: number;
-    promedioConducta: number;
+    menos_graves: number;
+    graves: number;
+    muy_graves: number;
+    puntos: number;
+    total_infracciones: number;
   };
+}
+
+export interface ResumenTrimestralConsolidadoAlumno {
+  cursoId: number;
+  alumnoId: number;
+  anio: string;
+  asistencia: {
+    trimestres: ResumenTrimestralItem[];
+    totales: Omit<ResumenTrimestralItem, 'trimestre'>;
+  };
+  conducta: ConductaTrimestresResumen;
 }
 
 // Servicio de resúmenes
@@ -667,82 +708,204 @@ export const resumenService = {
     return mapped;
   },
 
-  // 🆕 Obtener resumen trimestral consolidado anual
+  // 🆕 Obtener resumen trimestral consolidado (P/E/SP/A por trimestre)
   getResumenTrimestralConsolidado: async (
     params: ResumenTrimestralConsolidadoDto
-  ): Promise<ResumenTrimestralConsolidadoResponse[]> => {
+  ): Promise<ResumenTrimestralConsolidado> => {
     const queryParams = new URLSearchParams({
       cursoId: params.cursoId.toString(),
-      anio: params.anio.toString(),
+      ...(params.anio ? { anio: params.anio.toString() } : {}),
     });
 
     const response = await api.get<any>(
       `/asistencia/resumen/trimestral-consolidado?${queryParams.toString()}`
     );
 
-    // Mapear los nombres de campos del backend (snake_case) al frontend (camelCase)
-    const mapped = response.data.map((item: any) => ({
-      id_alumno: item.id_alumno,
-      nombre: item.nombre,
-      apellido: item.apellido,
-      trimestre1: {
-        justificadas: item.trimestre1?.justificadas ?? 0,
-        injustificadas: item.trimestre1?.injustificadas ?? 0,
-        infracciones: (item.trimestre1?.infracciones ?? []).map((inf: any) => ({
-          categoria: inf.categoria,
-          articulo: inf.articulo,
-          descripcion: inf.descripcion,
-          puntos: inf.puntos,
-          cantidad: inf.cantidad ?? inf.conteo ?? 0,
-        })),
-        puntajeConducta:
-          item.trimestre1?.puntaje_conducta ??
-          item.trimestre1?.puntajeConducta ??
-          10,
-      },
-      trimestre2: {
-        justificadas: item.trimestre2?.justificadas ?? 0,
-        injustificadas: item.trimestre2?.injustificadas ?? 0,
-        infracciones: (item.trimestre2?.infracciones ?? []).map((inf: any) => ({
-          categoria: inf.categoria,
-          articulo: inf.articulo,
-          descripcion: inf.descripcion,
-          puntos: inf.puntos,
-          cantidad: inf.cantidad ?? inf.conteo ?? 0,
-        })),
-        puntajeConducta:
-          item.trimestre2?.puntaje_conducta ??
-          item.trimestre2?.puntajeConducta ??
-          10,
-      },
-      trimestre3: {
-        justificadas: item.trimestre3?.justificadas ?? 0,
-        injustificadas: item.trimestre3?.injustificadas ?? 0,
-        infracciones: (item.trimestre3?.infracciones ?? []).map((inf: any) => ({
-          categoria: inf.categoria,
-          articulo: inf.articulo,
-          descripcion: inf.descripcion,
-          puntos: inf.puntos,
-          cantidad: inf.cantidad ?? inf.conteo ?? 0,
-        })),
-        puntajeConducta:
-          item.trimestre3?.puntaje_conducta ??
-          item.trimestre3?.puntajeConducta ??
-          10,
-      },
+    const data = response.data;
+
+    const trimestres = (data.trimestres ?? []).map((t: any) => {
+      const P = Number(t.P ?? 0);
+      const E = Number(t.E ?? 0);
+      const SP = Number(t.SP ?? 0);
+      const A = Number(t.A ?? 0);
+      const total = Number(t.total_registros ?? P + E + SP + A);
+      const pct = Number(
+        (t.porcentaje_asistencia ?? ((P + E) / (total || 1)) * 100).toFixed(2)
+      );
+      const alumnos: DetalleAlumnoTrimestre[] = (t.alumnos ?? []).map(
+        (al: any) => ({
+          id_alumno: Number(al.id_alumno),
+          nombre: String(al.nombre ?? ''),
+          apellido: String(al.apellido ?? ''),
+          P: Number(al.P ?? 0),
+          E: Number(al.E ?? 0),
+          SP: Number(al.SP ?? 0),
+          A: Number(al.A ?? 0),
+          total_registros: Number(
+            al.total_registros ??
+              Number(al.P ?? 0) +
+                Number(al.E ?? 0) +
+                Number(al.SP ?? 0) +
+                Number(al.A ?? 0)
+          ),
+          porcentaje_asistencia: Number(
+            (
+              al.porcentaje_asistencia ??
+              ((Number(al.P ?? 0) + Number(al.E ?? 0)) /
+                (Number(
+                  al.total_registros ??
+                    Number(al.P ?? 0) +
+                      Number(al.E ?? 0) +
+                      Number(al.SP ?? 0) +
+                      Number(al.A ?? 0)
+                ) || 1)) *
+                100
+            ).toFixed(2)
+          ),
+        })
+      );
+      return {
+        trimestre: (t.trimestre as 1 | 2 | 3) ?? 1,
+        P,
+        E,
+        SP,
+        A,
+        total_registros: total,
+        porcentaje_asistencia: pct,
+        alumnos,
+      } as ResumenTrimestralItem;
+    });
+
+    const tot = data.totales ?? {};
+    const Ptot = Number(tot.P ?? 0);
+    const Etot = Number(tot.E ?? 0);
+    const SPtot = Number(tot.SP ?? 0);
+    const Atot = Number(tot.A ?? 0);
+    const totalTot = Number(tot.total_registros ?? Ptot + Etot + SPtot + Atot);
+    const pctTot = Number(
+      (
+        tot.porcentaje_asistencia ?? ((Ptot + Etot) / (totalTot || 1)) * 100
+      ).toFixed(2)
+    );
+
+    const mapped: ResumenTrimestralConsolidado = {
+      cursoId: Number(data.cursoId ?? params.cursoId),
+      anio: String(data.anio ?? params.anio ?? ''),
+      trimestres,
       totales: {
-        justificadas: item.totales?.justificadas ?? 0,
-        injustificadas: item.totales?.injustificadas ?? 0,
-        totalInfracciones:
-          item.totales?.total_infracciones ??
-          item.totales?.totalInfracciones ??
-          0,
-        promedioConducta:
-          item.totales?.promedio_conducta ??
-          item.totales?.promedioConducta ??
-          10,
+        P: Ptot,
+        E: Etot,
+        SP: SPtot,
+        A: Atot,
+        total_registros: totalTot,
+        porcentaje_asistencia: pctTot,
       },
+    };
+
+    return mapped;
+  },
+
+  // 🆕 Consolidado por alumno (asistencia + conducta)
+  getResumenTrimestralConsolidadoAlumno: async (
+    params: ResumenTrimestralConsolidadoAlumnoDto
+  ): Promise<ResumenTrimestralConsolidadoAlumno> => {
+    const queryParams = new URLSearchParams({
+      cursoId: params.cursoId.toString(),
+      alumnoId: params.alumnoId.toString(),
+      ...(params.anio ? { anio: params.anio.toString() } : {}),
+    });
+
+    const response = await api.get<any>(
+      `/asistencia/resumen/trimestral-consolidado/alumno?${queryParams.toString()}`
+    );
+
+    const data = response.data ?? {};
+
+    const mapTrimestres = (arr: any[]): ResumenTrimestralItem[] =>
+      (arr ?? []).map((t: any) => {
+        const P = Number(t.P ?? 0);
+        const E = Number(t.E ?? 0);
+        const SP = Number(t.SP ?? 0);
+        const A = Number(t.A ?? 0);
+        const total = Number(t.total_registros ?? P + E + SP + A);
+        const pct = Number(
+          (t.porcentaje_asistencia ?? ((P + E) / (total || 1)) * 100).toFixed(2)
+        );
+        return {
+          trimestre: (t.trimestre as 1 | 2 | 3) ?? 1,
+          P,
+          E,
+          SP,
+          A,
+          total_registros: total,
+          porcentaje_asistencia: pct,
+        } as ResumenTrimestralItem;
+      });
+
+    const asis = data.asistencia ?? {};
+    const asisTrimestres = mapTrimestres(asis.trimestres ?? []);
+    const asisTot = asis.totales ?? {};
+    const asisMappedTot = {
+      P: Number(asisTot.P ?? 0),
+      E: Number(asisTot.E ?? 0),
+      SP: Number(asisTot.SP ?? 0),
+      A: Number(asisTot.A ?? 0),
+      total_registros: Number(
+        asisTot.total_registros ??
+          Number(asisTot.P ?? 0) +
+            Number(asisTot.E ?? 0) +
+            Number(asisTot.SP ?? 0) +
+            Number(asisTot.A ?? 0)
+      ),
+      porcentaje_asistencia: Number(
+        (
+          asisTot.porcentaje_asistencia ??
+          ((Number(asisTot.P ?? 0) + Number(asisTot.E ?? 0)) /
+            (Number(
+              asisTot.total_registros ??
+                Number(asisTot.P ?? 0) +
+                  Number(asisTot.E ?? 0) +
+                  Number(asisTot.SP ?? 0) +
+                  Number(asisTot.A ?? 0)
+            ) || 1)) *
+            100
+        ).toFixed(2)
+      ),
+    } as Omit<ResumenTrimestralItem, 'trimestre'>;
+
+    const cond = data.conducta ?? {};
+    const condTrimestres: ConductaTrimestreResumen[] = (
+      cond.trimestres ?? []
+    ).map((t: any) => ({
+      trimestre: (t.trimestre as 1 | 2 | 3) ?? 1,
+      menos_graves: Number(t.menos_graves ?? 0),
+      graves: Number(t.graves ?? 0),
+      muy_graves: Number(t.muy_graves ?? 0),
+      puntos: Number(t.puntos ?? 0),
+      detalles: (t.detalles ?? []).map((inf: any) => ({
+        categoria: inf.categoria,
+        articulo: inf.articulo,
+        descripcion: inf.descripcion,
+        puntos: Number(inf.puntos ?? 0),
+        cantidad: Number(inf.cantidad ?? inf.conteo ?? 0),
+      })) as InfraccionResumen[],
     }));
+    const condTot = cond.totales ?? {};
+    const condMappedTot = {
+      menos_graves: Number(condTot.menos_graves ?? 0),
+      graves: Number(condTot.graves ?? 0),
+      muy_graves: Number(condTot.muy_graves ?? 0),
+      puntos: Number(condTot.puntos ?? 0),
+      total_infracciones: Number(condTot.total_infracciones ?? 0),
+    };
+
+    const mapped: ResumenTrimestralConsolidadoAlumno = {
+      cursoId: Number(data.cursoId ?? params.cursoId),
+      alumnoId: Number(data.alumnoId ?? params.alumnoId),
+      anio: String(data.anio ?? params.anio ?? ''),
+      asistencia: { trimestres: asisTrimestres, totales: asisMappedTot },
+      conducta: { trimestres: condTrimestres, totales: condMappedTot },
+    };
 
     return mapped;
   },

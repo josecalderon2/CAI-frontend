@@ -73,7 +73,9 @@ import {
   type ResumenAnualDto,
   type ResumenAnualResponse,
   type ResumenTrimestralConsolidadoDto,
-  type ResumenTrimestralConsolidadoResponse,
+  type ResumenTrimestralConsolidado,
+  type ResumenTrimestralConsolidadoAlumnoDto,
+  type ResumenTrimestralConsolidadoAlumno,
   type InfraccionCatalogoResponse,
   type InfraccionResumen,
   type CreateInfraccionCatalogoDto,
@@ -182,6 +184,7 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
         'resumen-mensual',
         'resumen-trimestral',
         'resumen-anual',
+        'resumen-trimestral-consolidado',
       ];
       if (validTabs.includes(tabParam)) {
         setActiveTab(tabParam as typeof activeTab);
@@ -349,12 +352,27 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
 
   // Estados para Resumen Trimestral Consolidado
   const [resumenTrimestralConsolidado, setResumenTrimestralConsolidado] =
-    useState<ResumenTrimestralConsolidadoResponse[] | null>(null);
+    useState<ResumenTrimestralConsolidado | null>(null);
+  const [
+    resumenTrimestralConsolidadoAlumno,
+    setResumenTrimestralConsolidadoAlumno,
+  ] = useState<ResumenTrimestralConsolidadoAlumno | null>(null);
+  const [expandedTrimestre, setExpandedTrimestre] = useState<1 | 2 | 3 | null>(
+    null
+  );
   const [
     filtroResumenTrimestralConsolidado,
     setFiltroResumenTrimestralConsolidado,
   ] = useState<ResumenTrimestralConsolidadoDto>({
     cursoId: 0,
+    anio: obtenerAnioActualElSalvador(),
+  });
+  const [
+    filtroResumenTrimestralConsolidadoAlumno,
+    setFiltroResumenTrimestralConsolidadoAlumno,
+  ] = useState<ResumenTrimestralConsolidadoAlumnoDto>({
+    cursoId: 0,
+    alumnoId: 0,
     anio: obtenerAnioActualElSalvador(),
   });
 
@@ -1397,18 +1415,49 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
 
       setResumenTrimestralConsolidado(resumen);
 
-      if (resumen.length === 0) {
+      if (!resumen || !resumen.trimestres || resumen.trimestres.length === 0) {
         toast.warning('No se encontraron registros para este año');
       } else {
-        toast.success(
-          `Resumen trimestral consolidado generado: ${resumen.length} alumno(s)`
-        );
+        toast.success('Resumen trimestral consolidado generado');
       }
     } catch (e: any) {
       const errorMsg =
         e?.response?.data?.message ||
         'No se pudo generar el resumen trimestral consolidado';
       toast.error(errorMsg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGenerarResumenTrimestralConsolidadoAlumno = async () => {
+    if (
+      !filtroResumenTrimestralConsolidadoAlumno.cursoId ||
+      filtroResumenTrimestralConsolidadoAlumno.cursoId === 0 ||
+      !filtroResumenTrimestralConsolidadoAlumno.alumnoId ||
+      filtroResumenTrimestralConsolidadoAlumno.alumnoId === 0
+    ) {
+      toast.error('Debe seleccionar curso y alumno');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const detalle =
+        await resumenService.getResumenTrimestralConsolidadoAlumno(
+          filtroResumenTrimestralConsolidadoAlumno
+        );
+      setResumenTrimestralConsolidadoAlumno(detalle);
+      if (!detalle || detalle.asistencia.trimestres.length === 0) {
+        toast.warning('Sin datos para este alumno');
+      } else {
+        toast.success('Detalle por alumno generado');
+      }
+    } catch (e: any) {
+      const msg =
+        e?.response?.data?.message ||
+        'No se pudo obtener el detalle por alumno';
+      toast.error(msg);
     } finally {
       setIsLoading(false);
     }
@@ -4928,20 +4977,18 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
           <CardTitle className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <BarChart3 className="w-5 h-5" />
-              <span>Resumen Trimestral Consolidado Anual</span>
+              <span>Resumen Trimestral Consolidado</span>
             </div>
           </CardTitle>
           <p className="text-sm text-gray-600 mt-2">
-            Consulta el resumen de los tres trimestres del año académico con
-            asistencia, conducta e infracciones por trimestre
+            Consolida asistencia por trimestre (1-3). E cuenta como asistencia.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
           <Alert className="bg-indigo-50 border-indigo-200 py-2">
             <AlertCircle className="h-3 w-3 text-indigo-600" />
             <AlertDescription className="text-xs text-indigo-700">
-              📊 Este reporte muestra el detalle trimestral completo del año
-              académico seleccionado
+              📊 Muestra P, E, SP y A por trimestre y totales del curso.
             </AlertDescription>
           </Alert>
 
@@ -5007,271 +5054,415 @@ export function AsistenciaModuleNew({ user }: AsistenciaModuleProps) {
               </AlertDescription>
             </Alert>
           )}
+
+          {/* Filtros opcionales para detalle por alumno */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+            <div>
+              <Label>Alumno (opcional)</Label>
+              <Select
+                disabled={!filtroResumenTrimestralConsolidado.cursoId}
+                value={
+                  filtroResumenTrimestralConsolidadoAlumno.alumnoId
+                    ? filtroResumenTrimestralConsolidadoAlumno.alumnoId.toString()
+                    : ''
+                }
+                onValueChange={(v) =>
+                  setFiltroResumenTrimestralConsolidadoAlumno({
+                    ...filtroResumenTrimestralConsolidadoAlumno,
+                    cursoId: filtroResumenTrimestralConsolidado.cursoId,
+                    alumnoId: parseInt(v),
+                    anio: filtroResumenTrimestralConsolidado.anio,
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona un alumno (opcional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(
+                    alumnosPorCurso[
+                      (
+                        filtroResumenTrimestralConsolidado.cursoId || ''
+                      ).toString()
+                    ] || []
+                  ).map((al) => (
+                    <SelectItem
+                      key={al.id_alumno}
+                      value={al.id_alumno.toString()}
+                    >
+                      {al.nombre} {al.apellido}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-end">
+              <Button
+                variant="outline"
+                onClick={handleGenerarResumenTrimestralConsolidadoAlumno}
+                disabled={
+                  isLoading ||
+                  !filtroResumenTrimestralConsolidado.cursoId ||
+                  !filtroResumenTrimestralConsolidadoAlumno.alumnoId
+                }
+              >
+                <Search className="w-4 h-4 mr-2" />
+                Ver detalle por alumno
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
-      {resumenTrimestralConsolidado &&
-        resumenTrimestralConsolidado.length > 0 && (
-          <Card>
-            <CardHeader className="bg-gradient-to-r from-indigo-50 to-purple-50 border-b-2 border-indigo-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-xl font-bold text-gray-900 mb-1">
-                    RESUMEN TRIMESTRAL CONSOLIDADO -{' '}
-                    {cursosAsignados
-                      .find(
-                        (c) =>
-                          c.id_curso ===
-                          filtroResumenTrimestralConsolidado.cursoId
-                      )
-                      ?.nombre?.toUpperCase() || 'CURSO'}
-                  </CardTitle>
-                  <p className="text-sm text-gray-600">
-                    Año Académico: {filtroResumenTrimestralConsolidado.anio}
-                  </p>
-                </div>
-                <div className="flex space-x-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      // TODO: Implementar exportación a PDF
-                      toast.info('Función de PDF en desarrollo');
-                    }}
-                    className="bg-red-50 hover:bg-red-100 text-red-700 border-red-200"
-                  >
-                    <FileText className="w-4 h-4 mr-2" />
-                    PDF
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      // TODO: Implementar exportación a Excel
-                      toast.info('Función de Excel en desarrollo');
-                    }}
-                    className="bg-green-50 hover:bg-green-100 text-green-700 border-green-200"
-                  >
-                    <Download className="w-4 h-4 mr-2" />
-                    Excel
-                  </Button>
-                </div>
+      {resumenTrimestralConsolidado && (
+        <Card>
+          <CardHeader className="bg-gradient-to-r from-indigo-50 to-purple-50 border-b-2 border-indigo-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-xl font-bold text-gray-900 mb-1">
+                  RESUMEN TRIMESTRAL CONSOLIDADO -{' '}
+                  {cursosAsignados
+                    .find(
+                      (c) =>
+                        c.id_curso ===
+                        filtroResumenTrimestralConsolidado.cursoId
+                    )
+                    ?.nombre?.toUpperCase() || 'CURSO'}
+                </CardTitle>
+                <p className="text-sm text-gray-600">
+                  Año Académico: {resumenTrimestralConsolidado.anio}
+                </p>
               </div>
-            </CardHeader>
-            <CardContent className="p-6">
+              <div className="flex space-x-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => toast.info('Función de PDF en desarrollo')}
+                  className="bg-red-50 hover:bg-red-100 text-red-700 border-red-200"
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  PDF
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => toast.info('Función de Excel en desarrollo')}
+                  className="bg-green-50 hover:bg-green-100 text-green-700 border-green-200"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Excel
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-6">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-gray-50">
+                    <TableHead className="font-bold text-gray-900 border">
+                      Trimestre
+                    </TableHead>
+                    <TableHead className="text-center border">P</TableHead>
+                    <TableHead className="text-center border">E</TableHead>
+                    <TableHead className="text-center border">SP</TableHead>
+                    <TableHead className="text-center border">A</TableHead>
+                    <TableHead className="text-center border">Total</TableHead>
+                    <TableHead className="text-center border">
+                      % Asistencia
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {resumenTrimestralConsolidado.trimestres.map((t) => (
+                    <TableRow key={t.trimestre} className="hover:bg-gray-50">
+                      <TableCell className="font-medium border">
+                        {t.trimestre}
+                      </TableCell>
+                      <TableCell className="text-center border">
+                        {t.P}
+                      </TableCell>
+                      <TableCell className="text-center border">
+                        {t.E}
+                      </TableCell>
+                      <TableCell className="text-center border">
+                        {t.SP}
+                      </TableCell>
+                      <TableCell className="text-center border">
+                        {t.A}
+                      </TableCell>
+                      <TableCell className="text-center border">
+                        {t.total_registros}
+                      </TableCell>
+                      <TableCell className="text-center border">
+                        <Badge
+                          className={
+                            t.porcentaje_asistencia >= 95
+                              ? 'bg-green-100 text-green-800'
+                              : t.porcentaje_asistencia >= 90
+                                ? 'bg-yellow-100 text-yellow-800'
+                                : 'bg-red-100 text-red-800'
+                          }
+                        >
+                          {t.porcentaje_asistencia.toFixed(2)}%
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  <TableRow className="bg-orange-50">
+                    <TableCell className="font-bold border">Totales</TableCell>
+                    <TableCell className="text-center border font-bold">
+                      {resumenTrimestralConsolidado.totales.P}
+                    </TableCell>
+                    <TableCell className="text-center border font-bold">
+                      {resumenTrimestralConsolidado.totales.E}
+                    </TableCell>
+                    <TableCell className="text-center border font-bold">
+                      {resumenTrimestralConsolidado.totales.SP}
+                    </TableCell>
+                    <TableCell className="text-center border font-bold">
+                      {resumenTrimestralConsolidado.totales.A}
+                    </TableCell>
+                    <TableCell className="text-center border font-bold">
+                      {resumenTrimestralConsolidado.totales.total_registros}
+                    </TableCell>
+                    <TableCell className="text-center border">
+                      <Badge
+                        className={
+                          resumenTrimestralConsolidado.totales
+                            .porcentaje_asistencia >= 95
+                            ? 'bg-green-100 text-green-800 font-bold'
+                            : resumenTrimestralConsolidado.totales
+                                  .porcentaje_asistencia >= 90
+                              ? 'bg-yellow-100 text-yellow-800 font-bold'
+                              : 'bg-red-100 text-red-800 font-bold'
+                        }
+                      >
+                        {resumenTrimestralConsolidado.totales.porcentaje_asistencia.toFixed(
+                          2
+                        )}
+                        %
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-center border">—</TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {resumenTrimestralConsolidadoAlumno && (
+        <Card>
+          <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b-2 border-blue-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-lg font-bold text-gray-900 mb-1">
+                  Detalle por Alumno
+                </CardTitle>
+                <p className="text-sm text-gray-600">
+                  Año: {resumenTrimestralConsolidadoAlumno.anio}
+                </p>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-6 space-y-8">
+            {/* Tabla Asistencia Alumno */}
+            <div>
+              <h3 className="font-semibold mb-3">Asistencia</h3>
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-gray-50">
                       <TableHead className="font-bold text-gray-900 border">
-                        Alumno
+                        Trimestre
                       </TableHead>
-                      <TableHead
-                        colSpan={4}
-                        className="font-bold text-center text-gray-900 border bg-blue-50"
-                      >
-                        TRIMESTRE 1
+                      <TableHead className="text-center border">P</TableHead>
+                      <TableHead className="text-center border">E</TableHead>
+                      <TableHead className="text-center border">SP</TableHead>
+                      <TableHead className="text-center border">A</TableHead>
+                      <TableHead className="text-center border">
+                        Total
                       </TableHead>
-                      <TableHead
-                        colSpan={4}
-                        className="font-bold text-center text-gray-900 border bg-green-50"
-                      >
-                        TRIMESTRE 2
-                      </TableHead>
-                      <TableHead
-                        colSpan={4}
-                        className="font-bold text-center text-gray-900 border bg-purple-50"
-                      >
-                        TRIMESTRE 3
-                      </TableHead>
-                      <TableHead
-                        colSpan={4}
-                        className="font-bold text-center text-gray-900 border bg-orange-50"
-                      >
-                        TOTALES
-                      </TableHead>
-                    </TableRow>
-                    <TableRow className="bg-gray-50">
-                      <TableHead className="border"></TableHead>
-                      {/* Trimestre 1 */}
-                      <TableHead className="text-center border text-xs">
-                        Just.
-                      </TableHead>
-                      <TableHead className="text-center border text-xs">
-                        Injust.
-                      </TableHead>
-                      <TableHead className="text-center border text-xs">
-                        Infrac.
-                      </TableHead>
-                      <TableHead className="text-center border text-xs">
-                        Punt.
-                      </TableHead>
-                      {/* Trimestre 2 */}
-                      <TableHead className="text-center border text-xs">
-                        Just.
-                      </TableHead>
-                      <TableHead className="text-center border text-xs">
-                        Injust.
-                      </TableHead>
-                      <TableHead className="text-center border text-xs">
-                        Infrac.
-                      </TableHead>
-                      <TableHead className="text-center border text-xs">
-                        Punt.
-                      </TableHead>
-                      {/* Trimestre 3 */}
-                      <TableHead className="text-center border text-xs">
-                        Just.
-                      </TableHead>
-                      <TableHead className="text-center border text-xs">
-                        Injust.
-                      </TableHead>
-                      <TableHead className="text-center border text-xs">
-                        Infrac.
-                      </TableHead>
-                      <TableHead className="text-center border text-xs">
-                        Punt.
-                      </TableHead>
-                      {/* Totales */}
-                      <TableHead className="text-center border text-xs">
-                        Just.
-                      </TableHead>
-                      <TableHead className="text-center border text-xs">
-                        Injust.
-                      </TableHead>
-                      <TableHead className="text-center border text-xs">
-                        Tot. Infrac.
-                      </TableHead>
-                      <TableHead className="text-center border text-xs">
-                        Prom.
+                      <TableHead className="text-center border">
+                        % Asistencia
                       </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {resumenTrimestralConsolidado.map((alumno) => (
-                      <TableRow
-                        key={alumno.id_alumno}
-                        className="hover:bg-gray-50"
-                      >
-                        <TableCell className="font-medium border">
-                          {alumno.nombre} {alumno.apellido}
-                        </TableCell>
-
-                        {/* Trimestre 1 */}
-                        <TableCell className="text-center border bg-blue-50">
-                          {alumno.trimestre1.justificadas}
-                        </TableCell>
-                        <TableCell className="text-center border bg-blue-50">
-                          {alumno.trimestre1.injustificadas}
-                        </TableCell>
-                        <TableCell className="text-center border bg-blue-50">
-                          {alumno.trimestre1.infracciones.length}
-                        </TableCell>
-                        <TableCell className="text-center border bg-blue-50">
-                          <Badge
-                            variant={
-                              alumno.trimestre1.puntajeConducta >= 7
-                                ? 'default'
-                                : 'destructive'
-                            }
-                            className={
-                              alumno.trimestre1.puntajeConducta >= 7
-                                ? 'bg-green-100 text-green-800'
-                                : 'bg-red-100 text-red-800'
-                            }
-                          >
-                            {alumno.trimestre1.puntajeConducta.toFixed(2)}
-                          </Badge>
-                        </TableCell>
-
-                        {/* Trimestre 2 */}
-                        <TableCell className="text-center border bg-green-50">
-                          {alumno.trimestre2.justificadas}
-                        </TableCell>
-                        <TableCell className="text-center border bg-green-50">
-                          {alumno.trimestre2.injustificadas}
-                        </TableCell>
-                        <TableCell className="text-center border bg-green-50">
-                          {alumno.trimestre2.infracciones.length}
-                        </TableCell>
-                        <TableCell className="text-center border bg-green-50">
-                          <Badge
-                            variant={
-                              alumno.trimestre2.puntajeConducta >= 7
-                                ? 'default'
-                                : 'destructive'
-                            }
-                            className={
-                              alumno.trimestre2.puntajeConducta >= 7
-                                ? 'bg-green-100 text-green-800'
-                                : 'bg-red-100 text-red-800'
-                            }
-                          >
-                            {alumno.trimestre2.puntajeConducta.toFixed(2)}
-                          </Badge>
-                        </TableCell>
-
-                        {/* Trimestre 3 */}
-                        <TableCell className="text-center border bg-purple-50">
-                          {alumno.trimestre3.justificadas}
-                        </TableCell>
-                        <TableCell className="text-center border bg-purple-50">
-                          {alumno.trimestre3.injustificadas}
-                        </TableCell>
-                        <TableCell className="text-center border bg-purple-50">
-                          {alumno.trimestre3.infracciones.length}
-                        </TableCell>
-                        <TableCell className="text-center border bg-purple-50">
-                          <Badge
-                            variant={
-                              alumno.trimestre3.puntajeConducta >= 7
-                                ? 'default'
-                                : 'destructive'
-                            }
-                            className={
-                              alumno.trimestre3.puntajeConducta >= 7
-                                ? 'bg-green-100 text-green-800'
-                                : 'bg-red-100 text-red-800'
-                            }
-                          >
-                            {alumno.trimestre3.puntajeConducta.toFixed(2)}
-                          </Badge>
-                        </TableCell>
-
-                        {/* Totales */}
-                        <TableCell className="text-center border font-bold bg-orange-50">
-                          {alumno.totales.justificadas}
-                        </TableCell>
-                        <TableCell className="text-center border font-bold bg-orange-50">
-                          {alumno.totales.injustificadas}
-                        </TableCell>
-                        <TableCell className="text-center border font-bold bg-orange-50">
-                          {alumno.totales.totalInfracciones}
-                        </TableCell>
-                        <TableCell className="text-center border bg-orange-50">
-                          <Badge
-                            variant={
-                              alumno.totales.promedioConducta >= 7
-                                ? 'default'
-                                : 'destructive'
-                            }
-                            className={
-                              alumno.totales.promedioConducta >= 7
-                                ? 'bg-green-100 text-green-800 font-bold'
-                                : 'bg-red-100 text-red-800 font-bold'
-                            }
-                          >
-                            {alumno.totales.promedioConducta.toFixed(2)}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {resumenTrimestralConsolidadoAlumno.asistencia.trimestres.map(
+                      (t) => (
+                        <TableRow key={`asis-${t.trimestre}`}>
+                          <TableCell className="font-medium border">
+                            {t.trimestre}
+                          </TableCell>
+                          <TableCell className="text-center border">
+                            {t.P}
+                          </TableCell>
+                          <TableCell className="text-center border">
+                            {t.E}
+                          </TableCell>
+                          <TableCell className="text-center border">
+                            {t.SP}
+                          </TableCell>
+                          <TableCell className="text-center border">
+                            {t.A}
+                          </TableCell>
+                          <TableCell className="text-center border">
+                            {t.total_registros}
+                          </TableCell>
+                          <TableCell className="text-center border">
+                            <Badge>{t.porcentaje_asistencia.toFixed(2)}%</Badge>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    )}
+                    <TableRow className="bg-orange-50">
+                      <TableCell className="font-bold border">
+                        Totales
+                      </TableCell>
+                      <TableCell className="text-center border font-bold">
+                        {
+                          resumenTrimestralConsolidadoAlumno.asistencia.totales
+                            .P
+                        }
+                      </TableCell>
+                      <TableCell className="text-center border font-bold">
+                        {
+                          resumenTrimestralConsolidadoAlumno.asistencia.totales
+                            .E
+                        }
+                      </TableCell>
+                      <TableCell className="text-center border font-bold">
+                        {
+                          resumenTrimestralConsolidadoAlumno.asistencia.totales
+                            .SP
+                        }
+                      </TableCell>
+                      <TableCell className="text-center border font-bold">
+                        {
+                          resumenTrimestralConsolidadoAlumno.asistencia.totales
+                            .A
+                        }
+                      </TableCell>
+                      <TableCell className="text-center border font-bold">
+                        {
+                          resumenTrimestralConsolidadoAlumno.asistencia.totales
+                            .total_registros
+                        }
+                      </TableCell>
+                      <TableCell className="text-center border">
+                        <Badge className="font-bold">
+                          {resumenTrimestralConsolidadoAlumno.asistencia.totales.porcentaje_asistencia.toFixed(
+                            2
+                          )}
+                          %
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
                   </TableBody>
                 </Table>
               </div>
-            </CardContent>
-          </Card>
-        )}
+            </div>
+
+            {/* Tabla Conducta Alumno */}
+            <div>
+              <h3 className="font-semibold mb-3">Conducta</h3>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-gray-50">
+                      <TableHead className="font-bold text-gray-900 border">
+                        Trimestre
+                      </TableHead>
+                      <TableHead className="text-center border">
+                        Menos graves
+                      </TableHead>
+                      <TableHead className="text-center border">
+                        Graves
+                      </TableHead>
+                      <TableHead className="text-center border">
+                        Muy graves
+                      </TableHead>
+                      <TableHead className="text-center border">
+                        Puntos
+                      </TableHead>
+                      <TableHead className="text-center border">
+                        Total
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {resumenTrimestralConsolidadoAlumno.conducta.trimestres.map(
+                      (t) => (
+                        <TableRow key={`cond-${t.trimestre}`}>
+                          <TableCell className="font-medium border">
+                            {t.trimestre}
+                          </TableCell>
+                          <TableCell className="text-center border">
+                            {t.menos_graves}
+                          </TableCell>
+                          <TableCell className="text-center border">
+                            {t.graves}
+                          </TableCell>
+                          <TableCell className="text-center border">
+                            {t.muy_graves}
+                          </TableCell>
+                          <TableCell className="text-center border">
+                            {t.puntos}
+                          </TableCell>
+                          <TableCell className="text-center border">
+                            {(t.detalles || []).reduce(
+                              (acc, d) => acc + (d.cantidad || 0),
+                              0
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      )
+                    )}
+                    <TableRow className="bg-indigo-50">
+                      <TableCell className="font-bold border">
+                        Totales
+                      </TableCell>
+                      <TableCell className="text-center border font-bold">
+                        {
+                          resumenTrimestralConsolidadoAlumno.conducta.totales
+                            .menos_graves
+                        }
+                      </TableCell>
+                      <TableCell className="text-center border font-bold">
+                        {
+                          resumenTrimestralConsolidadoAlumno.conducta.totales
+                            .graves
+                        }
+                      </TableCell>
+                      <TableCell className="text-center border font-bold">
+                        {
+                          resumenTrimestralConsolidadoAlumno.conducta.totales
+                            .muy_graves
+                        }
+                      </TableCell>
+                      <TableCell className="text-center border font-bold">
+                        {
+                          resumenTrimestralConsolidadoAlumno.conducta.totales
+                            .puntos
+                        }
+                      </TableCell>
+                      <TableCell className="text-center border font-bold">
+                        {
+                          resumenTrimestralConsolidadoAlumno.conducta.totales
+                            .total_infracciones
+                        }
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 
