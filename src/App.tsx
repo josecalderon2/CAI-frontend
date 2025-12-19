@@ -11,6 +11,7 @@ import { useEffect } from 'react';
 
 // Toaster
 import { Toaster } from 'sonner';
+import Snowfall from 'react-snowfall'; // Efecto de nieve`
 
 import { Header } from './components/Header';
 import LoginForm from './components/LoginForm';
@@ -443,8 +444,41 @@ function AppRoutes() {
 }
 
 export default function App() {
+  // Mostrar nieve solo entre el 20 de noviembre y el 10 de enero
+  const shouldShowSnow = () => {
+    const now = new Date();
+    const month = now.getMonth(); // 0 = enero, 10 = noviembre
+    const day = now.getDate();
+
+    // Noviembre (mes 10) desde el día 20 en adelante
+    if (month === 10 && day >= 20) return true;
+
+    // Todo diciembre (mes 11)
+    if (month === 11) return true;
+
+    // Enero (mes 0) hasta el día 10
+    if (month === 0 && day <= 10) return true;
+
+    return false;
+  };
+
   return (
     <Router>
+      {shouldShowSnow() && (
+        <Snowfall
+          color="#4A90E2"
+          snowflakeCount={150}
+          speed={[0.5, 1.5]}
+          wind={[-0.5, 1.0]}
+          radius={[0.5, 3.0]}
+          style={{
+            position: 'fixed',
+            width: '100vw',
+            height: '100vh',
+            zIndex: 9999,
+          }}
+        />
+      )}
       <AppRoutes />
       <Toaster richColors position="top-right" />
     </Router>
